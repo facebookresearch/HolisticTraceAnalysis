@@ -2,7 +2,7 @@ Analyzing Traces with HTA
 =========================
 
 We recommend using HTA in a Jupyter notebook and provide `example notebooks
-<https://github.com/facebookresearch/HolisticTraceAnalysis/tree/update-notebooks/examples>`_,
+<https://github.com/facebookresearch/HolisticTraceAnalysis/tree/main/examples>`_,
 for your convenience. To get started, import the hta package in a Jupyter
 notebook, create a ``TraceAnalysis`` object and off we go in exactly two lines of
 code.
@@ -57,7 +57,7 @@ To learn more about the features in detail we refer the reader to the
 arguments that are available to the user. See the `TraceAnalysis
 <../api/trace_analysis_api.html>`_ API for the options available.
 For a detailed demo, HTA provides the `trace_analysis_demo notebook
-<https://github.com/facebookresearch/HolisticTraceAnalysis/blob/update-notebooks/examples/trace_analysis_demo.ipynb>`_
+<https://github.com/facebookresearch/HolisticTraceAnalysis/blob/main/examples/trace_analysis_demo.ipynb>`_
 in the examples folder in the repo.
 
 Trace Diff
@@ -83,7 +83,7 @@ details.
    compare_traces_df = TraceDiff.compare_traces(control_group_trace, test_group_trace)
 
 For a detailed demo HTA provides the `trace_diff_demo notebook
-<https://github.com/facebookresearch/HolisticTraceAnalysis/blob/update-notebooks/examples/trace_diff_demo.ipynb>`_
+<https://github.com/facebookresearch/HolisticTraceAnalysis/blob/main/examples/trace_diff_demo.ipynb>`_
 in the examples folder in the repo.
 
 .. tip::

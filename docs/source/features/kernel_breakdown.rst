@@ -67,5 +67,5 @@ taken on each rank.
 
 For a detailed walkthrough of this feature see the `gpu_kernel_breakdown
 notebook
-<https://github.com/facebookresearch/HolisticTraceAnalysis/blob/main/examples/gpu_kernel_breakdown_demo.ipynb>`_
+<https://github.com/facebookresearch/HolisticTraceAnalysis/blob/main/examples/kernel_breakdown_demo.ipynb>`_
 in the examples folder of the repo.
