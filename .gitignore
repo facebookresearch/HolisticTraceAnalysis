@@ -1,0 +1,67 @@
+# Editor Generated Files #
+.#*
+*\#*\#
+[#]*#
+*~
+*$
+*.bak
+*flymake*
+*.iml
+*.kdev4
+*.log
+*.swp
+*.pdb
+*.zip
+.project
+.pydevproject
+.settings
+.idea
+.vagrant
+.noseids
+.ipynb_checkpoints
+.tags
+.cache/
+
+# IDEs
+.idea/
+.vscode/
+
+# Compiled Sources #
+*.a
+*.com
+*.class
+*.dll
+*.exe
+*.pxi
+*.o
+*.py[ocd]
+*.so
+.build_cache_dir
+MANIFEST
+
+# Python #
+venv
+env
+doc/_build
+dist/
+build/
+*.egg-info/
+.mypy_cache/
+
+# Test data
+test_data
+
+# Environments
+.env
+.venv
+.vscode
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.vscode/*
+*.DS_Store
+
+# sphinx docs
+docs/build/

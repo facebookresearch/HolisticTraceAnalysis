@@ -1,0 +1,12 @@
+{
+  "hta": {
+    "defaults": {
+      "base_trace_dir": "/tmp/trace",
+      "max_ranks": -1,
+      "ranks": [],
+      "logging": {
+        "config_file": "$HTA/configs/logging.config"
+      }
+    }
+  }
+}

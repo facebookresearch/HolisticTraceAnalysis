@@ -1,0 +1,168 @@
+# Circle CI allows users to set environment variables from the UI. We are currently
+# using CACHE_VERSION as an environment variable with value "v1". If for some reason
+# the cache needs to be cleared, bump up the variable value by 1 and update here.
+
+version: 2.1
+
+# -------------------------------------------------------------------------------------
+# Environments to run the jobs in
+# -------------------------------------------------------------------------------------
+cpu_py38: &cpu_py38
+  docker:
+    - image: cimg/python:3.8
+  resource_class: large
+
+cpu_py39: &cpu_py39
+  docker:
+    - image: cimg/python:3.9
+  resource_class: large
+
+cpu_py310: &cpu_py310
+  docker:
+    - image: cimg/python:3.10
+  resource_class: large
+
+cpu_py311: &cpu_py311
+  docker:
+    - image: cimg/python:3.11
+  resource_class: large
+
+# -------------------------------------------------------------------------------------
+# Re-usable commands
+# -------------------------------------------------------------------------------------
+setup_venv: &setup_venv
+  - run:
+      name: Setup Virtual Env
+      working_directory: ~/
+      # use bash -x for debug early commands executed in .bashrc.
+      shell: /bin/bash
+      command: |
+        set -e
+        set -o pipefail
+        python -m venv ~/venv
+        echo ". ~/venv/bin/activate" >> $BASH_ENV
+        . ~/venv/bin/activate
+        python --version
+        which python
+        which pip
+        pip install --upgrade pip
+
+install_repo: &install_repo
+  - run:
+      name: Install Repository
+      command: |
+        pip install .
+
+
+# This is an alias to run all unit tests possible on a platform.
+run_unittests: &run_unittests
+   - run:
+       name: Run all unit tests.
+       # We run all and not stopping on failure on CPU since docker time is cheaper.
+       command: |
+         python3 -m unittest -v
+
+# -------------------------------------------------------------------------------------
+# Jobs to run
+# -------------------------------------------------------------------------------------
+
+jobs:
+  cpu_tests_py38:
+    <<: *cpu_py38
+
+    working_directory: ~/holistictraceanalysis
+
+    steps:
+      - checkout
+      - <<: *setup_venv
+      - <<: *install_repo
+
+      # Cache the venv directory that contains dependencies
+      - restore_cache:
+          keys:
+            - cache-key-cpu-py38-{{.Environment.CACHE_VERSION}}-{{checksum "setup.py"}}-{{checksum "requirements.txt"}}
+
+      - save_cache:
+          paths:
+            - ~/venv
+          key: cache-key-cpu-py38-{{.Environment.CACHE_VERSION}}-{{checksum "setup.py"}}-{{checksum "requirements.txt"}}
+
+      - <<: *run_unittests
+
+
+  cpu_tests_py39:
+    <<: *cpu_py39
+
+    working_directory: ~/holistictraceanalysis
+
+    steps:
+      - checkout
+      - <<: *setup_venv
+      - <<: *install_repo
+
+      # Cache the venv directory that contains dependencies
+      - restore_cache:
+          keys:
+            - cache-key-cpu-py39-{{.Environment.CACHE_VERSION}}-{{checksum "setup.py"}}-{{checksum "requirements.txt"}}
+
+      - save_cache:
+          paths:
+            - ~/venv
+          key: cache-key-cpu-py39-{{.Environment.CACHE_VERSION}}-{{checksum "setup.py"}}-{{checksum "requirements.txt"}}
+
+      - <<: *run_unittests
+
+  cpu_tests_py310:
+    <<: *cpu_py310
+
+    working_directory: ~/holistictraceanalysis
+
+    steps:
+      - checkout
+      - <<: *setup_venv
+      - <<: *install_repo
+
+      # Cache the venv directory that contains dependencies
+      - restore_cache:
+          keys:
+            - cache-key-cpu-py310-{{.Environment.CACHE_VERSION}}-{{checksum "setup.py"}}-{{checksum "requirements.txt"}}
+
+      - save_cache:
+          paths:
+            - ~/venv
+          key: cache-key-cpu-py310-{{.Environment.CACHE_VERSION}}-{{checksum "setup.py"}}-{{checksum "requirements.txt"}}
+
+      - <<: *run_unittests
+
+  cpu_tests_py311:
+    <<: *cpu_py311
+
+    working_directory: ~/holistictraceanalysis
+
+    steps:
+      - checkout
+      - <<: *setup_venv
+      - <<: *install_repo
+
+      # Cache the venv directory that contains dependencies
+      - restore_cache:
+          keys:
+            - cache-key-cpu-py311-{{.Environment.CACHE_VERSION}}-{{checksum "setup.py"}}-{{checksum "requirements.txt"}}
+
+      - save_cache:
+          paths:
+            - ~/venv
+          key: cache-key-cpu-py311-{{.Environment.CACHE_VERSION}}-{{checksum "setup.py"}}-{{checksum "requirements.txt"}}
+
+      - <<: *run_unittests
+
+# -------------------------------------------------------------------------------------
+# Workflows to run
+# -------------------------------------------------------------------------------------
+workflows:
+  build:
+    jobs:
+      - cpu_tests_py38
+      - cpu_tests_py39
+      - cpu_tests_py310
+      - cpu_tests_py311

@@ -1,0 +1,40 @@
+name: ❓ Questions/Help
+description: Ask a question about HTA.
+labels: ["question", "help wanted", "needs triage"]
+
+body:
+- type: markdown
+  attributes:
+    value: >
+      #### Before asking please read the documentation and search through the [issues](https://github.com/facebookresearch/HolisticTraceAnalysis/issues).
+
+- type: textarea
+  attributes:
+    label: What is your question?
+  validations:
+    required: true
+
+- type: textarea
+  attributes:
+    label: Code
+    description: |
+      Paste a code snippet if your question requires it.
+
+- type: textarea
+  attributes:
+    label: What have you tried?
+
+- type: textarea
+  attributes:
+    label: Environment
+    description: |
+      OS (Linux, Mac, Windows):
+      OS version:
+      Python version:
+      HTA version:
+      How did you installed HTA (`pip`, source):
+
+- type: markdown
+  attributes:
+    value: >
+      Thanks for contributing 🎉!
