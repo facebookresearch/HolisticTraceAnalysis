@@ -1,3 +1,5 @@
+[![CircleCI](https://circleci.com/gh/facebookresearch/HolisticTraceAnalysis.svg?style=shield)](https://app.circleci.com/pipelines/github/facebookresearch/HolisticTraceAnalysis)
+[![docs](https://readthedocs.org/projects/hta/badge/?version=latest)](https://hta.readthedocs.io/en/latest/?badge=latest)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/facebookresearch/HolisticTraceAnalysis/blob/main/LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-Welcome-brightgreen.svg)](https://github.com/facebookresearch/HolisticTraceAnalysis/blob/main/CONTRIBUTING.md)
 
@@ -29,7 +31,7 @@ HTA provides the following features:
 1. __Trace Comparison__ - A trace comparison tool to identify and visualize the differences between
    traces.
 
-To learn more about these features see the [documentation](https://github.com/facebookresearch/HolisticTraceAnalysis/blob/main/docs/README.md).
+To learn more about these features see the [documentation](https://hta.readthedocs.io/en/latest/index.html).
 
 
 ## Installation
