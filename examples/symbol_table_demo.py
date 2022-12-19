@@ -4,28 +4,23 @@
 
 """
 This script illustrate the use of symbol tables and data frames for trace analysis.
+To run this script, use the following command:
 
-To run this script, use the following commands:
-
-cd ~/TraceAnalyzer
-source venv/bin/activate
-git pull
-pip install . -U
-python3 hta/examples/symbol_table_demo.py --trace_name vision_transformer --base_trace_dir hta/tests/data --max_ranks 6
+python3 examples/symbol_table_demo.py --trace_dir tests/data/vision_transformer --max_ranks 4
+Note: For the above command to work specify the path to HolisticTraceAnalysis folder on line 22.
 """
 import argparse
 import logging
 import os
-from typing import Optional
-
 import pandas as pd
 import plotly.express as px
 
-import hta
-from hta.trace import Trace
+from typing import Optional
 
-demo_trace_name: str = "vision_transformer"
-demo_base_trace_dir: str = f"{os.path.dirname(hta.__file__)}/hta/tests/data"
+from hta.common.trace import Trace
+
+path_to_hta = "~/HolisticTraceAnalysis"
+trace_dir: str = path_to_hta + "/tests/data/vision_transformer"
 demo_max_ranks: int = 1
 
 
@@ -187,16 +182,10 @@ def trace_info(trace: Trace):
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument(
-        "--trace_name",
+        "--trace_dir",
         type=str,
-        default=demo_trace_name,
-        help="the folder name that contains the traces",
-    )
-    ap.add_argument(
-        "--base_trace_dir",
-        type=str,
-        default=demo_base_trace_dir,
-        help="a top level path where the traces are stored",
+        default=trace_dir,
+        help="path where the traces are stored",
     )
     ap.add_argument(
         "--max_ranks",
@@ -221,4 +210,7 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    assert os.path.isdir(
+        trace_dir
+    ), f"{trace_dir} is not a valid system path. Use the path_to_hta variable to set the right prefix."
     main()
