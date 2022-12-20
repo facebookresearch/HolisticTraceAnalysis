@@ -30,7 +30,7 @@ def setup_logger(config_file: str = "$HTA/configs/logging.config") -> logging.Lo
 logger: logging.Logger = setup_logger()
 
 
-class TraceAnalyzerConfig:
+class HtaConfig:
     """
     A container for customizing the trace analyzer configurations.
     """
@@ -68,13 +68,13 @@ class TraceAnalyzerConfig:
         load_default_paths: Optional[bool] = True,
     ):
         """
-        Constructor of the TraceAnalyzerConfig class.
+        Constructor of the HtaConfig class.
 
         Args:
              config_file_path (str): a user provided config file path.
              load_default_paths (bool) : control whether the analyzer should use available default configuration files.
         """
-        self.config_file_paths: List[str] = TraceAnalyzerConfig.get_default_paths() if load_default_paths else []
+        self.config_file_paths: List[str] = HtaConfig.get_default_paths() if load_default_paths else []
         if config_file_path:
             self.config_file_paths.append(config_file_path)
 
@@ -111,7 +111,7 @@ class TraceAnalyzerConfig:
              The configuration value corresponding to the dot_path.
 
          Notes:
-             TraceAnalyzerConfig represents its configuration using a dictionary which can have multiple layers.
+             HtaConfig represents its configuration using a dictionary which can have multiple layers.
              For easy use, this method allows the user to specify the search path with a dot string and then splits
              the dot string into a list of keys to navigate the configuration search.
         """
