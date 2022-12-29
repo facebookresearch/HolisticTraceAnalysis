@@ -167,7 +167,9 @@ def shorten_name(name: str) -> str:
                 stack.pop()
         else:
             stack.append(c)
-    return "".join(stack).split(" ")[-1]
+
+    ss = "".join(stack).strip()
+    return ss if not ss.startswith("void ") else ss[5:]
 
 
 def flatten_column_names(df: pd.DataFrame) -> None:
