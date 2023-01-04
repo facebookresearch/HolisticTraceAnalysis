@@ -65,3 +65,4 @@ venv.bak/
 
 # sphinx docs
 docs/build/
+.git/
