@@ -60,14 +60,14 @@ install_repo: &install_repo
 # This is an alias to run all unit tests possible on a platform.
 run_unittests: &run_unittests
  - run:
-      name: Run all unit tests.
+      name: Run all unit tests
       # We run all and not stopping on failure on CPU since docker time is cheaper.
       command: |
         python3 -m unittest -v
 
 run_unittests_with_coverage: &run_unittests_with_coverage
   - run:
-      name: Run Unit Tests
+      name: Run unit tests with coverage
       command: |
         coverage run -m unittest discover -v -s tests
 
