@@ -1,7 +1,8 @@
 [![CircleCI](https://circleci.com/gh/facebookresearch/HolisticTraceAnalysis.svg?style=shield)](https://app.circleci.com/pipelines/github/facebookresearch/HolisticTraceAnalysis)
-[![docs](https://readthedocs.org/projects/hta/badge/?version=latest)](https://hta.readthedocs.io/en/latest/?badge=latest)
+[![codecov](https://codecov.io/github/facebookresearch/holistictraceanalysis/branch/main/graph/badge.svg?token=R44P6M3RJN)](https://codecov.io/github/facebookresearch/holistictraceanalysis)
+[![Docs](https://readthedocs.org/projects/hta/badge/?version=latest)](https://hta.readthedocs.io/en/latest/?badge=latest)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/facebookresearch/HolisticTraceAnalysis/blob/main/LICENSE)
-[![PRs Welcome](https://img.shields.io/badge/PRs-Welcome-brightgreen.svg)](https://github.com/facebookresearch/HolisticTraceAnalysis/blob/main/CONTRIBUTING.md)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/facebookresearch/HolisticTraceAnalysis/blob/main/CONTRIBUTING.md)
 
 # Holistic Trace Analysis
 

@@ -4,6 +4,9 @@
 
 version: 2.1
 
+orbs:
+  codecov: codecov/codecov@3.2.4
+
 # -------------------------------------------------------------------------------------
 # Environments to run the jobs in
 # -------------------------------------------------------------------------------------
@@ -56,17 +59,47 @@ install_repo: &install_repo
 
 # This is an alias to run all unit tests possible on a platform.
 run_unittests: &run_unittests
-   - run:
-       name: Run all unit tests.
-       # We run all and not stopping on failure on CPU since docker time is cheaper.
-       command: |
-         python3 -m unittest -v
+ - run:
+      name: Run all unit tests
+      # We run all and not stopping on failure on CPU since docker time is cheaper.
+      command: |
+        python3 -m unittest -v
+
+run_unittests_with_coverage: &run_unittests_with_coverage
+  - run:
+      name: Run unit tests with coverage
+      command: |
+        coverage run -m unittest discover -v -s tests
 
 # -------------------------------------------------------------------------------------
 # Jobs to run
 # -------------------------------------------------------------------------------------
 
 jobs:
+  coverage_test_py38:
+    <<: *cpu_py38
+
+    working_directory: ~/holistictraceanalysis
+
+    steps:
+      - checkout
+      - <<: *setup_venv
+      - <<: *install_repo
+
+      # Cache the venv directory that contains dependencies
+      - restore_cache:
+          keys:
+            - cache-key-cpu-py38-{{.Environment.CACHE_VERSION}}-{{checksum "setup.py"}}-{{checksum "requirements.txt"}}
+
+      - save_cache:
+          paths:
+            - ~/venv
+          key: cache-key-cpu-py38-{{.Environment.CACHE_VERSION}}-{{checksum "setup.py"}}-{{checksum "requirements.txt"}}
+
+      - <<: *run_unittests_with_coverage
+      - codecov/upload
+
+
   cpu_tests_py38:
     <<: *cpu_py38
 
@@ -162,6 +195,7 @@ jobs:
 workflows:
   build:
     jobs:
+      - coverage_test_py38
       - cpu_tests_py38
       - cpu_tests_py39
       - cpu_tests_py310
