@@ -135,7 +135,7 @@ def compress_df(df: pd.DataFrame) -> Tuple[pd.DataFrame, TraceSymbolTable]:
 
     # drop rows with null values
     df.dropna(axis=0, subset=["dur", "cat"], inplace=True)
-    df.drop(df[df["cat"] == "Trace"].index, inplace=True)
+    df.drop(df[df["cat"].isin(["Trace", "gpu_user_annotation"])].index, inplace=True)
 
     # drop columns
     columns_to_drop = {"ph", "id", "bp", "s"}.intersection(set(df.columns))

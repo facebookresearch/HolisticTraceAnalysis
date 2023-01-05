@@ -15,14 +15,18 @@ class TraceParseTestCase(unittest.TestCase):
     vision_transformer_raw_df: pd.DataFrame
     inference_t: Trace
     inference_raw_df: pd.DataFrame
+    gpu_user_annotation_t: Trace
+    gpu_user_annotation_raw_df: pd.DataFrame
 
     @classmethod
     def setUpClass(cls):
         super(TraceParseTestCase, cls).setUpClass()
         vision_transformer_trace_dir: str = "tests/data/vision_transformer"
         inference_trace_dir: str = "tests/data/inference_single_rank"
+        gpu_user_annotation_trace_dir: str = "tests/data/with_gpu_user_annotation"
         vision_transformer_rank_0_file: str = "rank-0.json.gz"
         inference_rank_0_file: str = "inference_rank_0.json.gz"
+        gpu_user_annotation_rank_0_file: str = "step_based_trace_2543932.json.gz"
         max_ranks = 8
 
         # Trace parser for vision transformer
@@ -35,6 +39,12 @@ class TraceParseTestCase(unittest.TestCase):
         cls.inference_t: Trace = Trace(trace_dir=inference_trace_dir)
         cls.inference_t.parse_traces(max_ranks=max_ranks, use_multiprocessing=True)
         cls.inference_raw_df = cls.prepare_ground_truth_df(inference_trace_dir, inference_rank_0_file)
+        # Trace parser for trace files with gpu_user_annotation
+        cls.gpu_user_annotation_t: Trace = Trace(trace_dir=gpu_user_annotation_trace_dir)
+        cls.gpu_user_annotation_t.parse_traces(max_ranks=max_ranks, use_multiprocessing=True)
+        cls.gpu_user_annotation_raw_df = cls.prepare_ground_truth_df(
+            gpu_user_annotation_trace_dir, gpu_user_annotation_rank_0_file
+        )
 
     @classmethod
     def prepare_ground_truth_df(cls, trace_dir, rank_0_file) -> pd.DataFrame:
@@ -95,6 +105,12 @@ class TraceParseTestCase(unittest.TestCase):
             self.assertTrue("iteration" in df.columns)
             self.assertTrue(all(i in sym_id_map for i in iterations))
             self.assertDictEqual(gpu_kernels_per_iteration, correlated_cpu_ops_per_iteration)
+
+    def test_filter_gpu_user_annotation(self) -> None:
+        # gpu_user_annotation is in the original trace file
+        self.assertIn("gpu_user_annotation", self.gpu_user_annotation_raw_df["cat"].unique())
+        # gpu_user_annotation is not in the parsed trace file
+        self.assertNotIn("gpu_user_annotation", self.gpu_user_annotation_t.symbol_table.get_sym_id_map())
 
 
 if __name__ == "__main__":
