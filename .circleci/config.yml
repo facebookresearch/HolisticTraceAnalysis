@@ -80,8 +80,6 @@ run_coverage_test: &run_coverage_test
 # -------------------------------------------------------------------------------------
 
 jobs:
-
-
   coverage_test_py38:
     <<: *cpu_py38
 
@@ -200,6 +198,7 @@ jobs:
 workflows:
   build:
     jobs:
+      - coverage_test_py38
       - cpu_tests_py38
       - cpu_tests_py39
       - cpu_tests_py310
