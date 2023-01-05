@@ -59,21 +59,17 @@ install_repo: &install_repo
 
 # This is an alias to run all unit tests possible on a platform.
 run_unittests: &run_unittests
-   - run:
-       name: Run all unit tests.
-       # We run all and not stopping on failure on CPU since docker time is cheaper.
-       command: |
-         python3 -m unittest -v
-
-
-# Run coverage tests
-run_coverage_test: &run_coverage_test
-   - run:
-      name: Run coverage tests.
+ - run:
+      name: Run all unit tests.
+      # We run all and not stopping on failure on CPU since docker time is cheaper.
       command: |
-        pip install coverage
-        coverage run -m unittest
-   - codecov/upload
+        python3 -m unittest -v
+
+run_unittests_with_coverage: &run_unittests_with_coverage
+  - run:
+      name: Run Unit Tests
+      command: |
+        coverage run -m unittest discover -v -s tests
 
 # -------------------------------------------------------------------------------------
 # Jobs to run
@@ -100,7 +96,8 @@ jobs:
             - ~/venv
           key: cache-key-cpu-py38-{{.Environment.CACHE_VERSION}}-{{checksum "setup.py"}}-{{checksum "requirements.txt"}}
 
-      - <<: *run_coverage_test
+      - <<: *run_unittests_with_coverage
+      - codecov/upload
 
 
   cpu_tests_py38:
