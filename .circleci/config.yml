@@ -4,6 +4,9 @@
 
 version: 2.1
 
+orbs:
+  codecov: codecov/codecov@3.2.4
+
 # -------------------------------------------------------------------------------------
 # Environments to run the jobs in
 # -------------------------------------------------------------------------------------
@@ -62,11 +65,46 @@ run_unittests: &run_unittests
        command: |
          python3 -m unittest -v
 
+
+# Run coverage tests
+run_coverage_test: &run_coverage_test
+   - run:
+      name: Run coverage tests.
+      command: |
+        pip install coverage
+        coverage run -m unittest
+   - codecov/upload
+
 # -------------------------------------------------------------------------------------
 # Jobs to run
 # -------------------------------------------------------------------------------------
 
 jobs:
+
+
+  coverage_test_py38:
+    <<: *cpu_py38
+
+    working_directory: ~/holistictraceanalysis
+
+    steps:
+      - checkout
+      - <<: *setup_venv
+      - <<: *install_repo
+
+      # Cache the venv directory that contains dependencies
+      - restore_cache:
+          keys:
+            - cache-key-cpu-py38-{{.Environment.CACHE_VERSION}}-{{checksum "setup.py"}}-{{checksum "requirements.txt"}}
+
+      - save_cache:
+          paths:
+            - ~/venv
+          key: cache-key-cpu-py38-{{.Environment.CACHE_VERSION}}-{{checksum "setup.py"}}-{{checksum "requirements.txt"}}
+
+      - <<: *run_coverage_test
+
+
   cpu_tests_py38:
     <<: *cpu_py38
 
