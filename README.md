@@ -32,39 +32,47 @@ HTA provides the following features:
 1. __Trace Comparison__ - A trace comparison tool to identify and visualize the differences between
    traces.
 
-To learn more about these features see the [documentation](https://hta.readthedocs.io/en/latest/index.html).
-
-
 ## Installation
 
 HTA runs on Linux and Mac with Python >= 3.8.
 
-1. Get the HTA source code
-   ``` bash
-   git clone https://github.com/facebookresearch/HolisticTraceAnalysis.git
-   ```
+### Create a Conda environment (optional)
 
-2. Create a virtual environment using Anaconda/Conda
+To install Miniconda see [here](https://docs.conda.io/en/latest/miniconda.html).
 
-    To create the environment `env_name`
-    ``` bash
-    conda create -n env_name
-    ```
+To create the environment `env_name`
+``` bash
+conda create -n env_name
+```
 
-    To activate the environment
-    ``` bash
-    conda activate env_name
-    ```
+To activate the environment
+``` bash
+conda activate env_name
+```
 
-    To deactivate
-    ``` bash
-    conda deactivate
-    ```
+To deactivate the environment
+``` bash
+conda deactivate
+```
 
-3. To install HTA execute the command below from the root of the repo
-    ```
-    pip install -e .
-    ```
+### Install using PyPI (stable)
+
+```
+pip install HolisticTraceAnalysis
+```
+
+### Install from source
+
+```
+git clone https://github.com/facebookresearch/HolisticTraceAnalysis.git
+cd HolisticTraceAnalysis
+pip install -r requirements.txt
+pip install -e .
+```
+
+## Documentation
+
+Learn more about the features and the API from our [documentation](https://hta.readthedocs.io/en/latest/index.html).
 
 ## Usage
 
