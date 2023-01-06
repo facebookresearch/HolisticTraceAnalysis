@@ -4,7 +4,7 @@
 1. Bump the version in `hta/version.py`. Versions must adhere to [Semantic Versioning](https://semver.org/).
 1. Install `twine` and `build` locally: `pip install --upgrade twine build`.
 1. Build the source distribution and wheel files: `python3 -m build`.
-1. Verify the new pacakage can be installed using pip:
+1. Verify the new package can be installed using pip:
     1. In a new conda environment execute: `pip install dist/HolisticTraceAnalysis1.X.Y.Z.tar.gz`
     1. Verify version of the new package: `python -c 'import hta; print(hta.__version__)'`
 1. Merge the release branch into main through a PR.
