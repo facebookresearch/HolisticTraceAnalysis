@@ -15,12 +15,11 @@ from hta.configs.default_values import DEFAULT_CONFIG_FILENAME
 ConfigValue = Union[None, bool, int, float, str, Dict[str, Any], List[Any], Set[Any]]
 
 
-def setup_logger(config_file: str = "$HTA/configs/logging.config") -> logging.Logger:
+def setup_logger(config_file: str = "logging.config") -> logging.Logger:
     global logger
     if config_file:
-        if config_file.startswith("$HTA"):
-            config_file = str(Path(hta.__file__).parent.joinpath(config_file[5:]))
-        logging.config.fileConfig(config_file)
+        log_filepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), "logging.config")
+        logging.config.fileConfig(log_filepath)
         logger = logging.getLogger("hta")
     elif logger is None:
         logger = logging.getLogger()
