@@ -3,7 +3,7 @@
 1. Create a new branch from main, say `release-vX.Y.Z` where X.Y.Z is the new release number.
 1. Bump the version in `hta/version.py`. Versions must adhere to [Semantic Versioning](https://semver.org/).
 1. Make a tag, `git tag vX.Y.Z`.
-1. Merge the release branch along **with the tag** into main through a PR `gith push --tags -u origin
+1. Merge the release branch along **with the tag** into main through a PR `git push --tags -u origin
    [branch_name]`
 1. Install `twine` and `build` locally: `pip install --upgrade twine build`.
 1. Build the source distribution and wheel files: `python3 -m build`.
