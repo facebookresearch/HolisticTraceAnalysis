@@ -1,2 +1,4 @@
 include requirements.txt
 include docs/conf.py
+include hta/configs/logging.config
+include hta/configs/trace_analyzer.json
