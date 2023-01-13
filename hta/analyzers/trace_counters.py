@@ -148,7 +148,7 @@ class TraceCounters:
             lambda x: get_memory_kernel_type(sym_table[x["name"]]), axis=1
         )
 
-        # In case of 0 us duration events round it up to 1us to avoid -ve values
+        # In case of 0 us duration events round it up to 1 us to avoid -ve values
         # see https://github.com/facebookresearch/HolisticTraceAnalysis/issues/20
         memcpy_kernels.loc[memcpy_kernels.dur == 0, ["dur"]] = 1
 
