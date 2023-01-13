@@ -22,9 +22,9 @@ class TraceCounters:
 
         # cudaLaunchKernel, cudaMemcpyAsync, cudaMemsetAsync
         sym_index = t.symbol_table.get_sym_id_map()
-        cudaLaunchKernel_id = sym_index["cudaLaunchKernel"]
-        cudaMemcpyAsync_id = sym_index["cudaMemcpyAsync"]
-        cudaMemsetAsync_id = sym_index["cudaMemsetAsync"]
+        cudaLaunchKernel_id = sym_index.get("cudaLaunchKernel", None)
+        cudaMemcpyAsync_id = sym_index.get("cudaMemcpyAsync", None)
+        cudaMemsetAsync_id = sym_index.get("cudaMemsetAsync", None)
 
         # CUDA Runtime events that may launch kernels
         # - filter events that have a correlated kernel event only.

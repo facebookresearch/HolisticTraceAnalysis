@@ -112,7 +112,7 @@ comm_comp_overlap_df = analyzer.get_comm_comp_overlap()
 frequent_patterns_df = analyzer.get_frequent_cuda_kernel_patterns(operator_name="aten::linear", output_dir="/new/trace/path")
 
 # CUDA kernel launch statistics
-cuda_launch_kernel_stats = analyzer.get_cuda_launch_kernel_info()
+cuda_launch_kernel_stats = analyzer.get_cuda_kernel_launch_stats()
 
 # Memory bandwidth time series
 memory_bw_series = analyzer.get_memory_bw_time_series()

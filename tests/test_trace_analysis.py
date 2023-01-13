@@ -69,7 +69,7 @@ class TraceAnalysisTestCase(unittest.TestCase):
         )
         self.assertTrue(frequent_patterns_dfs.empty)
 
-    def test_get_cuda_launch_kernel_info_training_multiple_ranks(self):
+    def test_get_cuda_kernel_launch_stats_training_multiple_ranks(self):
         dataframe_dict = self.vision_transformer_t.get_cuda_kernel_launch_stats(ranks=[1, 7], visualize=False)
         rank_1_df, rank_7_df = dataframe_dict[1], dataframe_dict[7]
         row1 = rank_1_df[rank_1_df["correlation"] == 373234]
@@ -82,7 +82,7 @@ class TraceAnalysisTestCase(unittest.TestCase):
         self.assertEqual(row2["gpu_duration"].item(), 94)
         self.assertEqual(row2["launch_delay"].item(), 41)
 
-    def test_get_cuda_launch_kernel_info_inference_single_rank(self):
+    def test_get_cuda_kernel_launch_stats_inference_single_rank(self):
         dataframe_list = self.inference_t.get_cuda_kernel_launch_stats(visualize=False)
         rank_0_df = dataframe_list[0]
         row = rank_0_df[rank_0_df["correlation"] == 684573]

@@ -5,6 +5,7 @@
 import gzip
 import json
 import os
+import sys
 from typing import Any, Dict, Tuple
 
 from hta.configs.config import logger
@@ -44,21 +45,23 @@ def create_rank_to_trace_dict(trace_path: str) -> Tuple[bool, Dict]:
             json_file_handle = open(filename, "r")
             data = json.loads(json_file_handle.read())
 
-        if "distributedInfo" not in data:
-            logger.warning(
-                "If the trace is from an inference run, then add the following snippet key to the json files "
-                'to use HTA "distributedInfo": {"rank": 0}. If there are multiple traces files, then each file '
-                "should have a unique rank value."
+        distributed_info = data.get("distributedInfo", None)
+        if distributed_info is None:
+            logger.error(
+                "If the trace file does not have the rank specified in it, then add the following snippet "
+                'key to the json files to use HTA; "distributedInfo": {"rank": 0}. If there are multiple '
+                "traces files, then each file should have a unique rank value."
             )
-            raise ValueError("The distributedInfo key does not exist in the trace. Trace cannot be processed.")
-        if "rank" not in data["distributedInfo"]:
-            logger.warning(
-                "If the trace is from an inference run, then add the following snippet key to the json files "
-                'to use HTA "distributedInfo": {"rank": 0}. If there are multiple traces files, then each file '
-                "should have a unique rank value."
+            sys.exit()
+
+        rank = distributed_info.get("rank", None)
+        if rank is None:
+            logger.error(
+                "If the trace file does not have the rank specified in it, then add the following snippet "
+                'key to the json files to use HTA; "distributedInfo": {"rank": 0}. If there are multiple '
+                "traces files, then each file should have a unique rank value."
             )
-            raise ValueError("Rank unavailable in the trace file. Trace cannot be processed.")
-        rank = data["distributedInfo"]["rank"]
+            sys.exit()
 
         assert isinstance(rank, int), "Rank is expected to be an integer"
         assert rank >= 0, "Rank must be a non-negative integer"
