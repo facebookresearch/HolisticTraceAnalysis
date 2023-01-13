@@ -47,7 +47,7 @@ def create_rank_to_trace_dict(trace_path: str) -> Tuple[bool, Dict]:
 
         distributed_info = data.get("distributedInfo", None)
         if distributed_info is None:
-            logger.warning(
+            logger.error(
                 "If the trace file does not have the rank specified in it, then add the following snippet "
                 'key to the json files to use HTA; "distributedInfo": {"rank": 0}. If there are multiple '
                 "traces files, then each file should have a unique rank value."
@@ -56,7 +56,7 @@ def create_rank_to_trace_dict(trace_path: str) -> Tuple[bool, Dict]:
 
         rank = distributed_info.get("rank", None)
         if rank is None:
-            logger.warning(
+            logger.error(
                 "If the trace file does not have the rank specified in it, then add the following snippet "
                 'key to the json files to use HTA; "distributedInfo": {"rank": 0}. If there are multiple '
                 "traces files, then each file should have a unique rank value."
