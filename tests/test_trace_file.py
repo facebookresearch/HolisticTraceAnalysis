@@ -51,10 +51,10 @@ class TestTraceFile(unittest.TestCase):
         self.trace_without_rank = "tests/data/rank_unavailable"
 
     def test_create_rank_to_trace_dict_without_distributed_info(self):
-        self.assertRaises(ValueError, create_rank_to_trace_dict, self.trace_without_distributed_info)
+        self.assertRaises(SystemExit, create_rank_to_trace_dict, self.trace_without_distributed_info)
 
     def test_create_rank_to_trace_dict_without_rank(self) -> None:
-        self.assertRaises(ValueError, create_rank_to_trace_dict, self.trace_without_rank)
+        self.assertRaises(SystemExit, create_rank_to_trace_dict, self.trace_without_rank)
 
     def test_read_write_trace(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdirname:

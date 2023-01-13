@@ -306,7 +306,7 @@ class CudaKernelAnalysis:
         visualize: bool = True,
     ) -> Dict[int, pd.DataFrame]:
         """
-        CUDA kernel launch statistics implementation. For details see `get_cuda_launch_kernel_info` in `trace_analysis.py`.
+        CUDA kernel launch statistics implementation. For details see `get_cuda_kernel_launch_stats` in `trace_analysis.py`.
         """
         if ranks is None or ranks == []:
             ranks = [0]
@@ -320,9 +320,9 @@ class CudaKernelAnalysis:
 
             # filter out events which have correlation value matching to
             # cudaLaunchKernel, cudaMemcpyAsync, cudaMemsetAsync
-            cudaLaunchKernel_id = sym_index["cudaLaunchKernel"]
-            cudaMemcpyAsync_id = sym_index["cudaMemcpyAsync"]
-            cudaMemsetAsync_id = sym_index["cudaMemsetAsync"]
+            cudaLaunchKernel_id = sym_index.get("cudaLaunchKernel", None)
+            cudaMemcpyAsync_id = sym_index.get("cudaMemcpyAsync", None)
+            cudaMemsetAsync_id = sym_index.get("cudaMemsetAsync", None)
 
             # get correlation id's of cudaLaunchKernel events
             cudaLaunchKernel_correlation_series: pd.Series = trace_df[
