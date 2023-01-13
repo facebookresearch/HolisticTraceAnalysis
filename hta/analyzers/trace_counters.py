@@ -16,7 +16,7 @@ class TraceCounters:
         pass
 
     @classmethod
-    def _get_queue_length_time_series_for_rank(cls, t: "Trace", rank: int) -> pd.DataFrame:
+    def _get_queue_length_time_series_for_rank(cls, t: "Trace", rank: int) -> Optional[pd.DataFrame]:
         # get trace for a rank
         trace_df: pd.DataFrame = t.get_trace(rank)
 
@@ -62,7 +62,11 @@ class TraceCounters:
             stream_df["queue_length"] = stream_df["queue"].cumsum()
             result_df_list.append(stream_df)
 
-        return pd.concat(result_df_list)[["ts", "pid", "tid", "stream", "queue_length"]]
+        return (
+            pd.concat(result_df_list)[["ts", "pid", "tid", "stream", "queue_length"]]
+            if len(result_df_list) > 0
+            else None
+        )
 
     @classmethod
     def get_queue_length_time_series(
@@ -98,14 +102,15 @@ class TraceCounters:
             "stays constant until the next update."
         )
 
-        return {rank: TraceCounters._get_queue_length_time_series_for_rank(t, rank) for rank in ranks}
+        result = {rank: TraceCounters._get_queue_length_time_series_for_rank(t, rank) for rank in ranks}
+        return dict(filter(lambda x: x[1] is not None, result.items()))
 
     @classmethod
     def get_queue_length_summary(
         cls,
         t: "Trace",
         ranks: Optional[List[int]] = None,
-    ) -> pd.DataFrame:
+    ) -> Optional[pd.DataFrame]:
         """
         Returns a dataframe with queue length statistics per CUDA stream and rank.
         We summarize queue length per stream and rank using-
@@ -125,7 +130,7 @@ class TraceCounters:
             rank_df["rank"] = rank
             result = rank_df[["rank", "stream", "queue_length"]].groupby(["rank", "stream"]).describe()
             results_list.append(result)
-        return pd.concat(results_list)
+        return pd.concat(results_list) if len(results_list) > 0 else None
 
     @classmethod
     def _get_memory_bw_time_series_for_rank(cls, t: "Trace", rank: int) -> pd.DataFrame:
@@ -142,6 +147,10 @@ class TraceCounters:
         memcpy_kernels["name"] = memcpy_kernels[["name"]].apply(
             lambda x: get_memory_kernel_type(sym_table[x["name"]]), axis=1
         )
+
+        # In case of 0 us duration events round it up to 1us to avoid -ve values
+        # see https://github.com/facebookresearch/HolisticTraceAnalysis/issues/20
+        memcpy_kernels.loc[memcpy_kernels.dur == 0, ["dur"]] = 1
 
         membw_time_series_a = memcpy_kernels[["ts", "name", "pid", "memory_bw_gbps"]]
         membw_time_series_b = memcpy_kernels[["ts", "name", "dur", "pid", "memory_bw_gbps"]].copy()
