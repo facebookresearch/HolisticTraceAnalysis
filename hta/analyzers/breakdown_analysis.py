@@ -125,7 +125,12 @@ class BreakdownAnalysis:
 
             non_zero_kernel_df = kernel_type_df[(kernel_type_df["percentage"] > 0)]
 
-            fig = px.pie(non_zero_kernel_df, values="percentage", names="kernel_type", title="Kernel Type Percentage Across All Ranks")
+            fig = px.pie(
+                non_zero_kernel_df,
+                values="percentage",
+                names="kernel_type",
+                title="Kernel Type Percentage Across All Ranks",
+            )
             fig.show(renderer=image_renderer)
 
             for kernel in kernel_per_rank:
@@ -155,12 +160,7 @@ class BreakdownAnalysis:
                     margin=dict(l=50, r=50, b=50, t=50),
                     showlegend=True,
                     height=400 * image_size_multiplier,
-                    legend=dict(
-                        yanchor="bottom",
-                        y=-0.1,
-                        xanchor="left",
-                        x=0
-                    ),
+                    legend=dict(yanchor="bottom", y=-0.1, xanchor="left", x=0),
                 )
                 fig.show(renderer=image_renderer)
 
