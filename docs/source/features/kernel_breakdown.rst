@@ -4,7 +4,7 @@ Kernel Breakdown
 The kernel breakdown feature breaks down the time spent for each kernel type
 i.e. communication (COMM), computation (COMP), and memory (MEM) across all
 ranks and presents the proportion of time spent in each category. The
-percentage of time spent in each category as a Venn diagram.
+percentage of time spent in each category as a pie chart.
 
 .. image:: ../_static/kernel_type_breakdown.png
    :align: center

@@ -1,8 +1,6 @@
 # Python dependencies required for development
 jupyterlab>=3.5.1
 kaleido>=0.2.1
-matplotlib>=3.6.2
-matplotlib_venn>=0.11.7
 numpy>=1.23.5
 pandas>=1.5.2
 plotly>=5.11.0
