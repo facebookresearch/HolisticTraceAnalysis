@@ -128,14 +128,20 @@ class BreakdownAnalysis:
                 non_zero_kernel_df,
                 values="percentage",
                 names="kernel_type",
+                height=500,
                 title="Kernel Type Percentage Across All Ranks",
+            )
+            fig.update_layout(
+                margin=dict(l=50, r=50, b=50, t=50),
+                showlegend=True,
+                legend=dict(yanchor="bottom", y=-0.4, xanchor="left", x=0),
             )
             fig.show(renderer=image_renderer)
 
             for kernel in kernel_per_rank:
                 specs = []
-                for rank in kernel_per_rank[kernel]:
-                    if rank % 2 == 0:
+                for count, rank in enumerate(kernel_per_rank[kernel]):
+                    if count % 2 == 0:
                         specs.append([{"type": "domain"}, {"type": "domain"}])
                 fig = make_subplots(
                     rows=int((len(kernel_per_rank[kernel]) + 1) / 2),
@@ -153,7 +159,7 @@ class BreakdownAnalysis:
                         int(rank / 2) + 1,
                         int(rank % 2) + 1,
                     )
-                image_size_multiplier = 1 + (len(t.traces.keys()) - 1) / 2
+                image_size_multiplier = 1 + (len(t.traces.keys())) / 2
                 fig.update_layout(
                     title_text=f'Kernel type "{kernel}" - kernel distribution on each rank',
                     margin=dict(l=50, r=50, b=50, t=50),
