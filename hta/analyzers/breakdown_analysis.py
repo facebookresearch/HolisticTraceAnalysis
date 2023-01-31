@@ -8,8 +8,6 @@ from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from matplotlib import pyplot as plt
-from matplotlib_venn import venn2_unweighted, venn3_unweighted
 from plotly.subplots import make_subplots
 
 from hta.configs.config import logger
@@ -124,81 +122,26 @@ class BreakdownAnalysis:
         )
 
         if visualize:
+            non_zero_kernel_df = kernel_type_df[(kernel_type_df["percentage"] > 0)]
 
-            if len(kernel_type_to_analysis) == 2:
-                comp_overlapping_comm = f"{KernelType.COMPUTATION.name} overlapping {KernelType.COMMUNICATION.name}"
-
-                venn2_unweighted(
-                    subsets=(
-                        kernel_type_df[kernel_type_df["kernel_type"] == KernelType.COMPUTATION.name]["percentage"]
-                        .reset_index(drop=True)
-                        .get(0, 0),
-                        kernel_type_df[kernel_type_df["kernel_type"] == KernelType.COMMUNICATION.name]["percentage"]
-                        .reset_index(drop=True)
-                        .get(0, 0),
-                        kernel_type_df[kernel_type_df["kernel_type"] == comp_overlapping_comm]["percentage"]
-                        .reset_index(drop=True)
-                        .get(0, 0),
-                    ),
-                    set_labels=(
-                        KernelType.COMPUTATION.name,
-                        KernelType.COMMUNICATION.name,
-                    ),
-                    set_colors=("orange", "blue"),
-                    alpha=0.5,
-                )
-
-                plt.title("Kernel Type Percentage (%)")
-                plt.show()
-            elif len(kernel_type_to_analysis) == 3:
-
-                comp_overlapping_comm = f"{KernelType.COMPUTATION.name} overlapping {KernelType.COMMUNICATION.name}"
-                comp_overlapping_mem = f"{KernelType.COMPUTATION.name} overlapping {KernelType.MEMORY.name}"
-                comm_overlapping_mem = f"{KernelType.COMMUNICATION.name} overlapping {KernelType.MEMORY.name}"
-                comp_overlapping_comm_overlapping_memory = f"{KernelType.COMPUTATION.name} overlapping {KernelType.COMMUNICATION.name} overlapping {KernelType.MEMORY.name}"
-
-                venn3_unweighted(
-                    subsets=(
-                        kernel_type_df[kernel_type_df["kernel_type"] == KernelType.COMPUTATION.name]["percentage"]
-                        .reset_index(drop=True)
-                        .get(0, 0),
-                        kernel_type_df[kernel_type_df["kernel_type"] == KernelType.COMMUNICATION.name]["percentage"]
-                        .reset_index(drop=True)
-                        .get(0, 0),
-                        kernel_type_df[kernel_type_df["kernel_type"] == comp_overlapping_comm]["percentage"]
-                        .reset_index(drop=True)
-                        .get(0, 0),
-                        kernel_type_df[kernel_type_df["kernel_type"] == KernelType.MEMORY.name]["percentage"]
-                        .reset_index(drop=True)
-                        .get(0, 0),
-                        kernel_type_df[kernel_type_df["kernel_type"] == comp_overlapping_mem]["percentage"]
-                        .reset_index(drop=True)
-                        .get(0, 0),
-                        kernel_type_df[kernel_type_df["kernel_type"] == comm_overlapping_mem]["percentage"]
-                        .reset_index(drop=True)
-                        .get(0, 0),
-                        kernel_type_df[kernel_type_df["kernel_type"] == comp_overlapping_comm_overlapping_memory][
-                            "percentage"
-                        ]
-                        .reset_index(drop=True)
-                        .get(0, 0),
-                    ),
-                    set_labels=(
-                        KernelType.COMPUTATION.name,
-                        KernelType.COMMUNICATION.name,
-                        KernelType.MEMORY.name,
-                    ),
-                    set_colors=("orange", "blue", "red"),
-                    alpha=0.5,
-                )
-
-                plt.title("Kernel Type Percentage Across All Ranks")
-                plt.show()
+            fig = px.pie(
+                non_zero_kernel_df,
+                values="percentage",
+                names="kernel_type",
+                height=500,
+                title="Kernel Type Percentage Across All Ranks",
+            )
+            fig.update_layout(
+                margin=dict(l=50, r=50, b=50, t=50),
+                showlegend=True,
+                legend=dict(yanchor="bottom", y=-0.4, xanchor="left", x=0),
+            )
+            fig.show(renderer=image_renderer)
 
             for kernel in kernel_per_rank:
                 specs = []
-                for rank in kernel_per_rank[kernel]:
-                    if rank % 2 == 0:
+                for count, rank in enumerate(kernel_per_rank[kernel]):
+                    if count % 2 == 0:
                         specs.append([{"type": "domain"}, {"type": "domain"}])
                 fig = make_subplots(
                     rows=int((len(kernel_per_rank[kernel]) + 1) / 2),
@@ -211,15 +154,18 @@ class BreakdownAnalysis:
                             labels=kernel_per_rank[kernel][rank]["name"],
                             values=kernel_per_rank[kernel][rank]["sum"],
                             title=f"Rank {rank}",
+                            automargin=False,
                         ),
                         int(rank / 2) + 1,
                         int(rank % 2) + 1,
                     )
-                image_size_multiplier = 1 + len(t.traces.keys()) / 8
+                image_size_multiplier = 1 + (len(t.traces.keys())) / 2
                 fig.update_layout(
                     title_text=f'Kernel type "{kernel}" - kernel distribution on each rank',
-                    showlegend=False,
-                    height=1200 * image_size_multiplier,
+                    margin=dict(l=50, r=50, b=50, t=50),
+                    showlegend=True,
+                    height=400 * image_size_multiplier,
+                    legend=dict(yanchor="bottom", y=-0.1, xanchor="left", x=0),
                 )
                 fig.show(renderer=image_renderer)
 

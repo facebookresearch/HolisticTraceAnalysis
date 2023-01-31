@@ -118,7 +118,7 @@ class TraceAnalysis:
         r"""
         Summarizes the time spent by each kernel and by kernel type. Outputs the following graphs:
 
-        1. Venn diagram indicating the percentage of time taken by each kernel type.
+        1. Pie chart indicating the percentage of time taken by each kernel type.
         2. Pie charts showing the most time consuming kernels for each rank for each kernel type.
         3. Bar graphs showing the average duration for the most time consuming kernels for each rank and each kernel type.
 

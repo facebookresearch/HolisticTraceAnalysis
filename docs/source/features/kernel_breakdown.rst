@@ -4,7 +4,7 @@ Kernel Breakdown
 The kernel breakdown feature breaks down the time spent for each kernel type
 i.e. communication (COMM), computation (COMP), and memory (MEM) across all
 ranks and presents the proportion of time spent in each category. The
-percentage of time spent in each category as a Venn diagram.
+percentage of time spent in each category as a pie chart.
 
 .. image:: ../_static/kernel_type_breakdown.png
    :align: center
@@ -17,7 +17,7 @@ The kernel breakdown can be calculated as follows:
    kernel_type_metrics_df, kernel_metrics_df = analyzer.get_gpu_kernel_breakdown()
 
 The first dataframe returned by the function contains the raw values used to
-generate the Venn diagram.
+generate the Pie chart.
 
 Kernel Duration Distribution
 ----------------------------
@@ -42,9 +42,9 @@ bottlenecks.
 .. image:: ../_static/pie_charts.png
 
 .. tip::
-   All images other than the Venn diagram are generated using plotly. Hovering
-   on the graph shows the mode bar on the top right which allows the user to
-   zoom, pan, select and download the graph.
+   All images are generated using plotly. Hovering on the graph shows the
+   mode bar on the top right which allows the user to zoom, pan, select and
+   download the graph.
 
 The pie charts above shows the top 5 computation, communication and memory
 kernels. Similar pie charts are generated for each rank. The pie charts can be
