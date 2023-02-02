@@ -1,7 +1,5 @@
-# Python dependencies required for development
+# Python dependencies required for users
 jupyterlab>=3.5.1
-kaleido>=0.2.1
 numpy>=1.23.5
 pandas>=1.5.2
 plotly>=5.11.0
-coverage>=7.0.2

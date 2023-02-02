@@ -172,7 +172,7 @@ class CudaKernelAnalysis:
             'View the generated trace file using Chrome Tracing and search for "Patterns" to highlight the frequent patterns.'
         )
 
-        if visualize:
+        if visualize:  # pragma: no cover
             vis_df = patterns_df[:top_k].copy()
             # show the pattern in multiple lines in visualization
             vis_df["pattern"] = vis_df["pattern"].str.replace("|", "<br>", regex=False)
@@ -259,7 +259,7 @@ class CudaKernelAnalysis:
     @classmethod
     def visualize_cuda_kernel_launch_stats(
         cls, rank: int, df: pd.DataFrame, runtime_cutoff: int, launch_delay_cutoff: int
-    ) -> None:
+    ) -> None:  # pragma: no cover
         short_kernels = df[(df["cpu_duration"] <= runtime_cutoff) & (df["gpu_duration"] < df["cpu_duration"])]
         runtime_outliers = df[df["cpu_duration"] > runtime_cutoff]
         launch_delay_outliers = df[df["launch_delay"] > launch_delay_cutoff]
@@ -369,7 +369,7 @@ class CudaKernelAnalysis:
             renamed_df = joined_df.rename(columns={"dur_x": "cpu_duration", "dur_y": "gpu_duration"})
             events_df = renamed_df[["correlation", "cpu_duration", "gpu_duration", "launch_delay"]]
 
-            if visualize:
+            if visualize:  # pragma: no cover
                 cls.visualize_cuda_kernel_launch_stats(rank, events_df, runtime_cutoff, launch_delay_cutoff)
 
             result_dict[rank] = events_df
