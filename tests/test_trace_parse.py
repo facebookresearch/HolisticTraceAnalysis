@@ -97,5 +97,5 @@ class TraceParseTestCase(unittest.TestCase):
             self.assertDictEqual(gpu_kernels_per_iteration, correlated_cpu_ops_per_iteration)
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     unittest.main()

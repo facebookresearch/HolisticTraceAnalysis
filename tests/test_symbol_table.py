@@ -69,5 +69,5 @@ class TraceSymbolTableTestCase(unittest.TestCase):
         self.assertTrue(all(is_consistent))
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     unittest.main()

@@ -485,7 +485,7 @@ class TraceDiff:
             width=1000,
             height=1000,
         )
-        if show_image:
+        if show_image:  # pragma: no cover
             fig.show()
-        if export_image_path:
+        if export_image_path:  # pragma: no cover
             fig.write_image(export_image_path)

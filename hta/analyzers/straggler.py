@@ -110,7 +110,7 @@ def _compute_normalized_start_time_of_significant_comm_kernels(
     long_comm_kernels = df.loc[
         (df["stream"] > 0) & (df["iteration"] > 0) & (df["dur"] >= min_duration) & (df["name"].isin(comm_op_ids))
     ]
-    if visualize:
+    if visualize:  # pragma: no cover
         plot_timeline_gpu_kernels(
             f"Timeline of Communication Kernels Longer Than {min_normalized_duration * 100:.2f}% of Iteration Time\n",
             long_comm_kernels,
@@ -135,7 +135,7 @@ def _compute_normalized_start_time_of_significant_comm_kernels(
         (last_long_comm_kernels["stream"].eq(stream)) & (last_long_comm_kernels["name"].eq(name))
     ]
 
-    if visualize:
+    if visualize:  # pragma: no cover
         plot_timeline_gpu_kernels(
             f"Timeline of Candidate Kernels (Iterations={iterations})",
             candidate_metric_kernels,
@@ -202,7 +202,7 @@ def _get_top_k_stragglers_with_metric(
         metric[col] = pd.to_numeric(metric[col])
 
     color_map = {"Yes": "red", "No": "blue"}
-    if visualize:
+    if visualize:  # pragma: no cover
         fig = px.bar(
             metric,
             x="rank",

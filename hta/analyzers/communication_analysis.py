@@ -71,7 +71,7 @@ class CommunicationAnalysis:
         result_df = pd.DataFrame(result)
         result_df["comp_comm_overlap_pctg"] = round(100 * result_df["comp_comm_overlap_ratio"], 2)
 
-        if visualize:
+        if visualize:  # pragma: no cover
             fig = px.bar(
                 result_df,
                 x="rank",

@@ -36,21 +36,21 @@ HTA provides the following features:
 
 HTA runs on Linux and Mac with Python >= 3.8.
 
-### Create a Conda environment (optional)
+### Setup a Conda environment (optional)
 
-To install Miniconda see [here](https://docs.conda.io/en/latest/miniconda.html).
+See [here](https://docs.conda.io/en/latest/miniconda.html) to install Miniconda.
 
-To create the environment `env_name`
+Create the environment `env_name`
 ``` bash
 conda create -n env_name
 ```
 
-To activate the environment
+Activate the environment
 ``` bash
 conda activate env_name
 ```
 
-To deactivate the environment
+Deactivate the environment
 ``` bash
 conda deactivate
 ```

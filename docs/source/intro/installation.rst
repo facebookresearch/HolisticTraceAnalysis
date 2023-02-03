@@ -5,13 +5,8 @@ We recommend using a Conda environment to install HTA. To install Anaconda, see
 `here <https://docs.anaconda.com/anaconda/install/index.html>`_. Holistic Trace
 Analysis runs on Linux and Mac with Python >= 3.8.
 
-**Get the HTA source code**
 
-.. code-block::
-
-  git clone https://github.com/facebookresearch/HolisticTraceAnalysis.git
-
-**Using a Conda environment**
+**Setup a Conda environment**
 
 .. code-block::
 
@@ -26,8 +21,18 @@ Analysis runs on Linux and Mac with Python >= 3.8.
 
 **Installing Holistic Trace Analysis**
 
-Execute the command below from the root of the repo
+Install using pip
 
 .. code-block::
 
-   pip install -e .
+   pip install HolisticTraceAnalysis
+
+Install from source
+
+.. code-block::
+
+  # get the source code
+  git clone https://github.com/facebookresearch/HolisticTraceAnalysis.git
+
+  # execute the command below from the root of the repo
+  pip install -e .

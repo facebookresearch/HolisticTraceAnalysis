@@ -56,6 +56,11 @@ install_repo: &install_repo
       command: |
         pip install .
 
+install_dev_requirements: &install_dev_requirements
+  - run:
+      name: Install development packages
+      command: |
+        pip install -r requirements-dev.txt
 
 # This is an alias to run all unit tests possible on a platform.
 run_unittests: &run_unittests
@@ -85,6 +90,7 @@ jobs:
       - checkout
       - <<: *setup_venv
       - <<: *install_repo
+      - <<: *install_dev_requirements
 
       # Cache the venv directory that contains dependencies
       - restore_cache:

@@ -121,7 +121,7 @@ class BreakdownAnalysis:
             inplace=True,
         )
 
-        if visualize:
+        if visualize:  # pragma: no cover
             non_zero_kernel_df = kernel_type_df[(kernel_type_df["percentage"] > 0)]
 
             fig = px.pie(
@@ -336,7 +336,7 @@ class BreakdownAnalysis:
         result_df["non_compute_time"] = result_df["non_compute_time(ns)"] / result_df["kernel_time(ns)"]
         result_df["non_compute_time_pctg"] = round(100 * result_df["non_compute_time"], 2)
 
-        if visualize:
+        if visualize:  # pragma: no cover
             fig = px.bar(
                 result_df,
                 x="rank",
@@ -480,7 +480,7 @@ class BreakdownAnalysis:
         result_df.rename(mapper=idle_category_name_map, axis=0, inplace=True)
         result_df.reset_index(inplace=True)
 
-        if visualize:
+        if visualize:  # pragma: no cover
             result_df["stream"] = result_df.stream.astype(str)
             ycol = "idle_time_ratio" if visualize_pctg else "idle_time"
             fig = px.bar(
