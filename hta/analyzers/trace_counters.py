@@ -16,8 +16,7 @@ class TraceCounters:
         pass
 
     @classmethod
-    def _get_queue_length_time_series_for_rank(
-        cls, t: "Trace", rank: int) -> Optional[pd.DataFrame]:
+    def _get_queue_length_time_series_for_rank(cls, t: "Trace", rank: int) -> Optional[pd.DataFrame]:
         """
         Returns a dataframe (optional) with time series for the queue length
         on a CUDA streams within requested rank.
