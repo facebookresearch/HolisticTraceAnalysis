@@ -235,8 +235,8 @@ class TraceAnalysisTestCase(unittest.TestCase):
         queue_len_summary_df = self.rank_non_gpu_t.get_queue_length_summary(ranks=[0])
         self.assertIsNone(queue_len_summary_df)
 
-        #mem_bw_summary_df = self.rank_non_gpu_t.get_memory_bw_summary(ranks=[0])
-        #self.assertIsNone(queue_len_summary_df)
+        mem_bw_summary_df = self.rank_non_gpu_t.get_memory_bw_summary(ranks=[0])
+        self.assertIsNone(mem_bw_summary_df)
 
     def test_get_idle_time_breakdown(self):
         (idle_time_df, idle_interval_df,) = self.vision_transformer_t.get_idle_time_breakdown(

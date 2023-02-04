@@ -16,7 +16,8 @@ class TraceCounters:
         pass
 
     @classmethod
-    def _get_queue_length_time_series_for_rank(cls, t: "Trace", rank: int) -> Optional[pd.DataFrame]:
+    def _get_queue_length_time_series_for_rank(
+        cls, t: "Trace", rank: int) -> Optional[pd.DataFrame]:
         """
         Returns a dataframe (optional) with time series for the queue length
         on a CUDA streams within requested rank.
@@ -163,7 +164,7 @@ class TraceCounters:
         return pd.concat(results_list) if len(results_list) > 0 else None
 
     @classmethod
-    def _get_memory_bw_time_series_for_rank(cls, t: "Trace", rank: int) -> pd.DataFrame:
+    def _get_memory_bw_time_series_for_rank(cls, t: "Trace", rank: int) -> Optional[pd.DataFrame]:
         """
         Returns time series for the memory bandwidth of memory copy and memory set operations
         for specified rank.
@@ -173,8 +174,8 @@ class TraceCounters:
             rank (int): rank to generate the time series for.
 
         Returns:
-            pd.DataFrame
-                Returns time series for the memory bandwidth.
+            Optional[pd.DataFrame]
+                Returns dataframe (optional) with time series for the memory bandwidth.
                 The dataframe returned contains time series points with columns
                 - ts (timestamp), pid (of corresponding GPU), name of memory copy type
                 and memory_bw_gbps - memory bandwidth in GB/sec
@@ -216,6 +217,10 @@ class TraceCounters:
         for _, membw_df in membw_time_series.groupby("name"):
             membw_df.memory_bw_gbps = membw_df.memory_bw_gbps.cumsum()
             result_df_list.append(membw_df)
+
+        if len(result_df_list) == 0:
+            return None
+
         result_df = pd.concat(result_df_list)[["ts", "pid", "name", "memory_bw_gbps"]]
         result_df["tid"] = 0
         return result_df
@@ -248,7 +253,8 @@ class TraceCounters:
             "when the value changes. Once a values is observed the time series "
             "stays constant until the next update."
         )
-        return {rank: TraceCounters._get_memory_bw_time_series_for_rank(t, rank) for rank in ranks}
+        result = {rank: TraceCounters._get_memory_bw_time_series_for_rank(t, rank) for rank in ranks}
+        return dict(filter(lambda x: x[1] is not None, result.items()))
 
     @classmethod
     def get_memory_bw_summary(
@@ -282,4 +288,4 @@ class TraceCounters:
 
             result = rank_df[["rank", "name", "memory_bw_gbps"]].groupby(["rank", "name"]).describe()
             results_list.append(result)
-        return pd.concat(results_list)
+        return pd.concat(results_list) if len(results_list) > 0 else None
