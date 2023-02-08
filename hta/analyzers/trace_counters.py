@@ -219,7 +219,6 @@ class TraceCounters:
             return None
 
         result_df = pd.concat(result_df_list)[["ts", "pid", "name", "memory_bw_gbps"]]
-        result_df["tid"] = 0
         return result_df
 
     @classmethod
