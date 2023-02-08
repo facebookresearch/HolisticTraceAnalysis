@@ -324,7 +324,7 @@ class TraceAnalysis:
     def get_queue_length_summary(
         self,
         ranks: Optional[List[int]] = None,
-    ) -> pd.DataFrame:
+    ) -> Optional[pd.DataFrame]:
         r"""
         Queue length is defined as the number of outstanding CUDA operations on a stream. This
         functions calculates the summary statistics for the queue length on each CUDA stream for
@@ -334,9 +334,10 @@ class TraceAnalysis:
             ranks (List[int]): List of ranks for which to queue length summary is calculated. Default = [0].
 
         Returns:
-            pd.DataFrame
+            pd.DataFrame or None
                 A dataframe summarizing the queue length statistics. The dataframe contains count,
                 min, max, standard deviation, 25th, 50th and 75th percentiles.
+                The function returns None when the dataframe is empty.
         """
         return TraceCounters.get_queue_length_summary(self.t, ranks)
 
@@ -373,9 +374,10 @@ class TraceAnalysis:
             ranks (List[int]): List of ranks for which memory bandwidth is calculated. Default = [0].
 
         Returns:
-            pd.DataFrame
+            pd.DataFrame or None
                 A dataframe containing the summary statistics. The dataframe includes count, min, max, standard deviation,
                 25th, 50th and 75th percentiles of memory copy/memset operations.
+                The function returns None when the dataframe is empty.
         """
         return TraceCounters.get_memory_bw_summary(self.t, ranks)
 

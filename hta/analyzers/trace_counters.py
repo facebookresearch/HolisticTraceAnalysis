@@ -18,13 +18,13 @@ class TraceCounters:
     @classmethod
     def _get_queue_length_time_series_for_rank(cls, t: "Trace", rank: int) -> Optional[pd.DataFrame]:
         """
-        Returns a dataframe (optional) with time series for the queue length
+        Returns an (optional) dataframe with time series for the queue length
         on a CUDA streams within requested rank.
 
         Queue length is defined as the number of outstanding CUDA operations on a stream
         The value of the queue length is:
         1. Incremented when a CUDA runtime operation enqueues a kernel on a stream.
-        3. Decremented when a CUDA kernel/memcopy operation executes on a stream.
+        2. Decremented when a CUDA kernel/memcopy operation executes on a stream.
 
         Args:
             t (Trace): Input trace data structure.
@@ -32,12 +32,13 @@ class TraceCounters:
 
         Returns:
             Optional[pd.DataFrame]
-                Returns an optional dataframe containing time series points with columns
-                - ts (timestamp), pid, tid (of corresponding GPU,stream), stream and queue_length.
+                Returns an (optional) dataframe containing time series with the following
+                columns: ts (timestamp), pid, tid (of corresponding GPU, stream), stream and
+                queue_length.
 
-                Note that each row or time point shows a changes in the value of the
-                time series. The value remains constant until the next time point.
-                In essence, you can think of it like a step function changes.
+                Note that each row or timestamp denotes a change in the value of the
+                time series. The value remains constant until the next timestamp.
+                In essence, it can be thought of as a step function.
         """
         # get trace for a rank
         trace_df: pd.DataFrame = t.get_trace(rank)
@@ -102,7 +103,7 @@ class TraceCounters:
         Queue length is defined as the number of outstanding CUDA operations on a stream
         The value of the queue length is:
         1. Incremented when a CUDA runtime operation enqueues a kernel on a stream.
-        3. Decremented when a CUDA kernel/memcopy operation executes on a stream.
+        2. Decremented when a CUDA kernel/memcopy operation executes on a stream.
 
         Args:
             t (Trace): Input trace data structure.
@@ -111,12 +112,12 @@ class TraceCounters:
         Returns:
             Dict[int, pd.DataFrame]:
                 A dictionary of rank -> time series with the queue length of each CUDA stream.
-                Each dataframe contains time series points with columns
-                - ts (timestamp), pid, tid (of corresponding GPU,stream), stream and queue_length.
+                Each dataframe contains a time series consisting of the following columns:
+                ts (timestamp), pid, tid (of corresponding GPU, stream), stream and queue_length.
 
-                Note that each row or time point shows a changes in the value of the
-                time series. The value remains constant until the next time point.
-                In essence, you can think of it like a step function changes.
+                Note that each row or timestamp shows a change in the value of the
+                time series. The value remains constant until the next timestamp.
+                In essence, it can be thought of as a step function.
         """
         if ranks is None or len(ranks) == 0:
             ranks = [0]
@@ -137,19 +138,16 @@ class TraceCounters:
         ranks: Optional[List[int]] = None,
     ) -> Optional[pd.DataFrame]:
         """
-        Returns a dataframe (optional) with queue length statistics per CUDA stream
-        and rank.
+        Returns an (optional) dataframe with queue length statistics per CUDA stream and rank.
 
         Args:
             t (Trace): Input trace data structure.
-            ranks (list of int): ranks to perform this analysis for.
+            ranks (list of int): ranks to perform this analysis.
 
         Returns:
             Optional[pd.DataFrame]
-                A dataframe (optional) summarizing queue length per stream and rank
-                using-
-                    count, min, max, std-deviation, 25th, 50th and 75th percentiles.
-                This summary uses the pandas describe() function.
+                An (optional) dataframe containing the summary statistics of queue length per
+                stream and rank.
         """
         if ranks is None or len(ranks) == 0:
             ranks = [0]
@@ -174,10 +172,10 @@ class TraceCounters:
 
         Returns:
             Optional[pd.DataFrame]
-                Returns dataframe (optional) with time series for the memory bandwidth.
-                The dataframe returned contains time series points with columns
-                - ts (timestamp), pid (of corresponding GPU), name of memory copy type
-                and memory_bw_gbps - memory bandwidth in GB/sec
+                Returns an (optional) dataframe with time series for the memory bandwidth.
+                The dataframe returned contains time series with columns:
+                ts (timestamp), pid (of corresponding GPU), name of memory copy type
+                and memory_bw_gbps (memory bandwidth in GB/sec).
         """
         # get trace for a rank
         trace_df: pd.DataFrame = t.get_trace(rank)
@@ -240,9 +238,9 @@ class TraceCounters:
         Returns:
             Dict[int, pd.DataFrame]
                 Returns a dictionary of rank -> time series for the memory bandwidth.
-                The dataframe returned contains time series points with columns
-                - ts (timestamp), pid (of corresponding GPU), name of memory copy type
-                and memory_bw_gbps - memory bandwidth in GB/sec
+                The dataframe returned contains time series along with the following columns:
+                ts (timestamp), pid (of corresponding GPU), name of memory copy type
+                and memory_bw_gbps (memory bandwidth in GB/sec).
         """
         if ranks is None or len(ranks) == 0:
             ranks = [0]
@@ -260,9 +258,10 @@ class TraceCounters:
         cls,
         t: "Trace",
         ranks: Optional[List[int]] = None,
-    ) -> pd.DataFrame:
+    ) -> Optional[pd.DataFrame]:
         """
-        Returns a dataframe with memory copy bandwidth statistic per rank and memory copy/memset type.
+        Returns an (optional) dataframe containing the summary statistics of memory ops. The
+        tracked memory ops are MemcpyDtoH, MemcpyHtoD, MemcpyDtoD and MemSet.
 
         Args:
             t (Trace): Input trace data structure.
@@ -270,10 +269,8 @@ class TraceCounters:
 
         Returns:
             Optional[pd.DataFrame]
-                A dataframe (optional) summarizing memory bandwidth per stream and
-                memory/memset copy type using -
-                    count, min, max, std-deviation, 25th, 50th and 75th percentiles.
-                This summary uses the pandas describe() function.
+                An (optional) dataframe containing the summary statistics of the following memory ops:
+                MemcpyDtoH, MemcpyHtoD, MemcpyDtoD, MemSet.
         """
         if ranks is None or len(ranks) == 0:
             ranks = [0]
