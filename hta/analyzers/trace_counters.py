@@ -16,7 +16,30 @@ class TraceCounters:
         pass
 
     @classmethod
-    def _get_queue_length_time_series_for_rank(cls, t: "Trace", rank: int) -> pd.DataFrame:
+    def _get_queue_length_time_series_for_rank(cls, t: "Trace", rank: int) -> Optional[pd.DataFrame]:
+        """
+        Returns an (optional) dataframe with time series for the queue length
+        on a CUDA streams within requested rank.
+
+        Queue length is defined as the number of outstanding CUDA operations on a stream
+        The value of the queue length is:
+        1. Incremented when a CUDA runtime operation enqueues a kernel on a stream.
+        2. Decremented when a CUDA kernel/memcopy operation executes on a stream.
+
+        Args:
+            t (Trace): Input trace data structure.
+            rank (int): rank to generate the time series for.
+
+        Returns:
+            Optional[pd.DataFrame]
+                Returns an (optional) dataframe containing time series with the following
+                columns: ts (timestamp), pid, tid (of corresponding GPU, stream), stream and
+                queue_length.
+
+                Note that each row or timestamp denotes a change in the value of the
+                time series. The value remains constant until the next timestamp.
+                In essence, it can be thought of as a step function.
+        """
         # get trace for a rank
         trace_df: pd.DataFrame = t.get_trace(rank)
 
@@ -62,7 +85,11 @@ class TraceCounters:
             stream_df["queue_length"] = stream_df["queue"].cumsum()
             result_df_list.append(stream_df)
 
-        return pd.concat(result_df_list)[["ts", "pid", "tid", "stream", "queue_length"]]
+        return (
+            pd.concat(result_df_list)[["ts", "pid", "tid", "stream", "queue_length"]]
+            if len(result_df_list) > 0
+            else None
+        )
 
     @classmethod
     def get_queue_length_time_series(
@@ -76,18 +103,21 @@ class TraceCounters:
         Queue length is defined as the number of outstanding CUDA operations on a stream
         The value of the queue length is:
         1. Incremented when a CUDA runtime operation enqueues a kernel on a stream.
-        3. Decremented when a CUDA kernel/memcopy operation executes on a stream.
-
-        The dataframe returned contains time series points with columns
-        - ts (timestamp), pid, tid (of corresponding GPU,stream), stream,
-          and queue_length.
-        Note that each row or time point shows a changes in the value of the time series.
-        The value remains constant until the next time point. In essence, you can think
-        of it like a step function that keeps changing.
+        2. Decremented when a CUDA kernel/memcopy operation executes on a stream.
 
         Args:
             t (Trace): Input trace data structure.
-            ranks (list of int): ranks to perform this analysis for.
+            rank (int): rank to perform this analysis for.
+
+        Returns:
+            Dict[int, pd.DataFrame]:
+                A dictionary of rank -> time series with the queue length of each CUDA stream.
+                Each dataframe contains a time series consisting of the following columns:
+                ts (timestamp), pid, tid (of corresponding GPU, stream), stream and queue_length.
+
+                Note that each row or timestamp shows a change in the value of the
+                time series. The value remains constant until the next timestamp.
+                In essence, it can be thought of as a step function.
         """
         if ranks is None or len(ranks) == 0:
             ranks = [0]
@@ -98,23 +128,26 @@ class TraceCounters:
             "stays constant until the next update."
         )
 
-        return {rank: TraceCounters._get_queue_length_time_series_for_rank(t, rank) for rank in ranks}
+        result = {rank: TraceCounters._get_queue_length_time_series_for_rank(t, rank) for rank in ranks}
+        return dict(filter(lambda x: x[1] is not None, result.items()))
 
     @classmethod
     def get_queue_length_summary(
         cls,
         t: "Trace",
         ranks: Optional[List[int]] = None,
-    ) -> pd.DataFrame:
+    ) -> Optional[pd.DataFrame]:
         """
-        Returns a dataframe with queue length statistics per CUDA stream and rank.
-        We summarize queue length per stream and rank using-
-            count, min, max, std-deviation, 25, 50th and 75th percentiles.
-        The summary uses the pandas describe() function.
+        Returns an (optional) dataframe with queue length statistics per CUDA stream and rank.
 
         Args:
             t (Trace): Input trace data structure.
-            ranks (list of int): ranks to perform this analysis for.
+            ranks (list of int): ranks to perform this analysis.
+
+        Returns:
+            Optional[pd.DataFrame]
+                An (optional) dataframe containing the summary statistics of queue length per
+                stream and rank.
         """
         if ranks is None or len(ranks) == 0:
             ranks = [0]
@@ -125,10 +158,25 @@ class TraceCounters:
             rank_df["rank"] = rank
             result = rank_df[["rank", "stream", "queue_length"]].groupby(["rank", "stream"]).describe()
             results_list.append(result)
-        return pd.concat(results_list)
+        return pd.concat(results_list) if len(results_list) > 0 else None
 
     @classmethod
-    def _get_memory_bw_time_series_for_rank(cls, t: "Trace", rank: int) -> pd.DataFrame:
+    def _get_memory_bw_time_series_for_rank(cls, t: "Trace", rank: int) -> Optional[pd.DataFrame]:
+        """
+        Returns time series for the memory bandwidth of memory copy and memory set operations
+        for specified rank.
+
+        Args:
+            t (Trace): Input trace data structure.
+            rank (int): rank to generate the time series for.
+
+        Returns:
+            Optional[pd.DataFrame]
+                Returns an (optional) dataframe with time series for the memory bandwidth.
+                The dataframe returned contains time series with columns:
+                ts (timestamp), pid (of corresponding GPU), name of memory copy type
+                and memory_bw_gbps (memory bandwidth in GB/sec).
+        """
         # get trace for a rank
         trace_df: pd.DataFrame = t.get_trace(rank)
         sym_table = t.symbol_table.get_sym_table()
@@ -142,6 +190,10 @@ class TraceCounters:
         memcpy_kernels["name"] = memcpy_kernels[["name"]].apply(
             lambda x: get_memory_kernel_type(sym_table[x["name"]]), axis=1
         )
+
+        # In case of 0 us duration events round it up to 1 us to avoid -ve values
+        # see https://github.com/facebookresearch/HolisticTraceAnalysis/issues/20
+        memcpy_kernels.loc[memcpy_kernels.dur == 0, ["dur"]] = 1
 
         membw_time_series_a = memcpy_kernels[["ts", "name", "pid", "memory_bw_gbps"]]
         membw_time_series_b = memcpy_kernels[["ts", "name", "dur", "pid", "memory_bw_gbps"]].copy()
@@ -162,8 +214,11 @@ class TraceCounters:
         for _, membw_df in membw_time_series.groupby("name"):
             membw_df.memory_bw_gbps = membw_df.memory_bw_gbps.cumsum()
             result_df_list.append(membw_df)
+
+        if len(result_df_list) == 0:
+            return None
+
         result_df = pd.concat(result_df_list)[["ts", "pid", "name", "memory_bw_gbps"]]
-        result_df["tid"] = 0
         return result_df
 
     @classmethod
@@ -175,12 +230,16 @@ class TraceCounters:
         """
         Returns a dictionary of rank -> time series for the memory bandwidth.
 
-        The dataframe returned contains time series points with columns
-        - ts (timestamp), pid (of corresponding GPU), name of memory copy type
-          and memory_bw_gbps - memory bandwidth in GB/sec
         Args:
             t (Trace): Input trace data structure.
             ranks (list of int): ranks to perform this analysis for.
+
+        Returns:
+            Dict[int, pd.DataFrame]
+                Returns a dictionary of rank -> time series for the memory bandwidth.
+                The dataframe returned contains time series along with the following columns:
+                ts (timestamp), pid (of corresponding GPU), name of memory copy type
+                and memory_bw_gbps (memory bandwidth in GB/sec).
         """
         if ranks is None or len(ranks) == 0:
             ranks = [0]
@@ -190,23 +249,27 @@ class TraceCounters:
             "when the value changes. Once a values is observed the time series "
             "stays constant until the next update."
         )
-        return {rank: TraceCounters._get_memory_bw_time_series_for_rank(t, rank) for rank in ranks}
+        result = {rank: TraceCounters._get_memory_bw_time_series_for_rank(t, rank) for rank in ranks}
+        return dict(filter(lambda x: x[1] is not None, result.items()))
 
     @classmethod
     def get_memory_bw_summary(
         cls,
         t: "Trace",
         ranks: Optional[List[int]] = None,
-    ) -> pd.DataFrame:
+    ) -> Optional[pd.DataFrame]:
         """
-        Returns a dataframe with memory copy bandwidth statistic per rank and
-        memory/memset copy type.
-        We summarize memory bandwidth by
-            count, min, max, std-deviation, 25, 50th and 75th percentiles.
-        The summary uses the pandas describe() function.
+        Returns an (optional) dataframe containing the summary statistics of memory ops. The
+        tracked memory ops are MemcpyDtoH, MemcpyHtoD, MemcpyDtoD and MemSet.
+
         Args:
             t (Trace): Input trace data structure.
             ranks (list of int): ranks to perform this analysis for.
+
+        Returns:
+            Optional[pd.DataFrame]
+                An (optional) dataframe containing the summary statistics of the following memory ops:
+                MemcpyDtoH, MemcpyHtoD, MemcpyDtoD, MemSet.
         """
         if ranks is None or len(ranks) == 0:
             ranks = [0]
@@ -220,4 +283,4 @@ class TraceCounters:
 
             result = rank_df[["rank", "name", "memory_bw_gbps"]].groupby(["rank", "name"]).describe()
             results_list.append(result)
-        return pd.concat(results_list)
+        return pd.concat(results_list) if len(results_list) > 0 else None

@@ -18,6 +18,7 @@ class TraceAnalysisTestCase(unittest.TestCase):
     vision_transformer_t: TraceAnalysis
     inference_t: TraceAnalysis
     df_index_resolver_t: TraceAnalysis
+    rank_non_gpu_t: TraceAnalysis
 
     @classmethod
     def setUpClass(cls):
@@ -25,9 +26,11 @@ class TraceAnalysisTestCase(unittest.TestCase):
         vision_transformer_trace_dir: str = "tests/data/vision_transformer"
         inference_trace_dir: str = "tests/data/inference_single_rank"
         df_index_resolver_trace_dir: str = "tests/data/df_index_resolver"
+        rank_non_gpu_trace_dir: str = "tests/data/rank_non_gpu/"
         cls.vision_transformer_t = TraceAnalysis(trace_dir=vision_transformer_trace_dir)
         cls.inference_t = TraceAnalysis(trace_dir=inference_trace_dir)
         cls.df_index_resolver_t = TraceAnalysis(trace_dir=df_index_resolver_trace_dir)
+        cls.rank_non_gpu_t = TraceAnalysis(trace_dir=rank_non_gpu_trace_dir)
 
     def setUp(self):
         self.overlaid_trace_dir = "tests/data"
@@ -203,7 +206,7 @@ class TraceAnalysisTestCase(unittest.TestCase):
 
         counter_events = [ev for ev in trace_json["traceEvents"] if ev["ph"] == PHASE_COUNTER]
         print(f"Trace has {len(counter_events)} counter events")
-        self.assertGreaterEqual(len(counter_events), 23000)
+        self.assertGreaterEqual(len(counter_events), 21000)
 
         counter_names = {ev["name"] for ev in counter_events}
         self.assertEqual(
@@ -224,6 +227,16 @@ class TraceAnalysisTestCase(unittest.TestCase):
         queue_len_summary_df = self.vision_transformer_t.get_queue_length_summary(ranks=[0, 2])
         # 2 ranks x 6 streams
         self.assertEqual(len(queue_len_summary_df), 12)
+
+        # Test traces without GPU kernels, these should return empty dicts or dataframes
+        queue_len_ts_dict = self.rank_non_gpu_t.get_queue_length_time_series()
+        self.assertEqual(len(queue_len_ts_dict), 0)
+
+        queue_len_summary_df = self.rank_non_gpu_t.get_queue_length_summary(ranks=[0])
+        self.assertIsNone(queue_len_summary_df)
+
+        mem_bw_summary_df = self.rank_non_gpu_t.get_memory_bw_summary(ranks=[0])
+        self.assertIsNone(mem_bw_summary_df)
 
     def test_get_idle_time_breakdown(self):
         (idle_time_df, idle_interval_df,) = self.vision_transformer_t.get_idle_time_breakdown(

@@ -637,10 +637,10 @@ class Trace:
 
         Returns a list of json events that can be appended to the trace.
         """
-        required_columns = ["tid", "pid", "ts", counter_col]
+        required_columns = ["pid", "ts", counter_col]
         if not set(required_columns).issubset(series.columns):
             logger.warning(
-                "Time seried dataframe does NOT contain required columns "
+                "Time series dataframe does NOT contain required columns "
                 f"{required_columns}, columns contained = {series.columns}"
             )
             return []
