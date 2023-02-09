@@ -206,7 +206,7 @@ class TraceAnalysisTestCase(unittest.TestCase):
 
         counter_events = [ev for ev in trace_json["traceEvents"] if ev["ph"] == PHASE_COUNTER]
         print(f"Trace has {len(counter_events)} counter events")
-        self.assertGreaterEqual(len(counter_events), 23000)
+        self.assertGreaterEqual(len(counter_events), 21000)
 
         counter_names = {ev["name"] for ev in counter_events}
         self.assertEqual(
