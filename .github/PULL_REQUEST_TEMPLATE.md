@@ -5,7 +5,9 @@ Fixes # (issue).
 
 - [ ] Was this discussed/approved via a Github issue? (no need for typos, doc improvements)
   - [ ] N/A
+- [ ] Did you write any new necessary tests?
+  - [ ] N/A
 - [ ] Did you make sure to update the docs?
   - [ ] N/A
-- [ ] Did you write any new necessary tests?
+- [ ] Did you update the [changelog](https://github.com/facebookresearch/HolisticTraceAnalysis/blob/main/CHANGELOG.md)?
   - [ ] N/A
