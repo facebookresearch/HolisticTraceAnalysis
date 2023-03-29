@@ -16,8 +16,12 @@ from typing import Dict
 
 
 def check_file_names(input_file, output_file):
-    assert input_file.endswith(".gz") or input_file.endswith(".json"), "Input file must end with .json or .json.gz"
-    assert output_file.endswith(".gz") or output_file.endswith(".json"), "Output file must end with .json.gz"
+    assert input_file.endswith(".gz") or input_file.endswith(
+        ".json"
+    ), "Input file must end with .json or .json.gz"
+    assert output_file.endswith(".gz") or output_file.endswith(
+        ".json"
+    ), "Output file must end with .json.gz"
 
 
 def _load_file(input_file: str) -> Dict:
@@ -40,7 +44,9 @@ def _to_perfetto(input_data: Dict, input_file: str, output_file: str) -> None:
     output_data = {"traceEvents": input_data["traceEvents"]}
     dumped_json = json.dumps(output_data).encode("utf-8")
     trace_extraction_ends = time.perf_counter()
-    logging.info(f"Trace events extracted in {(trace_extraction_ends - trace_extraction_begins):.2f} seconds.")
+    logging.info(
+        f"Trace events extracted in {(trace_extraction_ends - trace_extraction_begins):.2f} seconds."
+    )
 
     result = "perfetto_%s" % input_file if output_file is None else output_file
     write_file_begins = time.perf_counter()
@@ -48,7 +54,9 @@ def _to_perfetto(input_data: Dict, input_file: str, output_file: str) -> None:
         f.write(dumped_json)
     write_file_ends = time.perf_counter()
 
-    logging.info(f"Output gzip file name: {result} written in {(write_file_ends - write_file_begins):.2f} seconds.")
+    logging.info(
+        f"Output gzip file name: {result} written in {(write_file_ends - write_file_begins):.2f} seconds."
+    )
     logging.info("Converted to Perfetto!")
 
 
@@ -57,8 +65,12 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Convert a PyTorch Profiler trace to a Perfetto compatible trace",
     )
-    parser.add_argument("--input_file", type=str, required=True, help="Path to trace file")
-    parser.add_argument("--output_file", type=str, required=True, help="Name of output trace file")
+    parser.add_argument(
+        "--input_file", type=str, required=True, help="Path to trace file"
+    )
+    parser.add_argument(
+        "--output_file", type=str, required=True, help="Name of output trace file"
+    )
     args = parser.parse_args()
 
     input_file, output_file = args.input_file, args.output_file

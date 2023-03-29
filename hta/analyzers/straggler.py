@@ -34,10 +34,15 @@ def extract_iteration_info(trace: Trace) -> pd.DataFrame:
 
     def _extract_one_rank(df) -> pd.DataFrame:
         profiler_step_name_ids = [
-            sym_map[k] for k in sorted([k for k in sym_map.keys() if k.startswith("ProfilerStep")])
+            sym_map[k]
+            for k in sorted([k for k in sym_map.keys() if k.startswith("ProfilerStep")])
         ]
         profiler_step_index = df["name"].isin(profiler_step_name_ids)
-        p_steps = df.loc[profiler_step_index, ["name", "ts", "dur"]].copy().rename(columns={"name": "profiler_step"})
+        p_steps = (
+            df.loc[profiler_step_index, ["name", "ts", "dur"]]
+            .copy()
+            .rename(columns={"name": "profiler_step"})
+        )
         p_steps["iter"] = p_steps["profiler_step"].apply(get_iter_nbr)
         p_steps["end"] = p_steps["ts"] + p_steps["dur"]
         p_steps.set_index("iter", inplace=True)
@@ -108,7 +113,10 @@ def _compute_normalized_start_time_of_significant_comm_kernels(
     mean_iter_time = ((df["ts"] + df["dur"]).max() - t_min) / float(n_iters)
     min_duration = mean_iter_time * min_normalized_duration
     long_comm_kernels = df.loc[
-        (df["stream"] > 0) & (df["iteration"] > 0) & (df["dur"] >= min_duration) & (df["name"].isin(comm_op_ids))
+        (df["stream"] > 0)
+        & (df["iteration"] > 0)
+        & (df["dur"] >= min_duration)
+        & (df["name"].isin(comm_op_ids))
     ]
     if visualize:  # pragma: no cover
         plot_timeline_gpu_kernels(
@@ -120,19 +128,28 @@ def _compute_normalized_start_time_of_significant_comm_kernels(
         )
 
     # select the last long communication kernel for all combinations of (rank, stream, iteration, kernel_name)
-    last_long_comm_kernels = long_comm_kernels.groupby(["rank", "stream", "iteration", "name"], as_index=False).last()
+    last_long_comm_kernels = long_comm_kernels.groupby(
+        ["rank", "stream", "iteration", "name"], as_index=False
+    ).last()
 
     # select the (stream, name) combination whose duration has the largest mean standard deviation across all ranks
     metric_name: str = "normalized_start_time"
-    last_long_comm_kernels[metric_name] = (last_long_comm_kernels["ts"] - t_min) / mean_iter_time
+    last_long_comm_kernels[metric_name] = (
+        last_long_comm_kernels["ts"] - t_min
+    ) / mean_iter_time
     last_long_comm_kernels["duration"] = last_long_comm_kernels["dur"] / mean_iter_time
-    duration_diff_across_ranks = last_long_comm_kernels.groupby(["stream", "iteration", "name"])["duration"].std()
-    average_duration_diff = duration_diff_across_ranks.groupby(["stream", "name"]).mean()
+    duration_diff_across_ranks = last_long_comm_kernels.groupby(
+        ["stream", "iteration", "name"]
+    )["duration"].std()
+    average_duration_diff = duration_diff_across_ranks.groupby(
+        ["stream", "name"]
+    ).mean()
     (stream, name) = average_duration_diff.idxmax()
 
     # Filter last_longer_comm_kernels
     candidate_metric_kernels = last_long_comm_kernels.loc[
-        (last_long_comm_kernels["stream"].eq(stream)) & (last_long_comm_kernels["name"].eq(name))
+        (last_long_comm_kernels["stream"].eq(stream))
+        & (last_long_comm_kernels["name"].eq(name))
     ]
 
     if visualize:  # pragma: no cover
@@ -178,26 +195,40 @@ def _get_top_k_stragglers_with_metric(
     """
     if n_stragglers <= 0:
         n_stragglers = 1
-    n_iterations = metric_df["iteration"].nunique() if "iteration" in metric_df.columns else 1
+    n_iterations = (
+        metric_df["iteration"].nunique() if "iteration" in metric_df.columns else 1
+    )
     with_iteration = True if n_iterations > 1 else False
     if not with_iteration:
         metric = metric_df[["rank", metric_name]].copy()
-        threshold = metric.sort_values(by=metric_name, ascending=False)[metric_name].tolist()[n_stragglers - 1]
-        metric["is_straggler"] = metric[metric_name].apply(lambda x: 1 if x >= threshold else 0)
+        threshold = metric.sort_values(by=metric_name, ascending=False)[
+            metric_name
+        ].tolist()[n_stragglers - 1]
+        metric["is_straggler"] = metric[metric_name].apply(
+            lambda x: 1 if x >= threshold else 0
+        )
         data_columns = ["rank", metric_name]
-        results = metric[["rank", "is_straggler"]].copy().set_index("rank")["is_straggler"]
+        results = (
+            metric[["rank", "is_straggler"]].copy().set_index("rank")["is_straggler"]
+        )
     else:
         metric = metric_df[["rank", "iteration", metric_name]].copy()
         metric["is_straggler"] = 0
         for iteration, group in metric.groupby("iteration"):
             if iteration < 0:
                 continue
-            threshold = group.sort_values(by=metric_name, ascending=False)[metric_name].tolist()[n_stragglers - 1]
-            metric.loc[group.index, "is_straggler"] = group[metric_name].apply(lambda x: 1 if x >= threshold else 0)
+            threshold = group.sort_values(by=metric_name, ascending=False)[
+                metric_name
+            ].tolist()[n_stragglers - 1]
+            metric.loc[group.index, "is_straggler"] = group[metric_name].apply(
+                lambda x: 1 if x >= threshold else 0
+            )
         data_columns = ["rank", "iteration", metric_name]
         results = metric.groupby("rank")["is_straggler"].sum()
 
-    metric["is_straggler"] = metric["is_straggler"].apply(lambda x: "Yes" if x > 0 else "No")
+    metric["is_straggler"] = metric["is_straggler"].apply(
+        lambda x: "Yes" if x > 0 else "No"
+    )
     for col in data_columns:
         metric[col] = pd.to_numeric(metric[col])
 
@@ -239,7 +270,9 @@ def find_stragglers_with_late_start_comm_kernels(
             if stragglers[r] > 0, then rank <r> is detected as a straggler for stragglers[r] times.
     """
 
-    metric_df, metric_name = _compute_normalized_start_time_of_significant_comm_kernels(df, symbol_table, visualize)
+    metric_df, metric_name = _compute_normalized_start_time_of_significant_comm_kernels(
+        df, symbol_table, visualize
+    )
     stragglers = _get_top_k_stragglers_with_metric(
         metric_df, metric_name, visualize=visualize, n_stragglers=n_stragglers
     )

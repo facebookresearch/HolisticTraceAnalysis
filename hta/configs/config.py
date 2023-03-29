@@ -18,7 +18,9 @@ ConfigValue = Union[None, bool, int, float, str, Dict[str, Any], List[Any], Set[
 def setup_logger(config_file: str = "logging.config") -> logging.Logger:
     global logger
     if config_file:
-        log_filepath = os.path.join(os.path.dirname(os.path.realpath(__file__)), "logging.config")
+        log_filepath = os.path.join(
+            os.path.dirname(os.path.realpath(__file__)), "logging.config"
+        )
         logging.config.fileConfig(log_filepath)
         logger = logging.getLogger("hta")
     elif logger is None:
@@ -56,7 +58,11 @@ class HtaConfig:
         As a class method, this function does not return the user defined config file path.
         """
         return [
-            str(Path(hta.__file__).parent.joinpath("configs").joinpath(DEFAULT_CONFIG_FILENAME)),
+            str(
+                Path(hta.__file__)
+                .parent.joinpath("configs")
+                .joinpath(DEFAULT_CONFIG_FILENAME)
+            ),
             str(Path.home().joinpath(".hta").joinpath(DEFAULT_CONFIG_FILENAME)),
             str(Path.cwd().joinpath(DEFAULT_CONFIG_FILENAME)),
         ]
@@ -73,7 +79,9 @@ class HtaConfig:
              config_file_path (str): a user provided config file path.
              load_default_paths (bool) : control whether the analyzer should use available default configuration files.
         """
-        self.config_file_paths: List[str] = HtaConfig.get_default_paths() if load_default_paths else []
+        self.config_file_paths: List[str] = (
+            HtaConfig.get_default_paths() if load_default_paths else []
+        )
         if config_file_path:
             self.config_file_paths.append(config_file_path)
 
@@ -94,9 +102,15 @@ class HtaConfig:
         """
         Return the available config file paths
         """
-        return [path for path in self.config_file_paths if Path(path).exists() and os.access(path, os.R_OK)]
+        return [
+            path
+            for path in self.config_file_paths
+            if Path(path).exists() and os.access(path, os.R_OK)
+        ]
 
-    def get_config(self, dot_path: Optional[str] = None, default_value: ConfigValue = None) -> ConfigValue:
+    def get_config(
+        self, dot_path: Optional[str] = None, default_value: ConfigValue = None
+    ) -> ConfigValue:
         """
          Return the value for a configuration key <doct_keys>.
 

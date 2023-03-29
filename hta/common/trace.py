@@ -72,7 +72,9 @@ class TraceSymbolTable:
         shared_queue: queue.Queue[Any] = m.Queue()
         collector = _SymbolCollector(shared_queue)
 
-        with mp.get_context("spawn").Pool(min(mp.cpu_count(), len(symbols_list))) as pool:
+        with mp.get_context("spawn").Pool(
+            min(mp.cpu_count(), len(symbols_list))
+        ) as pool:
             pool.map(collector, symbols_list)
             pool.close()
             pool.join()
@@ -108,7 +110,9 @@ def parse_trace_dict(trace_file_path: str) -> Dict[str, Any]:
         with open(trace_file_path, "r") as fh2:
             trace_record = json.loads(fh2.read())
     else:
-        raise ValueError(f"expect the value of trace_file ({trace_file_path}) ends with '.gz' or 'json'")
+        raise ValueError(
+            f"expect the value of trace_file ({trace_file_path}) ends with '.gz' or 'json'"
+        )
     t_end = time.perf_counter()
     logger.info(
         f"Parsed {trace_file_path} time = {(t_end - t_start):.2f} seconds "
@@ -143,7 +147,9 @@ def compress_df(df: pd.DataFrame) -> Tuple[pd.DataFrame, TraceSymbolTable]:
 
     # extract arguments; the argument list needs to update when more arguments are used in the analysis.
     for arg in ["stream", "correlation", "Trace iteration", "memory bandwidth (GB/s)"]:
-        df[arg] = df["args"].apply(lambda row: row.get(arg, -1) if isinstance(row, dict) else -1)
+        df[arg] = df["args"].apply(
+            lambda row: row.get(arg, -1) if isinstance(row, dict) else -1
+        )
     df.drop(["args"], axis=1, inplace=True)
     df.rename(columns={"memory bandwidth (GB/s)": "memory_bw_gbps"}, inplace=True)
 
@@ -216,7 +222,9 @@ def transform_correlation_to_index(df: pd.DataFrame) -> pd.DataFrame:
     on_gpu = corr_df.loc[df["stream"].ne(-1)]
     merged_cpu_idx = on_cpu.merge(on_gpu, on="correlation", how="inner")
     merged_gpu_idx = on_gpu.merge(on_cpu, on="correlation", how="inner")
-    matched = pd.concat([merged_cpu_idx, merged_gpu_idx], axis=0)[["index_x", "index_y"]].set_index("index_x")
+    matched = pd.concat([merged_cpu_idx, merged_gpu_idx], axis=0)[
+        ["index_x", "index_y"]
+    ].set_index("index_x")
 
     corr_index_map: Dict[int, int] = matched["index_y"].to_dict()
 
@@ -366,7 +374,9 @@ class Trace:
         """
         self.trace_path: str = normalize_path(trace_dir)
         logger.info(f"{self.trace_path}")
-        self.trace_files: Dict[int, str] = trace_files if trace_files is not None else get_trace_files(self.trace_path)
+        self.trace_files: Dict[int, str] = (
+            trace_files if trace_files is not None else get_trace_files(self.trace_path)
+        )
         logger.debug(self.trace_files)
         self.traces: Dict[int, pd.DataFrame] = {}
         self.symbol_table = TraceSymbolTable()
@@ -415,9 +425,13 @@ class Trace:
             local_table = local_symbol_table.get_sym_table()
             global_map = self.symbol_table.get_sym_id_map()
             for col in ["cat", "name"]:
-                self.traces[rank][col] = self.traces[rank][col].apply(lambda idx: global_map[local_table[idx]])
+                self.traces[rank][col] = self.traces[rank][col].apply(
+                    lambda idx: global_map[local_table[idx]]
+                )
 
-    def parse_multiple_ranks(self, ranks: List[int], use_multiprocessing: bool = True) -> None:
+    def parse_multiple_ranks(
+        self, ranks: List[int], use_multiprocessing: bool = True
+    ) -> None:
         """
         Parse the trace for a given rank.
 
@@ -466,10 +480,14 @@ class Trace:
         for rank in ranks:
             local_table = local_symbol_tables[rank].get_sym_table()
             for col in ["cat", "name"]:
-                self.traces[rank][col] = self.traces[rank][col].apply(lambda idx: global_map[local_table[idx]])
+                self.traces[rank][col] = self.traces[rank][col].apply(
+                    lambda idx: global_map[local_table[idx]]
+                )
 
         t1 = time.perf_counter()
-        logger.debug(f"leaving {sys._getframe().f_code.co_name} duration={t1 - t0:.2f} seconds")
+        logger.debug(
+            f"leaving {sys._getframe().f_code.co_name} duration={t1 - t0:.2f} seconds"
+        )
 
     def parse_traces(
         self,
@@ -501,7 +519,9 @@ class Trace:
             logger.error("The list of ranks to be parsed is empty.")
             self.is_parsed = False
         t1 = time.perf_counter()
-        logger.debug(f"leaving {sys._getframe().f_code.co_name} duration={t1 - t0:.2f} seconds")
+        logger.debug(
+            f"leaving {sys._getframe().f_code.co_name} duration={t1 - t0:.2f} seconds"
+        )
 
     def align_and_filter_trace(self):
         """
@@ -565,8 +585,12 @@ class Trace:
         Normalize the trace filenames so that a rank's trace file can be located by self.trace_files[rank] itself.
         """
         if not isinstance(self.trace_files, dict):
-            logger.error(f"self.trace_files must be of type Dict[int, str]; got {type(self.trace_files)}")
-            raise ValueError(f"Expected trace_files to be Dict[int, str]; got {type(self.trace_files)}")
+            logger.error(
+                f"self.trace_files must be of type Dict[int, str]; got {type(self.trace_files)}"
+            )
+            raise ValueError(
+                f"Expected trace_files to be Dict[int, str]; got {type(self.trace_files)}"
+            )
 
         for rank in self.trace_files:
             filename = self.trace_files[rank]
@@ -582,10 +606,14 @@ class Trace:
         """
         for rank, filepath in self.trace_files.items():
             if not (os.path.exists(filepath) and os.access(filepath, os.R_OK)):
-                logger.error(f"Trace file '{filepath}' doesn't exist or is not readable.")
+                logger.error(
+                    f"Trace file '{filepath}' doesn't exist or is not readable."
+                )
                 return False
             if not (filepath.endswith(".gz") or filepath.endswith(".json")):
-                logger.error(f"The postfix of trace file '{filepath}' is neither '.gz' or '.json'")
+                logger.error(
+                    f"The postfix of trace file '{filepath}' is neither '.gz' or '.json'"
+                )
                 return False
         return True
 
@@ -608,15 +636,23 @@ class Trace:
         def filter_gpu_kernels_for_one_rank(trace_df: pd.DataFrame) -> pd.DataFrame:
             cpu_kernels = trace_df[trace_df["stream"].eq(-1)]
             gpu_kernels = trace_df[trace_df["stream"].ne(-1)]
-            last_profiler_start = cpu_kernels[cpu_kernels["name"].isin(profiler_steps)]["ts"].max()
+            last_profiler_start = cpu_kernels[cpu_kernels["name"].isin(profiler_steps)][
+                "ts"
+            ].max()
             cpu_kernels = cpu_kernels[cpu_kernels["ts"] < last_profiler_start]
-            filtered_gpu_kernels = gpu_kernels.merge(cpu_kernels["correlation"], on="correlation", how="inner")
+            filtered_gpu_kernels = gpu_kernels.merge(
+                cpu_kernels["correlation"], on="correlation", how="inner"
+            )
             return pd.concat([filtered_gpu_kernels, cpu_kernels], axis=0)
 
         if not profiler_steps:
-            logger.warning("ProfilerStep not found in the trace. The analysis result may not be accurate.")
+            logger.warning(
+                "ProfilerStep not found in the trace. The analysis result may not be accurate."
+            )
         elif len(profiler_steps) == 1:
-            logger.warning("There is only one iteration in the trace. The analysis result may not be accurate.")
+            logger.warning(
+                "There is only one iteration in the trace. The analysis result may not be accurate."
+            )
         else:
             for rank, trace_df in self.traces.items():
                 self.traces[rank] = filter_gpu_kernels_for_one_rank(trace_df)

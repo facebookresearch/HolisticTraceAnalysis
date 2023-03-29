@@ -7,7 +7,7 @@ import unittest
 
 import pandas as pd
 
-from hta.common.trace import Trace, parse_trace_dict
+from hta.common.trace import parse_trace_dict, Trace
 
 
 class TraceParseTestCase(unittest.TestCase):
@@ -27,18 +27,24 @@ class TraceParseTestCase(unittest.TestCase):
 
         # Trace parser for vision transformer
         cls.vision_transformer_t: Trace = Trace(trace_dir=vision_transformer_trace_dir)
-        cls.vision_transformer_t.parse_traces(max_ranks=max_ranks, use_multiprocessing=True)
+        cls.vision_transformer_t.parse_traces(
+            max_ranks=max_ranks, use_multiprocessing=True
+        )
         cls.vision_transformer_raw_df = cls.prepare_ground_truth_df(
             vision_transformer_trace_dir, vision_transformer_rank_0_file
         )
         # Trace parser for inference
         cls.inference_t: Trace = Trace(trace_dir=inference_trace_dir)
         cls.inference_t.parse_traces(max_ranks=max_ranks, use_multiprocessing=True)
-        cls.inference_raw_df = cls.prepare_ground_truth_df(inference_trace_dir, inference_rank_0_file)
+        cls.inference_raw_df = cls.prepare_ground_truth_df(
+            inference_trace_dir, inference_rank_0_file
+        )
 
     @classmethod
     def prepare_ground_truth_df(cls, trace_dir, rank_0_file) -> pd.DataFrame:
-        df = pd.DataFrame(parse_trace_dict(os.path.join(trace_dir, rank_0_file))["traceEvents"])
+        df = pd.DataFrame(
+            parse_trace_dict(os.path.join(trace_dir, rank_0_file))["traceEvents"]
+        )
         df.dropna(axis=0, subset=["dur", "cat"], inplace=True)
         df.drop(df[df["cat"] == "Trace"].index, inplace=True)
         return df
@@ -62,7 +68,9 @@ class TraceParseTestCase(unittest.TestCase):
             ground_truth_name = raw_df["name"]
             ground_truth_name_id = raw_df["name"].apply(lambda x: sym_id_map[x])
 
-            self.assertListEqual(rank_0_df_name_id.to_list(), ground_truth_name_id.to_list())
+            self.assertListEqual(
+                rank_0_df_name_id.to_list(), ground_truth_name_id.to_list()
+            )
             self.assertListEqual(rank_0_df_name.to_list(), ground_truth_name.to_list())
 
             # test aligned and filtered trace
@@ -85,16 +93,28 @@ class TraceParseTestCase(unittest.TestCase):
         for t in self.traces:
             df = t.traces[0]
             sym_id_map = t.symbol_table.get_sym_id_map()
-            iterations = {f"ProfilerStep#{i}" for i in set(df["iteration"].unique()) if i != -1}
+            iterations = {
+                f"ProfilerStep#{i}" for i in set(df["iteration"].unique()) if i != -1
+            }
 
-            valid_gpu_kernels = df.loc[df["stream"].gt(0) & df["index_correlation"].gt(0)]
-            correlated_cpu_ops = df.loc[df.loc[valid_gpu_kernels.index, "index_correlation"]]
-            gpu_kernels_per_iteration = valid_gpu_kernels.groupby("iteration")["index"].agg("count").to_dict()
-            correlated_cpu_ops_per_iteration = correlated_cpu_ops.groupby("iteration")["index"].agg("count").to_dict()
+            valid_gpu_kernels = df.loc[
+                df["stream"].gt(0) & df["index_correlation"].gt(0)
+            ]
+            correlated_cpu_ops = df.loc[
+                df.loc[valid_gpu_kernels.index, "index_correlation"]
+            ]
+            gpu_kernels_per_iteration = (
+                valid_gpu_kernels.groupby("iteration")["index"].agg("count").to_dict()
+            )
+            correlated_cpu_ops_per_iteration = (
+                correlated_cpu_ops.groupby("iteration")["index"].agg("count").to_dict()
+            )
 
             self.assertTrue("iteration" in df.columns)
             self.assertTrue(all(i in sym_id_map for i in iterations))
-            self.assertDictEqual(gpu_kernels_per_iteration, correlated_cpu_ops_per_iteration)
+            self.assertDictEqual(
+                gpu_kernels_per_iteration, correlated_cpu_ops_per_iteration
+            )
 
 
 if __name__ == "__main__":  # pragma: no cover

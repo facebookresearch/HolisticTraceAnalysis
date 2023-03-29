@@ -29,7 +29,11 @@ def create_rank_to_trace_dict(trace_path: str) -> Tuple[bool, Dict]:
         logger.error(f"trace_path {trace_path} doesn't exist or is not readable")
         return False, {}
 
-    file_list = [fn for fn in os.listdir(trace_path) if fn.endswith(".gz") or fn.endswith(".json")]
+    file_list = [
+        fn
+        for fn in os.listdir(trace_path)
+        if fn.endswith(".gz") or fn.endswith(".json")
+    ]
     if len(file_list) == 0:
         logger.warning(f"No trace file is found in {trace_path}")
         return False, {}

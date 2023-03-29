@@ -22,8 +22,12 @@ class HtaConfigTestCase(unittest.TestCase):
 
     def test_get_default_paths(self):
         paths = HtaConfig.get_default_paths()
-        self.assertEqual(len(paths), 3, f"expect the default file paths to be 3 but got {len(paths)}")
-        self.assertTrue(all([str(path).endswith(DEFAULT_CONFIG_FILENAME) for path in paths]))
+        self.assertEqual(
+            len(paths), 3, f"expect the default file paths to be 3 but got {len(paths)}"
+        )
+        self.assertTrue(
+            all([str(path).endswith(DEFAULT_CONFIG_FILENAME) for path in paths])
+        )
 
     def test_constructor_no_config_file(self):
         config = HtaConfig(load_default_paths=False)
@@ -53,7 +57,9 @@ class HtaConfigTestCase(unittest.TestCase):
         config = HtaConfig(self.test_config_path, load_default_paths=False)
         self.assertDictEqual(config.get_config("c"), self.test_config["c"])
         self.assertEqual(config.get_config("c.c1"), self.test_config["c"]["c1"])
-        self.assertEqual(config.get_config("c.c2.c21"), self.test_config["c"]["c2"]["c21"])
+        self.assertEqual(
+            config.get_config("c.c2.c21"), self.test_config["c"]["c2"]["c21"]
+        )
         self.assertIsNone(config.get_config("d"))
         self.assertIsNone(config.get_config("c.c2.c22"))
         self.assertIsNone(config.get_config("c.c1.c3"))

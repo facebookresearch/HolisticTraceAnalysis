@@ -23,7 +23,9 @@ setuptools.setup(
     license="MIT",
     install_requires=fetch_requirements(),
     include_package_data=True,
-    packages=setuptools.find_packages(include=["hta*"]),  # Only include code within hta.
+    packages=setuptools.find_packages(
+        include=["hta*"]
+    ),  # Only include code within hta.
     classifiers=[
         "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",

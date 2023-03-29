@@ -203,7 +203,9 @@ class CallStackGraph:
         We skip the call graph construction for GPU streams because the kernels on a single stream is just a list.
         """
         if "index_correlation" not in df.columns:
-            raise ValueError("The input DataFrame doesn't have column 'index_correlation'")
+            raise ValueError(
+                "The input DataFrame doesn't have column 'index_correlation'"
+            )
         self.correlations = df["index_correlation"]
 
         if self.device_type == DeviceType.GPU:
@@ -250,7 +252,9 @@ class CallStackGraph:
             self.nodes[parent_index].children.append(child_index)
 
         # The parent node should always exist at this point.
-        self.nodes[child_index] = CallStackNode(parent_index, self.nodes[parent_index].depth + 1, [])
+        self.nodes[child_index] = CallStackNode(
+            parent_index, self.nodes[parent_index].depth + 1, []
+        )
 
     def get_nodes(self) -> Dict[int, CallStackNode]:
         """Return the nodes of this graph."""
@@ -426,7 +430,9 @@ class CallGraph:
                     call_stack_ids.append(csi)
 
         t1 = perf_counter()
-        logging.debug(f"Completed constructing call stack graph for in {t1 - t0:.3} seconds")
+        logging.debug(
+            f"Completed constructing call stack graph for in {t1 - t0:.3} seconds"
+        )
 
         # build a map from call stack meta data to call stack objects
         self.mapping = pd.DataFrame(
@@ -440,8 +446,12 @@ class CallGraph:
 
         # add depth information to the data frame
         for rank in ranks:
-            call_stack_indices = self.mapping[self.mapping["rank"].eq(rank)]["csg_index"]
-            depth = pd.concat([self.call_stacks[idx].get_depth() for idx in call_stack_indices])
+            call_stack_indices = self.mapping[self.mapping["rank"].eq(rank)][
+                "csg_index"
+            ]
+            depth = pd.concat(
+                [self.call_stacks[idx].get_depth() for idx in call_stack_indices]
+            )
             df = self.trace_data.get_trace(rank)
             df["depth"] = depth
         self.mapping.set_index(["rank", "pid", "tid"], inplace=True)

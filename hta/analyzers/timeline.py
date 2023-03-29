@@ -13,7 +13,9 @@ from hta.common.trace import Trace, TraceSymbolTable
 from hta.configs.config import logger
 
 
-def plot_timeline(title: str, events: pd.DataFrame, ranks: Optional[List[int]] = None) -> None:
+def plot_timeline(
+    title: str, events: pd.DataFrame, ranks: Optional[List[int]] = None
+) -> None:
     """
     Plot the timeline of events
 
@@ -43,7 +45,9 @@ def plot_timeline(title: str, events: pd.DataFrame, ranks: Optional[List[int]] =
         "label",
     ]
     if not set(must_have_columns).issubset(set(events.columns)):
-        raise ValueError(f"the events dataframe doesn't contain all required columns {must_have_columns}")
+        raise ValueError(
+            f"the events dataframe doesn't contain all required columns {must_have_columns}"
+        )
 
     if ranks is None:
         if "rank" not in events.columns:
@@ -83,7 +87,9 @@ def plot_timeline(title: str, events: pd.DataFrame, ranks: Optional[List[int]] =
     logger.debug(f"Plotted timeline in {t1 - t0:.2f} seconds")
 
 
-def _get_unique_values(df: pd.DataFrame, col: str, exclude_values: List[int] = [-1]) -> List[int]:
+def _get_unique_values(
+    df: pd.DataFrame, col: str, exclude_values: List[int] = [-1]
+) -> List[int]:
     """Get the unique values for a given column <col> in the input Dataframe <df>
 
     Args:
@@ -138,7 +144,9 @@ def prepare_timeline_gpu_events(
     t0 = perf_counter()
     required_columns: List[str] = ["iteration", "name", "cat", "rank", "stream", "ts"]
     if not set(required_columns).issubset(set(df.columns)):
-        raise ValueError(f"columns {set(required_columns) - set(df.columns)} are not in input DataFrame")
+        raise ValueError(
+            f"columns {set(required_columns) - set(df.columns)} are not in input DataFrame"
+        )
 
     if ranks is None:
         ranks = _get_unique_values(df, "rank")
@@ -149,23 +157,37 @@ def prepare_timeline_gpu_events(
     if streams is None:
         streams = _get_unique_values(df, "stream")
 
-    events = df.loc[(df["rank"].isin(ranks)) & (df["iteration"].isin(iterations)) & (df["stream"].isin(streams))].copy()
+    events = df.loc[
+        (df["rank"].isin(ranks))
+        & (df["iteration"].isin(iterations))
+        & (df["stream"].isin(streams))
+    ].copy()
 
     sym_tab = symbol_table.get_sym_table()
     events["s_name"] = events["name"].apply(lambda i: sym_tab[i]).apply(_simplify_name)
     events["s_cat"] = events["cat"].apply(lambda i: sym_tab[i])
     events["calibrated_start_global"] = pd.to_datetime(events["ts"], unit="us")
     events["calibrated_end_global"] = pd.to_datetime(
-        events["ts"] + events["dur"].apply(lambda x: x if x >= duration_threshold else duration_threshold),
+        events["ts"]
+        + events["dur"].apply(
+            lambda x: x if x >= duration_threshold else duration_threshold
+        ),
         unit="us",
     )
 
     events["label"] = events["s_name"]
-    events["task"] = "rank " + events["rank"].astype("str") + " stream " + events["stream"].astype("str")
+    events["task"] = (
+        "rank "
+        + events["rank"].astype("str")
+        + " stream "
+        + events["stream"].astype("str")
+    )
     events = events.sort_values(by=["rank", "stream", "ts"])
 
     t1 = perf_counter()
-    logger.debug(f"Preprocessed events data for timeline visualization in {t1 - t0:.2f} seconds")
+    logger.debug(
+        f"Preprocessed events data for timeline visualization in {t1 - t0:.2f} seconds"
+    )
 
     return events
 
@@ -191,7 +213,9 @@ def plot_timeline_gpu_kernels(
         streams List[int]: filter the input DataFrame with the given set of streams; use all streams if None.
         duration_threshold (int) : the minimum duration given for short kernels for them to be visible on the figure.
     """
-    df_timeline = prepare_timeline_gpu_events(df, symbol_table, ranks, iterations, streams, duration_threshold)
+    df_timeline = prepare_timeline_gpu_events(
+        df, symbol_table, ranks, iterations, streams, duration_threshold
+    )
     plot_timeline(title, df_timeline)
 
 
