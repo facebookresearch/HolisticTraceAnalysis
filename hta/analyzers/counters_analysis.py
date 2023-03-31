@@ -56,10 +56,10 @@ class CountersAnalysis:
         cg = CallGraph(t)
 
         for rank in ranks:
-            # get trace for a rank
+            # Get trace for a rank
             trace_df: pd.DataFrame = t.get_trace(rank)
 
-            # get cuda profiler events
+            # Get cuda profiler events
             gpu_kernels = trace_df[trace_df["cat"].eq(cuda_profiler_cat)].reset_index(drop=True)
 
             # call stacks of interest are all on CPU
@@ -69,8 +69,8 @@ class CountersAnalysis:
             leaf_nodes: List[int] = []
             for i in call_stacks_idxs:
                 leaf_nodes.extend(cg.call_stacks[i].get_leaf_nodes(-1))
-
             leaf_df = trace_df.loc[leaf_nodes]
+
             kernel_launches = leaf_df[leaf_df["cat"].eq(cuda_runtime_cat)]
             kernel_launches = kernel_launches[kernel_launches["name"].eq(kernel_launch_sym)].reset_index(drop=True)
 
