@@ -67,7 +67,9 @@ class TraceCompareTestCase(unittest.TestCase):
         }
 
     def test_labeled_trace(self) -> None:
-        base_t = LabeledTrace(label=self.base_trace["label"], trace_dir=self.base_trace["trace_dir"])
+        base_t = LabeledTrace(
+            label=self.base_trace["label"], trace_dir=self.base_trace["trace_dir"]
+        )
         self.assertListEqual(base_t.ranks(), self.base_trace["ranks"])
         self.assertListEqual(base_t.iterations(), self.base_trace["iterations"])
 
@@ -76,7 +78,9 @@ class TraceCompareTestCase(unittest.TestCase):
         self.assertTrue(base_t.label.startswith("t"))
 
     def test_extract_ops(self) -> None:
-        base_t = LabeledTrace(label=self.base_trace["label"], trace_dir=self.base_trace["trace_dir"])
+        base_t = LabeledTrace(
+            label=self.base_trace["label"], trace_dir=self.base_trace["trace_dir"]
+        )
         cpu_events: pd.DataFrame = base_t.extract_ops(
             self.base_trace["test_rank"],
             self.base_trace["test_iteration"],
@@ -91,7 +95,9 @@ class TraceCompareTestCase(unittest.TestCase):
         self.assertEqual(gpu_events.shape[0], self.base_trace["test_num_gpu_events"])
 
     def test_get_ops_summary(self) -> None:
-        base_t = LabeledTrace(label=self.base_trace["label"], trace_dir=self.base_trace["trace_dir"])
+        base_t = LabeledTrace(
+            label=self.base_trace["label"], trace_dir=self.base_trace["trace_dir"]
+        )
         df: pd.DataFrame = base_t.get_ops_summary(
             base_t.extract_ops(
                 self.base_trace["test_rank"],
@@ -100,16 +106,22 @@ class TraceCompareTestCase(unittest.TestCase):
             )
         )
         self.assertDictEqual(
-            df.sort_values(by="name")[["name", "counts", "total_duration"]].set_index("name").to_dict(),
+            df.sort_values(by="name")[["name", "counts", "total_duration"]]
+            .set_index("name")
+            .to_dict(),
             self.base_trace["test_user_annotation_summary"],
         )
 
     def test_compare_trace(self) -> None:
-        base_t = LabeledTrace(label=self.base_trace["label"], trace_dir=self.base_trace["trace_dir"])
+        base_t = LabeledTrace(
+            label=self.base_trace["label"], trace_dir=self.base_trace["trace_dir"]
+        )
         base_rank = self.base_trace["test_rank"]
         base_iteration = self.base_trace["test_iteration"]
 
-        test_t = LabeledTrace(label=self.test_trace["label"], trace_dir=self.test_trace["trace_dir"])
+        test_t = LabeledTrace(
+            label=self.test_trace["label"], trace_dir=self.test_trace["trace_dir"]
+        )
         test_rank = self.test_trace["test_rank"]
         test_iteration = self.test_trace["test_iteration"]
 
@@ -144,11 +156,15 @@ class TraceCompareTestCase(unittest.TestCase):
         )
 
     def test_ops_diff(self) -> None:
-        base_t = LabeledTrace(label=self.base_trace["label"], trace_dir=self.base_trace["trace_dir"])
+        base_t = LabeledTrace(
+            label=self.base_trace["label"], trace_dir=self.base_trace["trace_dir"]
+        )
         base_rank = self.base_trace["test_rank"]
         base_iteration = self.base_trace["test_iteration"]
 
-        test_t = LabeledTrace(label=self.test_trace["label"], trace_dir=self.test_trace["trace_dir"])
+        test_t = LabeledTrace(
+            label=self.test_trace["label"], trace_dir=self.test_trace["trace_dir"]
+        )
         test_rank = self.test_trace["test_rank"]
         test_iteration = self.test_trace["test_iteration"]
 
@@ -164,11 +180,15 @@ class TraceCompareTestCase(unittest.TestCase):
         self.assertDictEqual(diff, self.test_trace["ops_diff"])
 
     def test_visualize(self) -> None:
-        base_t = LabeledTrace(label=self.base_trace["label"], trace_dir=self.base_trace["trace_dir"])
+        base_t = LabeledTrace(
+            label=self.base_trace["label"], trace_dir=self.base_trace["trace_dir"]
+        )
         base_rank = self.base_trace["test_rank"]
         base_iteration = self.base_trace["test_iteration"]
 
-        test_t = LabeledTrace(label=self.test_trace["label"], trace_dir=self.test_trace["trace_dir"])
+        test_t = LabeledTrace(
+            label=self.test_trace["label"], trace_dir=self.test_trace["trace_dir"]
+        )
         test_rank = self.test_trace["test_rank"]
         test_iteration = self.test_trace["test_iteration"]
 

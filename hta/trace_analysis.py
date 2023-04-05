@@ -3,7 +3,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from collections import defaultdict
-from enum import Flag, auto
+from enum import auto, Flag
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import pandas as pd
@@ -65,7 +65,9 @@ class TraceAnalysis:
         profiler_steps: Optional[List[int]] = None,
         num_candidates: int = 2,
         visualize: bool = False,
-        straggler_identification_impl: Callable[..., pd.Series] = find_stragglers_with_late_start_comm_kernels,
+        straggler_identification_impl: Callable[
+            ..., pd.Series
+        ] = find_stragglers_with_late_start_comm_kernels,
     ) -> List[int]:
         r"""
         Identify potential stragglers based on a pre-defined metric computed from the trace.
@@ -286,19 +288,25 @@ class TraceAnalysis:
             ranks = [0]
 
         if time_series is None:
-            time_series = TimeSeriesTypes.QUEUE_LENGTH | TimeSeriesTypes.MEMCPY_BANDWIDTH
+            time_series = (
+                TimeSeriesTypes.QUEUE_LENGTH | TimeSeriesTypes.MEMCPY_BANDWIDTH
+            )
 
         counter_events: Dict[int, List[Dict[str, Any]]] = defaultdict(list)
         if output_suffix == "":
             output_suffix = "_with_counters"
 
-        def add_time_series(series_dict: Dict[int, pd.DataFrame], counter_name: str, counter_col: str):
+        def add_time_series(
+            series_dict: Dict[int, pd.DataFrame], counter_name: str, counter_col: str
+        ):
             nonlocal counter_events
             """accept a rank -> time series dict and append it"""
             for rank, series in series_dict.items():
                 if "stream" in series.columns:
                     series.rename(columns={"stream": "id"}, inplace=True)
-                ce = self.t.convert_time_series_to_events(series, counter_name, counter_col)
+                ce = self.t.convert_time_series_to_events(
+                    series, counter_name, counter_col
+                )
                 counter_events[rank].extend(ce)
 
         if TimeSeriesTypes.QUEUE_LENGTH in time_series:
@@ -317,7 +325,9 @@ class TraceAnalysis:
         for rank, ev_list in counter_events.items():
             raw_trace_content = self.t.get_raw_trace_for_one_rank(rank=rank)
             raw_trace_content["traceEvents"].extend(ev_list)
-            output_file = self.t.trace_files[rank].replace(".json", f"{output_suffix}.json")
+            output_file = self.t.trace_files[rank].replace(
+                ".json", f"{output_suffix}.json"
+            )
             logger.info(f"Writing trace with counters for rank {rank} to {output_file}")
             self.t.write_raw_trace(output_file, raw_trace_content)
 

@@ -28,4 +28,6 @@ class CorrelationTestCase(unittest.TestCase):
         )
         expected_index_correlation = [5, 6, 0, -1, 1, 2, 0, -1]
         df2 = transform_correlation_to_index(df)
-        self.assertListEqual(expected_index_correlation, df2["index_correlation"].tolist())
+        self.assertListEqual(
+            expected_index_correlation, df2["index_correlation"].tolist()
+        )

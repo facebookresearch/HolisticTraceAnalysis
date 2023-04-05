@@ -25,7 +25,9 @@ sys.path.insert(0, os.path.abspath(".."))
 
 def find_version(version_file_path) -> str:
     with open(version_file_path) as version_file:
-        version_match = re.search(r"^__version_tuple__ = (.*)", version_file.read(), re.M)
+        version_match = re.search(
+            r"^__version_tuple__ = (.*)", version_file.read(), re.M
+        )
         if version_match:
             ver_tup = eval(version_match.group(1))
             ver_str = ".".join([str(x) for x in ver_tup])

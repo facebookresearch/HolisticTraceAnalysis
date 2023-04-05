@@ -47,7 +47,9 @@ class LabeledTrace:
         elif trace_dir is not None and os.path.isdir(trace_dir):
             self.t = Trace(trace_dir=trace_dir)
         else:
-            raise ValueError("either a trace object or a valid trace dir must be provided in LabeledTrace.__init__()")
+            raise ValueError(
+                "either a trace object or a valid trace dir must be provided in LabeledTrace.__init__()"
+            )
         self.t.parse_traces()
 
         self.s_map = pd.Series(self.t.symbol_table.get_sym_id_map())
@@ -66,7 +68,9 @@ class LabeledTrace:
         """Extract the iterations from the symbol map"""
         s_map = pd.Series(self.t.symbol_table.get_sym_id_map())
         iteration_df = s_map[s_map.index.str.startswith("ProfilerStep")].reset_index()
-        iteration_df["iteration"] = iteration_df["index"].apply(lambda s: int(s.replace("ProfilerStep#", "")))
+        iteration_df["iteration"] = iteration_df["index"].apply(
+            lambda s: int(s.replace("ProfilerStep#", ""))
+        )
         iteration_df.rename(columns={0: "id", "index": "symbol"}, inplace=True)
         return iteration_df
 
@@ -174,7 +178,11 @@ class LabeledTrace:
             2 	cpu_op 	            aten::as_strided 	aten::as_strided 	1 	0 	            12 	    0
         """
         s_tab = self.s_tab
-        df = ops[["cat", "name", "dur"]].groupby(["cat", "name"]).aggregate(["count", "sum"])
+        df = (
+            ops[["cat", "name", "dur"]]
+            .groupby(["cat", "name"])
+            .aggregate(["count", "sum"])
+        )
         df.columns = ["_".join(col).rstrip("_") for col in df.columns.values]
         df.reset_index(inplace=True)
         df.rename(
@@ -204,7 +212,9 @@ class LabeledTrace:
         return df
 
 
-def _trace_argument_adapter(t: Union[LabeledTrace, Trace, TraceDir], default_label: str) -> LabeledTrace:
+def _trace_argument_adapter(
+    t: Union[LabeledTrace, Trace, TraceDir], default_label: str
+) -> LabeledTrace:
     """A helper function to construct a LabeledTrace from several argument types."""
     lt: LabeledTrace
     if isinstance(t, TraceDir):
@@ -292,20 +302,26 @@ class TraceDiff:
         if control_trace.label == test_trace.label:
             test_trace.label = f"{test_trace.label}_control"
             test_trace.label = f"{test_trace.label}_test"
-            logger.warn(f"The two traces have the same label. change test_trace's label to {test_trace.label}")
+            logger.warn(
+                f"The two traces have the same label. change test_trace's label to {test_trace.label}"
+            )
         control_label = control_trace.label
         test_label = test_trace.label
 
         # Determine which column use to group the operators
         col_name = "short_name" if use_short_name else "name"
         control_trace_summary = (
-            control_trace.get_ops_summary(control_trace.extract_ops(control_rank, control_iteration, device_type))
+            control_trace.get_ops_summary(
+                control_trace.extract_ops(control_rank, control_iteration, device_type)
+            )
             .groupby(col_name)[["counts", "total_duration"]]
             .sum()
         )
 
         test_trace_summary = (
-            test_trace.get_ops_summary(test_trace.extract_ops(test_rank, test_iteration, device_type))
+            test_trace.get_ops_summary(
+                test_trace.extract_ops(test_rank, test_iteration, device_type)
+            )
             .groupby(col_name)[["counts", "total_duration"]]
             .sum()
         )
@@ -319,9 +335,16 @@ class TraceDiff:
         comp.fillna(0, inplace=True)
         flatten_column_names(comp)
 
-        comp["diff_counts"] = comp[f"{test_label}_counts"] - comp[f"{control_label}_counts"]
-        comp["diff_duration"] = comp[f"{test_label}_total_duration"] - comp[f"{control_label}_total_duration"]
-        comp["counts_change_categories"] = comp["diff_counts"].apply(lambda c: "+" if c > 0 else "-" if c < 0 else "=")
+        comp["diff_counts"] = (
+            comp[f"{test_label}_counts"] - comp[f"{control_label}_counts"]
+        )
+        comp["diff_duration"] = (
+            comp[f"{test_label}_total_duration"]
+            - comp[f"{control_label}_total_duration"]
+        )
+        comp["counts_change_categories"] = comp["diff_counts"].apply(
+            lambda c: "+" if c > 0 else "-" if c < 0 else "="
+        )
 
         return comp
 
@@ -397,8 +420,12 @@ class TraceDiff:
         col_diff = "diff_counts"
         return {
             "added": df.loc[df[col_control].eq(0) & df[col_test].gt(0)].index.tolist(),
-            "deleted": df.loc[df[col_control].gt(0) & df[col_test].eq(0)].index.tolist(),
-            "increased": df.loc[df[col_control].gt(0) & df[col_diff].gt(0)].index.tolist(),
+            "deleted": df.loc[
+                df[col_control].gt(0) & df[col_test].eq(0)
+            ].index.tolist(),
+            "increased": df.loc[
+                df[col_control].gt(0) & df[col_diff].gt(0)
+            ].index.tolist(),
             "decreased": df.loc[df[col_test].gt(0) & df[col_diff].lt(0)].index.tolist(),
             "unchanged": df.loc[df[col_test].gt(0) & df[col_diff].eq(0)].index.tolist(),
         }
@@ -422,7 +449,9 @@ class TraceDiff:
             None
         """
         labels: List[str] = [
-            col.replace("_total_duration", "") for col in df.columns if col.endswith("_total_duration")
+            col.replace("_total_duration", "")
+            for col in df.columns
+            if col.endswith("_total_duration")
         ]
         assert len(labels) >= 2
 
@@ -458,7 +487,9 @@ class TraceDiff:
             None
         """
         labels: List[str] = [
-            col.replace("_total_duration", "") for col in df.columns if col.endswith("_total_duration")
+            col.replace("_total_duration", "")
+            for col in df.columns
+            if col.endswith("_total_duration")
         ]
         assert len(labels) >= 2
 

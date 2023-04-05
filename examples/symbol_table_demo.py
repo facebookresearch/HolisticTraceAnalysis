@@ -12,10 +12,11 @@ Note: For the above command to work specify the path to HolisticTraceAnalysis fo
 import argparse
 import logging
 import os
-import pandas as pd
-import plotly.express as px
 
 from typing import Optional
+
+import pandas as pd
+import plotly.express as px
 
 from hta.common.trace import Trace
 
@@ -50,7 +51,9 @@ def demo_statistics(trace: Trace, rank: int, k: Optional[int] = None) -> pd.Data
 
     df_cpu_ops = df[df["cat"] == sym_id_map["Kernel"]]
     total_time = df_cpu_ops["dur"].sum()
-    gb = df_cpu_ops.groupby(by="name")["dur"].agg(["sum", "max", "min", "mean", "std", "count"])
+    gb = df_cpu_ops.groupby(by="name")["dur"].agg(
+        ["sum", "max", "min", "mean", "std", "count"]
+    )
     gb["percent"] = gb["sum"] / total_time * 100
 
     gb.reset_index(inplace=True)
@@ -128,11 +131,15 @@ def run_demo(
     # rank_0_df_name = demo_trace.traces[0]["name"].apply(lambda x: sym_table[x])
 
     num_entries = min(10, len(sym_table))
-    logging.info(f"\n===Symbol Table===\ntype={type(sym_table)}\nFirst {num_entries} entries:\n")
+    logging.info(
+        f"\n===Symbol Table===\ntype={type(sym_table)}\nFirst {num_entries} entries:\n"
+    )
     for i, sym in enumerate(sym_table[:num_entries]):
         logging.info(f"sym_table[{i}] = {sym}")
     logging.info("===End of Symbol Table")
-    logging.info(f"===Symbol to ID Map===\ntype={type(sym_id_map)}\nFirst {num_entries} entries:\n")
+    logging.info(
+        f"===Symbol to ID Map===\ntype={type(sym_id_map)}\nFirst {num_entries} entries:\n"
+    )
     count = num_entries
     for k, v in sym_id_map.items():
         logging.info(f"sym_id_map[{k}] = {v}")
@@ -151,13 +158,17 @@ def run_demo(
 
     logging.info("\n===Kernel Statistics===\n")
     top_k: int = 10
-    all_ranks_results = [demo_statistics(demo_trace, rank=r, k=top_k) for r in range(max_ranks)]
+    all_ranks_results = [
+        demo_statistics(demo_trace, rank=r, k=top_k) for r in range(max_ranks)
+    ]
     for r in range(max_ranks):
         logging.info(f"\nTop {top_k} kernels of rank {r}:\n{all_ranks_results[r]}\n")
 
     # uncomment this line to show the visualization on a browser
     for r in range(max_ranks):
-        demo_visualization(all_ranks_results[r], f"\nTop {top_k} kernels for Rank {r}\n")
+        demo_visualization(
+            all_ranks_results[r], f"\nTop {top_k} kernels for Rank {r}\n"
+        )
 
 
 def trace_info(trace: Trace):
