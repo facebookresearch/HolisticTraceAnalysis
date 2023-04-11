@@ -467,7 +467,7 @@ class Trace:
             logger.debug(f"finished parallel parsing using {num_procs} processes.")
 
             # collect the results
-            for (rank, result) in zip(ranks, results):
+            for rank, result in zip(ranks, results):
                 self.meta_data[rank], self.traces[rank], local_symbol_tables[rank] = (
                     result[0],
                     result[1],

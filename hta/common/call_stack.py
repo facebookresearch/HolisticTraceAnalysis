@@ -186,7 +186,6 @@ class CallStackGraph:
         self._compute_depth()
 
     def __repr__(self):
-
         ret = "\n"
         for key, item in self.nodes.items():
             ret = ret + f"    {key}: {item}\n"
