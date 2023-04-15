@@ -6,7 +6,6 @@ import gzip
 import json
 import os
 import re
-import sys
 from typing import Any, Dict, Tuple
 
 from hta.configs.config import logger
@@ -37,13 +36,6 @@ def create_rank_to_trace_dict(trace_dir: str) -> Tuple[bool, Dict]:
         logger.warning(f"No trace file is found in {trace_dir}")
         return False, {}
 
-    file_list = [
-        fn for fn in os.listdir(trace_dir) if fn.endswith(".gz") or fn.endswith(".json")
-    ]
-    if len(file_list) == 0:
-        logger.warning(f"No trace file is found in {trace_dir}")
-        return False, {}
-
     rank_to_trace_dict: Dict[int, str] = {}
     for file in file_list:
         file_path = os.path.join(trace_dir, file)
@@ -59,7 +51,11 @@ def create_rank_to_trace_dict(trace_dir: str) -> Tuple[bool, Dict]:
             # match is like "rank": 6,
             match = re.search(r'"rank": \d+', data)
             if match:
-                rank = match.group().split(": ")[1]
+                rank = int(match.group().split(": ")[1])
+                if rank in rank_to_trace_dict:
+                    logger.error(
+                        f"File {rank_to_trace_dict[rank]} and file {file_path} has the same rank. Will use {file_path} as the path to rank: {rank}."
+                    )
                 rank_to_trace_dict[int(rank)] = file_path
             else:
                 logger.error(
@@ -67,7 +63,6 @@ def create_rank_to_trace_dict(trace_dir: str) -> Tuple[bool, Dict]:
                     'key to the json files to use HTA; "distributedInfo": {"rank": 0}. If there are multiple '
                     "traces files, then each file should have a unique rank value."
                 )
-                sys.exit()
 
     return True, rank_to_trace_dict
 
