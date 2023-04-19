@@ -29,11 +29,20 @@ class CountersAnalysis:
     ) -> List[pd.DataFrame]:
         """Correlates the Kernel counter events with pytorch operators using
         the callgraph.
-        Returns a list of dataframes, one per rank
-        TODO:bcoutinho improve doc
+        Args:
+            t (Trace): trace object
+            ranks (List[int]): List of ranks on which to run the analysis. Default = [0].
+            stringify (bool): Add back string to symbol IDs for kernels/operators.
+        Returns:
+            A list of dataframes, one per rank, containing kernel name,
+            op_stack (operator stack), top and bottom level op, and columns
+            for individual performance counters.
+
+        For more details see `get_counter_data_with_operators` in `trace_analysis.py`,
+        or read more here https://github.com/facebookresearch/HolisticTraceAnalysis/issues/29
         """
 
-        if ranks is None:
+        if ranks is None or len(ranks) == 0:
             ranks = [0]
 
         result_list: List[pd.DataFrame] = []
@@ -60,10 +69,14 @@ class CountersAnalysis:
             trace_df: pd.DataFrame = t.get_trace(rank)
 
             # Get cuda profiler events
-            gpu_kernels = trace_df[trace_df["cat"].eq(cuda_profiler_cat)].reset_index(drop=True)
+            gpu_kernels = trace_df[trace_df["cat"].eq(cuda_profiler_cat)].reset_index(
+                drop=True
+            )
 
             # call stacks of interest are all on CPU
-            call_stacks_idxs = cg.mapping.query(f"rank == {rank} and pid != 0 and tid != 0").csg_index.values
+            call_stacks_idxs = cg.mapping.query(
+                f"rank == {rank} and pid != 0 and tid != 0"
+            ).csg_index.values
 
             # merge with runtime events from call stacks
             leaf_nodes: List[int] = []
@@ -72,12 +85,21 @@ class CountersAnalysis:
             leaf_df = trace_df.loc[leaf_nodes]
 
             kernel_launches = leaf_df[leaf_df["cat"].eq(cuda_runtime_cat)]
-            kernel_launches = kernel_launches[kernel_launches["name"].eq(kernel_launch_sym)].reset_index(drop=True)
+            kernel_launches = kernel_launches[
+                kernel_launches["name"].eq(kernel_launch_sym)
+            ].reset_index(drop=True)
 
             # We map 1:1 each kernel launch with gpu kernel
             # so the number of each should be equal
-            # TODO:bcoutinho log this error and skip to next rank
-            assert len(kernel_launches) == len(gpu_kernels)
+
+            if len(kernel_launches) != len(gpu_kernels):
+                logger.error(
+                    "Number of kernels launches and kernels do not match for"
+                    f" rank {rank}\n"
+                    f" kernel launches ({len(kernel_launches)})"
+                    f" kernels ({len(gpu_kernels)})"
+                )
+                continue
 
             # Now, we do the merge using index only
             gpu_kernels = gpu_kernels.merge(
@@ -91,7 +113,9 @@ class CountersAnalysis:
             # Add the op_stack as an array
             def get_opstack(row: pd.Series) -> List[int]:
                 for i in call_stacks_idxs:
-                    op_stack = cg.call_stacks[i].get_path_to_root(row.index_runtime)[:-2]
+                    op_stack = cg.call_stacks[i].get_path_to_root(row.index_runtime)[
+                        :-2
+                    ]
                     if len(op_stack) > 0:
                         return op_stack
                 return []
@@ -100,12 +124,16 @@ class CountersAnalysis:
 
             def get_top_or_bottom_op(ops: List[int], top: bool) -> int:
                 # only get ops that are cpu_op
-                filterd_ops = [op for op in ops if trace_df.loc[op]["cat"] == cpu_op_cat]
+                filterd_ops = [
+                    op for op in ops if trace_df.loc[op]["cat"] == cpu_op_cat
+                ]
                 if len(filterd_ops) < 1:
                     return -1
                 return filterd_ops[-1 if top else 0]
 
-            gpu_kernels["top_level_op"] = gpu_kernels["op_stack"].apply(lambda ops: get_top_or_bottom_op(ops, top=True))
+            gpu_kernels["top_level_op"] = gpu_kernels["op_stack"].apply(
+                lambda ops: get_top_or_bottom_op(ops, top=True)
+            )
             gpu_kernels["bottom_level_op"] = gpu_kernels["op_stack"].apply(
                 lambda ops: get_top_or_bottom_op(ops, top=False)
             )
@@ -118,13 +146,17 @@ class CountersAnalysis:
                     )
                 for col in ["top_level_op", "bottom_level_op"]:
                     gpu_kernels[col] = gpu_kernels[col].apply(
-                        lambda op: sym_table[trace_df.loc[op]["name"]] if op >= 0 else ""
+                        lambda op: sym_table[trace_df.loc[op]["name"]]
+                        if op >= 0
+                        else ""
                     )
 
                 def stringify_op_stack(ops: List[int]) -> List[str]:
                     return [sym_table[trace_df.loc[op]["name"]] for op in ops]
 
-                gpu_kernels["op_stack"] = gpu_kernels["op_stack"].apply(stringify_op_stack)
+                gpu_kernels["op_stack"] = gpu_kernels["op_stack"].apply(
+                    stringify_op_stack
+                )
 
             result_list.append(gpu_kernels)
 
