@@ -147,9 +147,9 @@ def compress_df(df: pd.DataFrame) -> Tuple[pd.DataFrame, TraceSymbolTable]:
 
     # extract arguments; the argument list needs to update when more arguments are used in the analysis.
     args_to_keep = {
-        "stream", 
-        "correlation", 
-        "Trace iteration", 
+        "stream",
+        "correlation",
+        "Trace iteration",
         "memory bandwidth (GB/s)",
     }
     # performance counters appear as args
