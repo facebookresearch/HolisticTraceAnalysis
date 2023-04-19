@@ -146,10 +146,17 @@ def compress_df(df: pd.DataFrame) -> Tuple[pd.DataFrame, TraceSymbolTable]:
     df.drop(list(columns_to_drop), axis=1, inplace=True)
 
     # extract arguments; the argument list needs to update when more arguments are used in the analysis.
-    args_to_keep = {"stream", "correlation", "Trace iteration", "memory bandwidth (GB/s)"}
+    args_to_keep = {
+        "stream", 
+        "correlation", 
+        "Trace iteration", 
+        "memory bandwidth (GB/s)",
+    }
     # performance counters appear as args
     if "cuda_profiler_range" in df.cat.unique():
-        counter_names = set.union(*[set(d.keys()) for d in df[df.cat == "cuda_profiler_range"]["args"].values])
+        counter_names = set.union(
+            *[set(d.keys()) for d in df[df.cat == "cuda_profiler_range"]["args"].values]
+        )
         args_to_keep = args_to_keep.union(counter_names)
 
     for arg in args_to_keep:
