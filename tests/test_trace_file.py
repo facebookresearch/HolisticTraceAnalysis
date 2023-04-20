@@ -12,6 +12,7 @@ from hta.common.trace_file import (
     update_trace_rank,
     write_trace,
 )
+from hta.configs.config import logger
 
 
 class TestTraceFile(unittest.TestCase):
@@ -54,16 +55,31 @@ class TestTraceFile(unittest.TestCase):
     def setUp(self) -> None:
         self.trace_without_distributed_info = "tests/data/distributed_info_unavailable"
         self.trace_without_rank = "tests/data/rank_unavailable"
+        self.trace_mixed_files = "tests/data/mixed_files"
+        self.logger = logger
 
     def test_create_rank_to_trace_dict_without_distributed_info(self):
-        self.assertRaises(
-            SystemExit, create_rank_to_trace_dict, self.trace_without_distributed_info
-        )
+        with self.assertLogs(logger, level="ERROR") as cm:
+            self.assertEqual(
+                create_rank_to_trace_dict(self.trace_without_distributed_info),
+                (True, {}),
+            )
+            self.assertIn("trace file does not have the rank", cm.output[0])
 
     def test_create_rank_to_trace_dict_without_rank(self) -> None:
-        self.assertRaises(
-            SystemExit, create_rank_to_trace_dict, self.trace_without_rank
-        )
+        with self.assertLogs(logger, level="ERROR") as cm:
+            self.assertEqual(
+                create_rank_to_trace_dict(self.trace_without_rank), (True, {})
+            )
+            self.assertIn("trace file does not have the rank", cm.output[0])
+
+    def test_create_rank_to_trace_dict_with_mixed_dir(self) -> None:
+        with self.assertLogs(logger, level="ERROR") as cm:
+            self.assertEqual(
+                create_rank_to_trace_dict(self.trace_mixed_files),
+                (True, {0: "tests/data/mixed_files/rank_non_gpu.json.gz"}),
+            )
+            self.assertIn("has the same rank", cm.output[0])
 
     def test_read_write_trace(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdirname:
