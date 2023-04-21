@@ -10,6 +10,7 @@ from typing import List
 from unittest.mock import patch
 
 import hta
+from hta.analyzers.counters_analysis import CUDA_SASS_INSTRUCTION_COUNTER_FLOPS
 from hta.common.trace import PHASE_COUNTER
 from hta.trace_analysis import TimeSeriesTypes, TraceAnalysis
 
@@ -296,6 +297,33 @@ class TraceAnalysisTestCase(unittest.TestCase):
                 expval,
                 msg=f"Stream 7 idle stats mismatch key={key}",
             )
+
+    def test_get_counter_data_with_operators(self):
+        # regular trace should return empty list since it will not have cuda_profiler_range events
+        self.assertEqual(self.inference_t.get_counter_data_with_operators(), [])
+
+        cupti_profiler_trace_dir: str = "tests/data/cupti_profiler/"
+        cupti_profiler_t = TraceAnalysis(trace_dir=cupti_profiler_trace_dir)
+
+        counters_df = cupti_profiler_t.get_counter_data_with_operators(stringify=True)[
+            0
+        ]
+
+        test_row = counters_df.iloc[5].to_dict()
+        self.assertEqual(test_row["cat"], "cuda_profiler_range")
+        self.assertTrue("fft2d_r2c_32x32" in test_row["name"])
+
+        self.assertEqual(
+            test_row["smsp__sass_thread_inst_executed_op_fadd_pred_on.sum"], 86114304
+        )
+        self.assertEqual(test_row["top_level_op"], "aten::conv2d")
+        self.assertEqual(test_row["bottom_level_op"], "aten::_convolution")
+
+        # Example trace has CUPTI SASS FLOPS instruction counters
+        counter_names = set(CUDA_SASS_INSTRUCTION_COUNTER_FLOPS.keys())
+        self.assertEqual(
+            set(counters_df.columns.unique()) & counter_names, counter_names
+        )
 
 
 if __name__ == "__main__":  # pragma: no cover
