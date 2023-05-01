@@ -114,10 +114,8 @@ def parse_trace_dict(trace_file_path: str) -> Dict[str, Any]:
             f"expect the value of trace_file ({trace_file_path}) ends with '.gz' or 'json'"
         )
     t_end = time.perf_counter()
-    logger.info(
-        f"Parsed {trace_file_path} time = {(t_end - t_start):.2f} seconds "
-        f"mem = {get_memory_usage(trace_record) / 1e6:.2f} MB"
-    )
+    logger.info(f"Parsed {trace_file_path} time = {(t_end - t_start):.2f} seconds ")
+    logger.debug(f"mem = {get_memory_usage(trace_record) / 1e6:.2f} MB")
     return trace_record
 
 
