@@ -12,6 +12,7 @@ import queue
 import re
 import sys
 import time
+import tracemalloc
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import pandas as pd
@@ -19,7 +20,7 @@ import pandas as pd
 from hta.common.trace_file import get_trace_files
 from hta.configs.config import logger
 from hta.configs.default_values import DEFAULT_TRACE_DIR
-from hta.utils.utils import get_memory_usage, normalize_path
+from hta.utils.utils import get_mp_pool_size, normalize_path
 
 MetaData = Dict[str, Any]
 PHASE_COUNTER: str = "C"
@@ -115,7 +116,6 @@ def parse_trace_dict(trace_file_path: str) -> Dict[str, Any]:
         )
     t_end = time.perf_counter()
     logger.info(f"Parsed {trace_file_path} time = {(t_end - t_start):.2f} seconds ")
-    logger.debug(f"mem = {get_memory_usage(trace_record) / 1e6:.2f} MB")
     return trace_record
 
 
@@ -346,7 +346,9 @@ def parse_trace_dataframe(
         add_iteration(df, local_symbol_table)
 
     t_end = time.perf_counter()
-    logger.debug(f"Parsed {trace_file_path} in {(t_end - t_start):.2f} seconds")
+    logger.debug(
+        f"Parsed {trace_file_path} in {(t_end - t_start):.2f} seconds; current PID:{os. getpid()}"
+    )
     return meta, df, local_symbol_table
 
 
@@ -470,8 +472,17 @@ class Trace:
             logger.debug(f"finished parsing for all {len(ranks)} ranks")
         else:
             num_procs = min(mp.cpu_count(), len(ranks))
+            if len(ranks) <= 8:
+                num_procs = min(len(ranks), mp.cpu_count())
+            else:
+                tracemalloc.start()
+                parse_trace_dataframe(trace_paths[0])
+                current, peak = tracemalloc.get_traced_memory()
+                tracemalloc.stop()
+                num_procs = get_mp_pool_size(peak, len(ranks))
             logger.debug(f"using {num_procs} processes for parsing.")
-            with mp.get_context("spawn").Pool(num_procs) as pool:
+
+            with mp.get_context("fork").Pool(num_procs) as pool:
                 results = pool.map(parse_trace_dataframe, trace_paths)
                 pool.close()
                 pool.join()

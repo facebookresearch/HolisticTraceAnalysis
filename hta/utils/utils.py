@@ -2,13 +2,13 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-import sys
-from collections import deque
+import multiprocessing as mp
 from enum import Enum
 from pathlib import Path
-from typing import Any, List, Set
+from typing import List
 
 import pandas as pd
+import psutil
 
 
 class KernelType(Enum):
@@ -21,38 +21,6 @@ class IdleTimeType(Enum):
     HOST_WAIT = 0
     KERNEL_WAIT = 1
     OTHER = 2
-
-
-def get_memory_usage(o: Any) -> int:
-    """Get the memory usage of an object.
-
-    Args:
-        o (object): an object
-
-    Returns:
-        the memory usage by the object <o>.
-    """
-    seen: Set[int] = set()
-
-    def get_size(obj: Any) -> int:
-        """Get the size of an object recursively."""
-        if id(obj) in seen:
-            return 0
-        size = sys.getsizeof(obj)
-        seen.add(id(obj))
-
-        if isinstance(obj, (str, bytes, bytearray)):
-            pass
-        elif isinstance(obj, dict):
-            size += sum([get_size(v) for v in obj.keys()])
-            size += sum([get_size(v) for v in obj.values()])
-        elif isinstance(obj, (tuple, list, Set, deque)):
-            size += sum(get_size(i) for i in obj)
-        elif hasattr(obj, "__dict__"):
-            size += get_size(vars(obj))
-        return size
-
-    return get_size(o)
 
 
 def normalize_path(path: str) -> str:
@@ -174,3 +142,21 @@ def flatten_column_names(df: pd.DataFrame) -> None:
     """Flatten a DataFrame's a multiple index column names to a single string"""
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = ["_".join(col).rstrip("_") for col in df.columns]
+
+
+def get_mp_pool_size(obj_size: int, num_objs: int) -> int:
+    """
+    Estimate the maximum pool size for multiprocessing
+
+    Args:
+        obj_size (int): the size of objects to be processed
+        num_objs (int): the total number of objects to be processed
+
+    Returns:
+        int
+            the recommend pool size
+    """
+    free_mem = psutil.virtual_memory().available
+    # Leave 20% buffer for system and other processes
+    max_np = int(0.8 * free_mem / obj_size)
+    return min(max_np, num_objs, mp.cpu_count())
