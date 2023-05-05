@@ -103,8 +103,7 @@ jobs:
           key: cache-key-cpu-py38-{{.Environment.CACHE_VERSION}}-{{checksum "setup.py"}}-{{checksum "requirements.txt"}}
 
       - <<: *run_unittests_with_coverage
-      - codecov/upload:
-          token: ${{ secrets.CODECOV_TOKEN }}
+      - codecov/upload
 
 
   cpu_tests_py38:
