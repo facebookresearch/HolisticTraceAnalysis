@@ -28,7 +28,7 @@ For help with other options just run any benchmark script file here with `-h`.
 ## Example Usage
 *(The following instructions should work on any of the benchmark scripts)*
 
-Since our functions are time consuming it is worth using lesser workers and loops. 
+Since our functions are time consuming it is worth using lesser workers and loops.
 For reasonable results use 10 workers and 1 loop -
 ```
 python3 benchmarks/trace_load_benchmark.py -p 10 -l 1
