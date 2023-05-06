@@ -18,14 +18,17 @@ It is worth noting how pyperf works [reference](https://pyperf.readthedocs.io/en
 1. Then each worker runs the benchmark 3 times.
 
 Even though there are multiple processes the benchmarks run serially. For a given benchmark the -
-`number of runs  = (worker count) x (3 runs) x (outer loops) x (inner loops)`
-where outer loop is configurable using `-l` flag. The inner loops is hard-coded in the benchmark code, we are typically using 1.
 
-For help on options just run any benchmark script file here with `-h`.
+`number of runs  = (worker count) x (3 runs) x (outer loops) x (inner loops)`
+
+where outer loop is configurable using `-l` flag. The inner loops is hard-coded in the benchmark code, we typically use 1 inner loop.
+
+For help with other options just run any benchmark script file here with `-h`.
 
 ## Example Usage
+*(The following instructions should work on any of the benchmark scripts)*
 
-Since our functions are time consuming it is worth using lesser workers and loops.
+Since our functions are time consuming it is worth using lesser workers and loops. 
 For reasonable results use 10 workers and 1 loop -
 ```
 python3 benchmarks/trace_load_benchmark.py -p 10 -l 1
@@ -34,4 +37,9 @@ python3 benchmarks/trace_load_benchmark.py -p 10 -l 1
 If you want to quickly test the benchmark use `--debug-single-value` as
 ```
 python3 benchmarks/trace_load_benchmark.py --debug-single-value
-``
+```
+
+For detailed statics add the `-t` flag. For memory usage add ` --track-memory`:
+```
+python3 benchmarks/trace_load_benchmark.py --debug-single-value --track-memory -t
+```
