@@ -10,8 +10,8 @@ import pandas as pd
 
 from hta.analyzers.breakdown_analysis import BreakdownAnalysis
 from hta.analyzers.communication_analysis import CommunicationAnalysis
-from hta.analyzers.counters_analysis import CountersAnalysis
 from hta.analyzers.cuda_kernel_analysis import CudaKernelAnalysis
+from hta.analyzers.cupti_counter_analysis import CuptiCounterAnalysis
 from hta.analyzers.straggler import find_stragglers_with_late_start_comm_kernels
 from hta.analyzers.straggler_analysis import StragglerAnalysis
 from hta.analyzers.trace_counters import TraceCounters
@@ -474,34 +474,33 @@ class TraceAnalysis:
             pd.concat(interval_df_list) if show_idle_interval_stats else None,
         )
 
-    def get_counter_data_with_operators(
+    def get_cupti_counter_data_with_operators(
         self,
         ranks: Optional[List[int]] = None,
-        stringify: bool = True,
     ) -> List[pd.DataFrame]:
-        """Performance counters measured on GPU kernels can provide insights on how to speed up GPU kernels. PyTorch profiler has an alternative lightweight API [CUPTI Range Profiler API](https://docs.nvidia.com/cupti/r_main.html#r_profiler) that enables users to program and measure detailed performance counters from the device.
+        r"""Performance counters provide insights on how to speed up GPU
+        kernels. The PyTorch Profiler has a lightweight API [CUPTI Range
+        Profiler API](https://docs.nvidia.com/cupti/r_main.html#r_profiler)
+        that enables users to monitor performance counters from the device.
 
-        When the CUPTI Profiler mode is enabled the PyTorch will emit the performance measurement values annotated in the GPU kernel events in the trace.
-        * The events are emitted under a `cuda_profiler_range` category
-        * The counter values are contained inside the `args` json part of the trace.
+        When the CUPTI Profiler mode is enabled then PyTorch will emit the
+        performance counters and annotates them in the trace.
+            * The events are logged under the `cuda_profiler_range` category.
+            * Counter values are logged in the `args` section of the trace.
 
-        This trace analyzer can investigate performance measurements per kernel
-        and associate them to operators that the kernel belongs to. A single kernel
+        This API can investigate performance measurements per kernel and
+        associate them to operators that the kernel belongs to. A single kernel
         can map to multiple levels of operators (as operators can be nested).
         To represent this we basically provide a list column called `op_stack`.
-        For further convenience we add the top and bottom level operator column as well.
-
-        Read more here https://github.com/facebookresearch/HolisticTraceAnalysis/issues/29
+        For further convenience we add the top and bottom level operator column
+        as well.
 
         Args:
-            t (Trace): trace object
             ranks (List[int]): List of ranks on which to run the analysis. Default = [0].
-            stringify (bool): Add back string to symbol IDs for kernels/operators.
         Returns:
-            A list of dataframes, one per rank, containing kernel name,
-            op_stack (operator stack), top and bottom level op, and columns
-            for individual performance counters.
+            List[pd.DataFrame]
+                A list of dataframes, one per rank, containing kernel name,
+                op_stack (operator stack), top and bottom level op, and columns
+                for individual performance counters.
         """
-        return CountersAnalysis.get_counter_data_with_operators(
-            self.t, ranks, stringify
-        )
+        return CuptiCounterAnalysis.get_counter_data_with_operators(self.t, ranks)
