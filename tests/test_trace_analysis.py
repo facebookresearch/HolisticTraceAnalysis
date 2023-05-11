@@ -10,7 +10,7 @@ from typing import List
 from unittest.mock import patch
 
 import hta
-from hta.analyzers.counters_analysis import CUDA_SASS_INSTRUCTION_COUNTER_FLOPS
+from hta.analyzers.cupti_counter_analysis import CUDA_SASS_INSTRUCTION_COUNTER_FLOPS
 from hta.common.trace import PHASE_COUNTER
 from hta.trace_analysis import TimeSeriesTypes, TraceAnalysis
 
@@ -298,16 +298,13 @@ class TraceAnalysisTestCase(unittest.TestCase):
                 msg=f"Stream 7 idle stats mismatch key={key}",
             )
 
-    def test_get_counter_data_with_operators(self):
+    def test_get_cupti_counter_data_with_operators(self):
         # regular trace should return empty list since it will not have cuda_profiler_range events
-        self.assertEqual(self.inference_t.get_counter_data_with_operators(), [])
+        self.assertEqual(self.inference_t.get_cupti_counter_data_with_operators(), [])
 
         cupti_profiler_trace_dir: str = "tests/data/cupti_profiler/"
         cupti_profiler_t = TraceAnalysis(trace_dir=cupti_profiler_trace_dir)
-
-        counters_df = cupti_profiler_t.get_counter_data_with_operators(stringify=True)[
-            0
-        ]
+        counters_df = cupti_profiler_t.get_cupti_counter_data_with_operators()[0]
 
         test_row = counters_df.iloc[5].to_dict()
         self.assertEqual(test_row["cat"], "cuda_profiler_range")

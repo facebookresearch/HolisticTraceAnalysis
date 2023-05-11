@@ -59,6 +59,11 @@ To aid in performance debugging HTA provides the following features
 #. `Trace Diff <source/features/trace_diff.html>`_: A trace comparison tool to identify and
    visualize the differences between traces.
 
+#. `CUPTI Counter Analysis <source/features/cupti_counter_analysis.html>`_: An
+   experimental API to interpret GPU performance counters. It attributes
+   performance measurements from kernels to PyTorch operators, and can help
+   with kernel optimization and roofline analysis.
+
 
 .. toctree::
    :hidden:
@@ -84,6 +89,7 @@ To aid in performance debugging HTA provides the following features
    source/features/cuda_kernel_launch_stats
    source/features/frequent_cuda_kernels
    source/features/trace_diff
+   source/features/cupti_counter_analysis
 
 .. toctree::
    :hidden:
