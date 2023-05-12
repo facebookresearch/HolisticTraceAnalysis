@@ -65,7 +65,9 @@ class TraceSymbolTableTestCase(unittest.TestCase):
         self.assertEqual(len(decoded_symbols), len(self.symbols))
 
         sym_id_map = st.get_sym_id_map()
-        is_consistent = [sym_id_map[sym] == idx for (sym, idx) in zip(decoded_symbols, indices)]
+        is_consistent = [
+            sym_id_map[sym] == idx for (sym, idx) in zip(decoded_symbols, indices)
+        ]
         self.assertTrue(all(is_consistent))
 
 

@@ -36,11 +36,15 @@ class CudaKernelAnalysis:
         for details.
         """
         if not operator_name:
-            logger.error("operator_name must be a non-empty string and a valid operator name in the trace file.")
+            logger.error(
+                "operator_name must be a non-empty string and a valid operator name in the trace file."
+            )
             return pd.DataFrame()
 
         if not output_dir:
-            logger.error("output_dir must be a non-empty string and a valid folder name.")
+            logger.error(
+                "output_dir must be a non-empty string and a valid folder name."
+            )
             return pd.DataFrame()
 
         # check output_dir is a valid path and a directory
@@ -60,16 +64,22 @@ class CudaKernelAnalysis:
         gpu_kernels = trace_df[trace_df["stream"].ne(-1)].copy()
 
         # get all the CPU operators which contain operator_name in their names
-        candidate_root_idx = [idx for name, idx in sym_index.items() if operator_name in name]
+        candidate_root_idx = [
+            idx for name, idx in sym_index.items() if operator_name in name
+        ]
         candidate_nodes = cpu_kernels[cpu_kernels["name"].isin(candidate_root_idx)]
         # to avoid double-counting when the same CPU operators appear multiple times in the call graph
         # hierarchy, only start the search from the shallowest CPU operators
         min_depth = candidate_nodes["depth"].min()
-        root_nodes = candidate_nodes[candidate_nodes["depth"].eq(min_depth)][["index", "dur"]]
+        root_nodes = candidate_nodes[candidate_nodes["depth"].eq(min_depth)][
+            ["index", "dur"]
+        ]
 
         pattern_counts: Dict[Tuple[int, ...], int] = defaultdict(int)
         # duration of the pattern: [GPU kernel duration, CPU op duration]
-        pattern_durations: Dict[Tuple[int, ...], List[int]] = defaultdict(lambda: [0, 0])
+        pattern_durations: Dict[Tuple[int, ...], List[int]] = defaultdict(
+            lambda: [0, 0]
+        )
         # record the indices of frequent patterns.
         pattern_occurrences: Dict[Tuple[int, ...], Set[int]] = defaultdict(set)
 
@@ -78,7 +88,9 @@ class CudaKernelAnalysis:
                 if root_node in cs.get_nodes():
                     # find all cuda kernels launched by the root_node by joining GPU kernels with leaf nodes.
                     cuda_kernels = gpu_kernels.merge(
-                        cpu_kernels[cpu_kernels["index"].isin(cs.get_leaf_nodes(root_node))][["correlation"]],
+                        cpu_kernels[
+                            cpu_kernels["index"].isin(cs.get_leaf_nodes(root_node))
+                        ][["correlation"]],
                         on="correlation",
                         how="inner",
                     ).sort_values(by="ts")
@@ -86,7 +98,9 @@ class CudaKernelAnalysis:
                     if len(cuda_kernels) < min_pattern_len:
                         continue
                     cpu_operator = cpu_kernels[cpu_kernels["index"].eq(root_node)]
-                    pattern: Tuple[int, ...] = tuple(pd.concat([cpu_operator["name"], cuda_kernels["name"]]))
+                    pattern: Tuple[int, ...] = tuple(
+                        pd.concat([cpu_operator["name"], cuda_kernels["name"]])
+                    )
                     pattern_counts[pattern] += 1
                     # update the duration for GPU kernels in the pattern
                     pattern_durations[pattern][0] += cuda_kernels["dur"].sum()
@@ -97,7 +111,9 @@ class CudaKernelAnalysis:
                     pattern_occurrences[pattern].update(cuda_kernels["index"])
 
         if not pattern_counts:
-            logger.error("operator_name not found in the trace file, or no frequent cuda kernel sequences found.")
+            logger.error(
+                "operator_name not found in the trace file, or no frequent cuda kernel sequences found."
+            )
             return pd.DataFrame()
 
         return cls._generate_frequent_pattern_results(
@@ -147,15 +163,21 @@ class CudaKernelAnalysis:
         Returns:
             patterns_df (pd.DataFrame): a dataframe with all patterns and their frequencies
         """
-        output_file = os.path.join(str(Path(output_dir)), "overlaid_" + t.trace_files[rank].split("/")[-1])
+        output_file = os.path.join(
+            str(Path(output_dir)), "overlaid_" + t.trace_files[rank].split("/")[-1]
+        )
 
         sym_table = t.symbol_table.get_sym_table()
         patterns_result: Dict[str, List[Union[int, str, Set[int]]]] = defaultdict(list)
         for pattern, count in pattern_counts.items():
             patterns_result["pattern"].append("|".join(sym_table[x] for x in pattern))
             patterns_result["count"].append(count)
-            patterns_result["GPU kernel duration (us)"].append(pattern_durations[pattern][0])
-            patterns_result["CPU op duration (us)"].append(pattern_durations[pattern][1])
+            patterns_result["GPU kernel duration (us)"].append(
+                pattern_durations[pattern][0]
+            )
+            patterns_result["CPU op duration (us)"].append(
+                pattern_durations[pattern][1]
+            )
             patterns_result["pattern_indices"].append(pattern_occurrences[pattern])
 
         patterns_df = pd.DataFrame(patterns_result).sort_values(
@@ -163,11 +185,17 @@ class CudaKernelAnalysis:
         )
         if top_k > len(patterns_df):
             top_k = len(patterns_df)
-            logger.info("The top_k argument value exceeds the number of patterns. Displaying all patterns.")
+            logger.info(
+                "The top_k argument value exceeds the number of patterns. Displaying all patterns."
+            )
 
-        overlaid_trace = cls._overlay_frequent_patterns_with_trace(t, patterns_df[:top_k], rank, compress_other_kernels)
+        overlaid_trace = cls._overlay_frequent_patterns_with_trace(
+            t, patterns_df[:top_k], rank, compress_other_kernels
+        )
         t.write_raw_trace(output_file, overlaid_trace)
-        logger.info(f"Overlaid trace file for rank {rank} has been generated at {output_file}.")
+        logger.info(
+            f"Overlaid trace file for rank {rank} has been generated at {output_file}."
+        )
         logger.info(
             'View the generated trace file using Chrome Tracing and search for "Patterns" to highlight the frequent patterns.'
         )
@@ -217,10 +245,20 @@ class CudaKernelAnalysis:
         top_patterns_df = (
             patterns_df.explode("pattern_indices")
             .groupby("pattern_indices", as_index=False)
-            .apply(lambda g: pd.Series({"active_patterns": {r["pattern"]: r["count"] for _, r in g.iterrows()}}))
+            .apply(
+                lambda g: pd.Series(
+                    {
+                        "active_patterns": {
+                            r["pattern"]: r["count"] for _, r in g.iterrows()
+                        }
+                    }
+                )
+            )
         )
         # join the pattern counter with the original events on their indices
-        merged_df = raw_trace_df.merge(top_patterns_df, left_on="index", right_on="pattern_indices", how="left")
+        merged_df = raw_trace_df.merge(
+            top_patterns_df, left_on="index", right_on="pattern_indices", how="left"
+        )
 
         def _add_patterns_to_args(row, compress_other_kernels):
             args = row["args"]
@@ -241,32 +279,45 @@ class CudaKernelAnalysis:
             return str(sym_id_map[row["name"]])
 
         # add the frequent patterns information to the args field so that it is searchable
-        merged_df["args"] = merged_df.apply(lambda r: _add_patterns_to_args(r, compress_other_kernels), axis=1)
+        merged_df["args"] = merged_df.apply(
+            lambda r: _add_patterns_to_args(r, compress_other_kernels), axis=1
+        )
 
         if compress_other_kernels:
             # compress kernel/operator names
             merged_df["name"] = merged_df.apply(_compress_kernel_names, axis=1)
             # add the symbol id -> event name mapping information to the PyTorch Profiler event for reference
             profiler_event = raw_trace_df[
-                (raw_trace_df["name"].str.contains("PyTorch Profiler")) & (raw_trace_df["pid"].eq("Spans"))
+                (raw_trace_df["name"].str.contains("PyTorch Profiler"))
+                & (raw_trace_df["pid"].eq("Spans"))
             ]
-            merged_df.loc[profiler_event.index, "args"] = [{str(i): name for name, i in sym_id_map.items()}]
+            merged_df.loc[profiler_event.index, "args"] = [
+                {str(i): name for name, i in sym_id_map.items()}
+            ]
         # drop unused columns before writing back to the overlaid trace file
-        merged_df.drop(["index", "active_patterns", "pattern_indices"], axis=1, inplace=True)
-        raw_trace_content["traceEvents"] = list(merged_df.apply(lambda row: row.dropna().to_dict(), axis=1))
+        merged_df.drop(
+            ["index", "active_patterns", "pattern_indices"], axis=1, inplace=True
+        )
+        raw_trace_content["traceEvents"] = list(
+            merged_df.apply(lambda row: row.dropna().to_dict(), axis=1)
+        )
         return raw_trace_content
 
     @classmethod
     def visualize_cuda_kernel_launch_stats(
         cls, rank: int, df: pd.DataFrame, runtime_cutoff: int, launch_delay_cutoff: int
     ) -> None:  # pragma: no cover
-        short_kernels = df[(df["cpu_duration"] <= runtime_cutoff) & (df["gpu_duration"] < df["cpu_duration"])]
+        short_kernels = df[
+            (df["cpu_duration"] <= runtime_cutoff)
+            & (df["gpu_duration"] < df["cpu_duration"])
+        ]
         runtime_outliers = df[df["cpu_duration"] > runtime_cutoff]
         launch_delay_outliers = df[df["launch_delay"] > launch_delay_cutoff]
         fig1 = px.histogram(
             short_kernels,
             x=short_kernels["cpu_duration"],
-            title="Short GPU kernels (gpu op duration < cpu op duration) on rank %d" % rank,
+            title="Short GPU kernels (gpu op duration < cpu op duration) on rank %d"
+            % rank,
             labels={
                 "cpu_duration": "Cuda Runtime Event Duration (us)",
             },
@@ -277,7 +328,8 @@ class CudaKernelAnalysis:
             runtime_outliers,
             x=runtime_outliers["cpu_duration"],
             nbins=300,
-            title="Runtime Event Duration Outliers (duration > %s us)  on rank %d" % (runtime_cutoff, rank),
+            title="Runtime Event Duration Outliers (duration > %s us)  on rank %d"
+            % (runtime_cutoff, rank),
             labels={
                 "cpu_duration": "Cuda Runtime Event Duration (us)",
             },
@@ -288,7 +340,8 @@ class CudaKernelAnalysis:
             launch_delay_outliers,
             x=launch_delay_outliers["launch_delay"],
             nbins=300,
-            title="Launch Delay Outliers (duration > %s us) on rank %d" % (launch_delay_cutoff, rank),
+            title="Launch Delay Outliers (duration > %s us) on rank %d"
+            % (launch_delay_cutoff, rank),
             labels={
                 "launch_delay": "Launch Delay Duration (us)",
             },
@@ -332,7 +385,8 @@ class CudaKernelAnalysis:
             # whether to use memory events - cudaMemsetAsync and cudaMemcpyAsync.
             if include_memory_events:
                 memory_event_correlation_series: pd.Series = trace_df[
-                    (trace_df["name"] == cudaMemsetAsync_id) | (trace_df["name"] == cudaMemcpyAsync_id)
+                    (trace_df["name"] == cudaMemsetAsync_id)
+                    | (trace_df["name"] == cudaMemcpyAsync_id)
                 ].correlation
                 merged_series: pd.Series = pd.concat(
                     [
@@ -348,12 +402,12 @@ class CudaKernelAnalysis:
             gpu_kernels = trace_df[trace_df["stream"].ne(-1)].copy()
 
             # get correlation id, duration, timestamp and name of cpu and gpu events
-            cpu_kernels_filtered = cpu_kernels[(cpu_kernels["correlation"]).isin(merged_series)][
-                ["correlation", "dur", "name", "ts"]
-            ]
-            gpu_kernels_filtered = gpu_kernels[(gpu_kernels["correlation"]).isin(merged_series)][
-                ["correlation", "dur", "name", "ts"]
-            ]
+            cpu_kernels_filtered = cpu_kernels[
+                (cpu_kernels["correlation"]).isin(merged_series)
+            ][["correlation", "dur", "name", "ts"]]
+            gpu_kernels_filtered = gpu_kernels[
+                (gpu_kernels["correlation"]).isin(merged_series)
+            ][["correlation", "dur", "name", "ts"]]
 
             # join the dataframes created above on correlation. This is required to calculate the launch delay
             # for each correlation id.
@@ -363,14 +417,22 @@ class CudaKernelAnalysis:
                 how="inner",
                 on="correlation",
             )
-            joined_df["launch_delay"] = joined_df["ts_y"] - joined_df["ts_x"] + joined_df["dur_x"]
+            joined_df["launch_delay"] = (
+                joined_df["ts_y"] - joined_df["ts_x"] + joined_df["dur_x"]
+            )
 
             # rename columns and select the required columns from the final dataframe
-            renamed_df = joined_df.rename(columns={"dur_x": "cpu_duration", "dur_y": "gpu_duration"})
-            events_df = renamed_df[["correlation", "cpu_duration", "gpu_duration", "launch_delay"]]
+            renamed_df = joined_df.rename(
+                columns={"dur_x": "cpu_duration", "dur_y": "gpu_duration"}
+            )
+            events_df = renamed_df[
+                ["correlation", "cpu_duration", "gpu_duration", "launch_delay"]
+            ]
 
             if visualize:  # pragma: no cover
-                cls.visualize_cuda_kernel_launch_stats(rank, events_df, runtime_cutoff, launch_delay_cutoff)
+                cls.visualize_cuda_kernel_launch_stats(
+                    rank, events_df, runtime_cutoff, launch_delay_cutoff
+                )
 
             result_dict[rank] = events_df
         return result_dict

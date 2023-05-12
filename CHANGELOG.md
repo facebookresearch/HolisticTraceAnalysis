@@ -5,6 +5,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 #### Added
+- Added CUPTI Counter analyzer feature to parse kernel and operator level counter statistics.
 
 #### Changed
 

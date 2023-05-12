@@ -5,18 +5,18 @@
 import gzip
 import json
 import os
-import sys
+import re
 from typing import Any, Dict, Tuple
 
 from hta.configs.config import logger
 
 
-def create_rank_to_trace_dict(trace_path: str) -> Tuple[bool, Dict]:
+def create_rank_to_trace_dict(trace_dir: str) -> Tuple[bool, Dict]:
     """
     Create a rank -> trace_filename map for traces located within the directory <trace_path>
 
     Args:
-        trace_path (str) : the path to the directory where the traces are located.
+        trace_dir (str) : the path to the directory where the traces are located.
 
     Returns:
         (success: bool, rank_trace_map: dict) : a tuple indicating whether the operation succeeds and the path
@@ -25,49 +25,45 @@ def create_rank_to_trace_dict(trace_path: str) -> Tuple[bool, Dict]:
             map_file_path (dict) : a dict with rank as key and trace_filename as the value
     """
 
-    if not (os.path.exists(trace_path) and os.access(trace_path, os.R_OK)):
-        logger.error(f"trace_path {trace_path} doesn't exist or is not readable")
+    if not (os.path.exists(trace_dir) and os.access(trace_dir, os.R_OK)):
+        logger.error(f"trace_path {trace_dir} doesn't exist or is not readable")
         return False, {}
 
-    file_list = [fn for fn in os.listdir(trace_path) if fn.endswith(".gz") or fn.endswith(".json")]
+    file_list = [
+        fn for fn in os.listdir(trace_dir) if fn.endswith(".gz") or fn.endswith(".json")
+    ]
     if len(file_list) == 0:
-        logger.warning(f"No trace file is found in {trace_path}")
+        logger.warning(f"No trace file is found in {trace_dir}")
         return False, {}
 
     rank_to_trace_dict: Dict[int, str] = {}
     for file in file_list:
-        filename = os.path.join(trace_path, file)
-        data = None
-        if file.endswith("gz"):
-            gzip_file_handle = gzip.open(filename, "rb")
-            data = json.loads(gzip_file_handle.read())
-        if file.endswith("json"):
-            json_file_handle = open(filename, "r")
-            data = json.loads(json_file_handle.read())
+        file_path = os.path.join(trace_dir, file)
 
-        distributed_info = data.get("distributedInfo", None)
-        if distributed_info is None:
-            logger.error(
-                "If the trace file does not have the rank specified in it, then add the following snippet "
-                'key to the json files to use HTA; "distributedInfo": {"rank": 0}. If there are multiple '
-                "traces files, then each file should have a unique rank value."
-            )
-            sys.exit()
+        with gzip.open(file_path, "rb") if file.endswith("gz") else open(
+            file_path, "r"
+        ) as f:
+            for line in f:
+                data = line.decode() if isinstance(line, bytes) else line
+                if "rank" in data:
+                    break
 
-        rank = distributed_info.get("rank", None)
-        if rank is None:
-            logger.error(
-                "If the trace file does not have the rank specified in it, then add the following snippet "
-                'key to the json files to use HTA; "distributedInfo": {"rank": 0}. If there are multiple '
-                "traces files, then each file should have a unique rank value."
-            )
-            sys.exit()
+            # match is like "rank": 6,
+            match = re.search(r'"rank": \d+', data)
+            if match:
+                rank = int(match.group().split(": ")[1])
+                if rank in rank_to_trace_dict:
+                    logger.error(
+                        f"File {rank_to_trace_dict[rank]} and file {file_path} has the same rank. Will use {file_path} as the path to rank: {rank}."
+                    )
+                rank_to_trace_dict[int(rank)] = file_path
+            else:
+                logger.error(
+                    "If the trace file does not have the rank specified in it, then add the following snippet "
+                    'key to the json files to use HTA; "distributedInfo": {"rank": 0}. If there are multiple '
+                    "traces files, then each file should have a unique rank value."
+                )
 
-        assert isinstance(rank, int), "Rank is expected to be an integer"
-        assert rank >= 0, "Rank must be a non-negative integer"
-        rank_to_trace_dict[rank] = filename
-    if len(rank_to_trace_dict) == 0:
-        logger.warning("Rank to trace dict has size zero.")
     return True, rank_to_trace_dict
 
 

@@ -10,6 +10,7 @@ from typing import List
 from unittest.mock import patch
 
 import hta
+from hta.analyzers.cupti_counter_analysis import CUDA_SASS_INSTRUCTION_COUNTER_FLOPS
 from hta.common.trace import PHASE_COUNTER
 from hta.trace_analysis import TimeSeriesTypes, TraceAnalysis
 
@@ -34,15 +35,19 @@ class TraceAnalysisTestCase(unittest.TestCase):
 
     def setUp(self):
         self.overlaid_trace_dir = "tests/data"
-        self.overlaid_trace_file = os.path.join(str(Path(self.overlaid_trace_dir)), "overlaid_rank-0.json.gz")
+        self.overlaid_trace_file = os.path.join(
+            str(Path(self.overlaid_trace_dir)), "overlaid_rank-0.json.gz"
+        )
 
     @patch.object(hta.common.trace.Trace, "write_raw_trace")
     def test_frequent_cuda_kernel_sequences(self, mock_write_trace):
-        frequent_patterns_dfs = self.vision_transformer_t.get_frequent_cuda_kernel_sequences(
-            operator_name="aten::linear",
-            output_dir=self.overlaid_trace_dir,
-            visualize=False,
-            compress_other_kernels=True,
+        frequent_patterns_dfs = (
+            self.vision_transformer_t.get_frequent_cuda_kernel_sequences(
+                operator_name="aten::linear",
+                output_dir=self.overlaid_trace_dir,
+                visualize=False,
+                compress_other_kernels=True,
+            )
         )
         self.assertIn(
             "|".join(
@@ -56,24 +61,30 @@ class TraceAnalysisTestCase(unittest.TestCase):
             frequent_patterns_dfs.iloc[2]["pattern"],
         )
         self.assertEqual(frequent_patterns_dfs.iloc[2]["count"], 48)
-        self.assertEqual(frequent_patterns_dfs.iloc[2]["GPU kernel duration (ns)"], 11300)
-        self.assertEqual(frequent_patterns_dfs.iloc[2]["CPU op duration (ns)"], 9652)
+        self.assertEqual(
+            frequent_patterns_dfs.iloc[2]["GPU kernel duration (us)"], 11300
+        )
+        self.assertEqual(frequent_patterns_dfs.iloc[2]["CPU op duration (us)"], 9652)
         mock_write_trace.assert_called_once()
         trace_output_filename, _ = mock_write_trace.call_args.args
         self.assertEqual(trace_output_filename, self.overlaid_trace_file)
 
     def test_no_frequent_cuda_kernel_sequences_found(self):
-        frequent_patterns_dfs = self.df_index_resolver_t.get_frequent_cuda_kernel_sequences(
-            operator_name="aten::clone",
-            output_dir=self.overlaid_trace_dir,
-            rank=1,
-            visualize=False,
-            compress_other_kernels=True,
+        frequent_patterns_dfs = (
+            self.df_index_resolver_t.get_frequent_cuda_kernel_sequences(
+                operator_name="aten::clone",
+                output_dir=self.overlaid_trace_dir,
+                rank=1,
+                visualize=False,
+                compress_other_kernels=True,
+            )
         )
         self.assertTrue(frequent_patterns_dfs.empty)
 
     def test_get_cuda_kernel_launch_stats_training_multiple_ranks(self):
-        dataframe_dict = self.vision_transformer_t.get_cuda_kernel_launch_stats(ranks=[1, 7], visualize=False)
+        dataframe_dict = self.vision_transformer_t.get_cuda_kernel_launch_stats(
+            ranks=[1, 7], visualize=False
+        )
         rank_1_df, rank_7_df = dataframe_dict[1], dataframe_dict[7]
         row1 = rank_1_df[rank_1_df["correlation"] == 373234]
         row2 = rank_7_df[rank_7_df["correlation"] == 327327]
@@ -100,7 +111,9 @@ class TraceAnalysisTestCase(unittest.TestCase):
         self.assertListEqual(results, expected)
 
     def test_get_potential_stragglers(self):
-        TCase = namedtuple("TCase", ["profiler_steps", "num_candidates", "expected_results"])
+        TCase = namedtuple(
+            "TCase", ["profiler_steps", "num_candidates", "expected_results"]
+        )
         p_steps = self.vision_transformer_t.get_profiler_steps()
         test_cases: List[TCase] = [
             TCase(p_steps[:1], -1, [7]),
@@ -117,7 +130,9 @@ class TraceAnalysisTestCase(unittest.TestCase):
             self.assertListEqual(got_stragglers, tc.expected_results)
 
     def test_comm_comp_overlap(self):
-        comm_comp_overlap = self.vision_transformer_t.get_comm_comp_overlap(visualize=False)
+        comm_comp_overlap = self.vision_transformer_t.get_comm_comp_overlap(
+            visualize=False
+        )
         self.assertAlmostEqual(
             comm_comp_overlap.iloc[0]["comp_comm_overlap_pctg"],
             round((240322 * 100) / 1091957, 3),
@@ -166,14 +181,16 @@ class TraceAnalysisTestCase(unittest.TestCase):
         (
             kernel_type_breakdown,
             kernel_breakdown,
-        ) = self.vision_transformer_t.get_gpu_kernel_breakdown(visualize=False, include_memory_kernels=True)
+        ) = self.vision_transformer_t.get_gpu_kernel_breakdown(
+            visualize=False, include_memory_kernels=True
+        )
 
         self.assertEqual(kernel_type_breakdown.iloc[0]["kernel_type"], "COMMUNICATION")
         self.assertEqual(kernel_type_breakdown.iloc[0]["sum"], 8040285)
         self.assertEqual(kernel_breakdown.iloc[0]["kernel_type"], "COMMUNICATION")
-        self.assertEqual(kernel_breakdown.iloc[0]["sum (ns)"], 627683)
+        self.assertEqual(kernel_breakdown.iloc[0]["sum (us)"], 627683)
         self.assertEqual(kernel_breakdown.iloc[151]["kernel_type"], "MEMORY")
-        self.assertEqual(kernel_breakdown.iloc[151]["sum (ns)"], 1064)
+        self.assertEqual(kernel_breakdown.iloc[151]["sum (us)"], 1064)
 
     def test_get_queue_length_summary(self):
         qd_summary = self.vision_transformer_t.get_queue_length_summary(ranks=[0])
@@ -192,7 +209,9 @@ class TraceAnalysisTestCase(unittest.TestCase):
             "max": 403.0,
         }
         for key, expval in expected_stats.items():
-            self.assertAlmostEqual(stream7_stats[key], expval, msg=f"Stream 7 stats mismatch key={key}")
+            self.assertAlmostEqual(
+                stream7_stats[key], expval, msg=f"Stream 7 stats mismatch key={key}"
+            )
 
     @patch.object(hta.common.trace.Trace, "write_raw_trace")
     def test_generate_trace_with_counters(self, mock_write_trace):
@@ -204,7 +223,9 @@ class TraceAnalysisTestCase(unittest.TestCase):
         trace_filename, trace_json = mock_write_trace.call_args.args
         self.assertTrue("with_counters" in trace_filename)
 
-        counter_events = [ev for ev in trace_json["traceEvents"] if ev["ph"] == PHASE_COUNTER]
+        counter_events = [
+            ev for ev in trace_json["traceEvents"] if ev["ph"] == PHASE_COUNTER
+        ]
         print(f"Trace has {len(counter_events)} counter events")
         self.assertGreaterEqual(len(counter_events), 21000)
 
@@ -220,11 +241,15 @@ class TraceAnalysisTestCase(unittest.TestCase):
         queue_len_ts = self.vision_transformer_t.get_queue_length_time_series()[0]
         self.assertEqual(len(queue_len_ts[queue_len_ts.queue_length < 0]), 0)
 
-        mem_bw_summary_df = self.vision_transformer_t.get_memory_bw_summary(ranks=[0, 2])
+        mem_bw_summary_df = self.vision_transformer_t.get_memory_bw_summary(
+            ranks=[0, 2]
+        )
         # 2 ranks x 4 types of memcpy/memset
         self.assertEqual(len(mem_bw_summary_df), 8)
 
-        queue_len_summary_df = self.vision_transformer_t.get_queue_length_summary(ranks=[0, 2])
+        queue_len_summary_df = self.vision_transformer_t.get_queue_length_summary(
+            ranks=[0, 2]
+        )
         # 2 ranks x 6 streams
         self.assertEqual(len(queue_len_summary_df), 12)
 
@@ -239,10 +264,15 @@ class TraceAnalysisTestCase(unittest.TestCase):
         self.assertIsNone(mem_bw_summary_df)
 
     def test_get_idle_time_breakdown(self):
-        (idle_time_df, idle_interval_df,) = self.vision_transformer_t.get_idle_time_breakdown(
+        (
+            idle_time_df,
+            idle_interval_df,
+        ) = self.vision_transformer_t.get_idle_time_breakdown(
             ranks=[0, 1], visualize=False, show_idle_interval_stats=True
         )
-        ranks = idle_time_df["rank"].unique()  # cannot use dataframe.rank as rank() is a utility too
+        ranks = idle_time_df[
+            "rank"
+        ].unique()  # cannot use dataframe.rank as rank() is a utility too
         streams = idle_time_df.stream.unique()
         idle_categories = idle_time_df.idle_category.unique()
 
@@ -267,6 +297,30 @@ class TraceAnalysisTestCase(unittest.TestCase):
                 expval,
                 msg=f"Stream 7 idle stats mismatch key={key}",
             )
+
+    def test_get_cupti_counter_data_with_operators(self):
+        # regular trace should return empty list since it will not have cuda_profiler_range events
+        self.assertEqual(self.inference_t.get_cupti_counter_data_with_operators(), [])
+
+        cupti_profiler_trace_dir: str = "tests/data/cupti_profiler/"
+        cupti_profiler_t = TraceAnalysis(trace_dir=cupti_profiler_trace_dir)
+        counters_df = cupti_profiler_t.get_cupti_counter_data_with_operators()[0]
+
+        test_row = counters_df.iloc[5].to_dict()
+        self.assertEqual(test_row["cat"], "cuda_profiler_range")
+        self.assertTrue("fft2d_r2c_32x32" in test_row["name"])
+
+        self.assertEqual(
+            test_row["smsp__sass_thread_inst_executed_op_fadd_pred_on.sum"], 86114304
+        )
+        self.assertEqual(test_row["top_level_op"], "aten::conv2d")
+        self.assertEqual(test_row["bottom_level_op"], "aten::_convolution")
+
+        # Example trace has CUPTI SASS FLOPS instruction counters
+        counter_names = set(CUDA_SASS_INSTRUCTION_COUNTER_FLOPS.keys())
+        self.assertEqual(
+            set(counters_df.columns.unique()) & counter_names, counter_names
+        )
 
 
 if __name__ == "__main__":  # pragma: no cover

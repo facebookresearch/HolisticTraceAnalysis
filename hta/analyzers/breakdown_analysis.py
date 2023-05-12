@@ -3,15 +3,20 @@
 # LICENSE file in the root directory of this source tree.
 
 from collections import defaultdict
-from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, TYPE_CHECKING
 
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 
 from hta.configs.config import logger
-from hta.utils.utils import IdleTimeType, KernelType, get_kernel_type, merge_kernel_intervals
+from hta.utils.utils import (
+    get_kernel_type,
+    IdleTimeType,
+    KernelType,
+    merge_kernel_intervals,
+)
+from plotly.subplots import make_subplots
 
 # import statement used without the "if TYPE_CHECKING" guard will cause a circular
 # dependency with trace_analysis.py causing mypy to fail and should not be removed.
@@ -101,15 +106,23 @@ class BreakdownAnalysis:
 
                 gpu_kernel_time["kernel_type"] = kernel_type
                 gpu_kernel_time["rank"] = int(rank)
-                all_kernel_df = pd.concat([all_kernel_df, gpu_kernel_time], ignore_index=True)
+                all_kernel_df = pd.concat(
+                    [all_kernel_df, gpu_kernel_time], ignore_index=True
+                )
 
         kernel_type_df = kernel_type_df.groupby(by=["kernel_type"])["sum"].agg(["sum"])
         kernel_type_df.reset_index(inplace=True)
-        kernel_type_df.sort_values(by=["sum"], ignore_index=True, inplace=True, ascending=False)
-        kernel_type_df["percentage"] = (kernel_type_df["sum"] / kernel_type_df["sum"].sum()) * 100
+        kernel_type_df.sort_values(
+            by=["sum"], ignore_index=True, inplace=True, ascending=False
+        )
+        kernel_type_df["percentage"] = (
+            kernel_type_df["sum"] / kernel_type_df["sum"].sum()
+        ) * 100
         kernel_type_df = kernel_type_df.round({"percentage": 1})
 
-        all_kernel_df.sort_values(by=["kernel_type", "name", "rank"], ignore_index=True, inplace=True)
+        all_kernel_df.sort_values(
+            by=["kernel_type", "name", "rank"], ignore_index=True, inplace=True
+        )
         all_kernel_df.rename(
             columns={
                 "sum": "sum (us)",
@@ -184,8 +197,10 @@ class BreakdownAnalysis:
                                 "rank": "Rank",
                                 "mean (us)": "Mean Duration (us)",
                             },
-                            error_y=kernel_name_df["max (us)"] - kernel_name_df["mean (us)"],
-                            error_y_minus=kernel_name_df["mean (us)"] - kernel_name_df["min (us)"],
+                            error_y=kernel_name_df["max (us)"]
+                            - kernel_name_df["mean (us)"],
+                            error_y_minus=kernel_name_df["mean (us)"]
+                            - kernel_name_df["min (us)"],
                         )
                         fig.update_layout(
                             title_text=f'Kernel type "{kernel}" - {name}',
@@ -196,7 +211,9 @@ class BreakdownAnalysis:
         return kernel_type_df, all_kernel_df
 
     @classmethod
-    def _get_gpu_kernel_type_time(cls, gpu_kernels: pd.DataFrame, kernel_type_to_analysis: List[str]) -> pd.DataFrame:
+    def _get_gpu_kernel_type_time(
+        cls, gpu_kernels: pd.DataFrame, kernel_type_to_analysis: List[str]
+    ) -> pd.DataFrame:
         overlap_kernel_type_df = pd.DataFrame(
             {
                 "status": pd.Series(dtype="str"),
@@ -208,13 +225,17 @@ class BreakdownAnalysis:
         for idx, kernel_type in enumerate(kernel_type_to_analysis):
             value = 1 << idx
             kernel_t_mapping[kernel_type] = value
-            kernel_t_df = merge_kernel_intervals(gpu_kernels[gpu_kernels["kernel_type"].eq(kernel_type)].copy())
+            kernel_t_df = merge_kernel_intervals(
+                gpu_kernels[gpu_kernels["kernel_type"].eq(kernel_type)].copy()
+            )
 
             overlap_kernel_type_df = (
                 pd.concat(
                     [
                         overlap_kernel_type_df,
-                        kernel_t_df.melt(var_name="status", value_name="time").replace({"ts": value, "end": -value}),
+                        kernel_t_df.melt(var_name="status", value_name="time").replace(
+                            {"ts": value, "end": -value}
+                        ),
                     ]
                 )
                 .sort_values(by="time")
@@ -232,19 +253,25 @@ class BreakdownAnalysis:
                         if u_running not in running_mapping:
                             running_mapping[u_running] = k_t
                         else:
-                            running_mapping[u_running] = f"{running_mapping[u_running]} overlapping {k_t}"
+                            running_mapping[
+                                u_running
+                            ] = f"{running_mapping[u_running]} overlapping {k_t}"
 
         overlap_kernel_type_df["kernel_type"] = ""
-        overlap_kernel_type_df = overlap_kernel_type_df[overlap_kernel_type_df["running"] > 0]
+        overlap_kernel_type_df = overlap_kernel_type_df[
+            overlap_kernel_type_df["running"] > 0
+        ]
         for running in running_mapping:
-            overlap_kernel_type_df.loc[overlap_kernel_type_df["running"].eq(running), "kernel_type"] = running_mapping[
-                running
-            ]
-        overlap_kernel_type_df["dur"] = (overlap_kernel_type_df["next_time"] - overlap_kernel_type_df["time"]).astype(
-            int
-        )
+            overlap_kernel_type_df.loc[
+                overlap_kernel_type_df["running"].eq(running), "kernel_type"
+            ] = running_mapping[running]
+        overlap_kernel_type_df["dur"] = (
+            overlap_kernel_type_df["next_time"] - overlap_kernel_type_df["time"]
+        ).astype(int)
 
-        overlap_kernel_type_df = overlap_kernel_type_df.groupby(by=["kernel_type"])["dur"].agg(["sum"])
+        overlap_kernel_type_df = overlap_kernel_type_df.groupby(by=["kernel_type"])[
+            "dur"
+        ].agg(["sum"])
         overlap_kernel_type_df.reset_index(inplace=True)
 
         return overlap_kernel_type_df
@@ -256,18 +283,26 @@ class BreakdownAnalysis:
         duration_ratio: float = 0.8,
         num_kernels: int = 10,
     ) -> pd.DataFrame:
-        gpu_kernel_time = gpu_kernel_time.groupby(by=["name"])["dur"].agg(["sum", "max", "min", "mean", "std"])
+        gpu_kernel_time = gpu_kernel_time.groupby(by=["name"])["dur"].agg(
+            ["sum", "max", "min", "mean", "std"]
+        )
         gpu_kernel_time.reset_index(inplace=True)
-        gpu_kernel_time = gpu_kernel_time.sort_values(by=["sum"], ascending=False, ignore_index=True)
+        gpu_kernel_time = gpu_kernel_time.sort_values(
+            by=["sum"], ascending=False, ignore_index=True
+        )
         gpu_kernel_time["std"].fillna(0, inplace=True)
 
         # if there are more than num_kernels kernels, starting to aggregate kernels
         if gpu_kernel_time.shape[0] > num_kernels:
             gpu_kernel_time["cumsum"] = gpu_kernel_time["sum"].cumsum()
             quantiles = gpu_kernel_time["cumsum"].quantile(duration_ratio)
-            gpu_kernel_time.loc[gpu_kernel_time["cumsum"] > quantiles, "name"] = "others"
+            gpu_kernel_time.loc[
+                gpu_kernel_time["cumsum"] > quantiles, "name"
+            ] = "others"
             gpu_kernel_time.loc[gpu_kernel_time.index >= num_kernels, "name"] = "others"
-            gpu_kernel_time = gpu_kernel_time.groupby(by=["name"])["sum"].agg(["sum", "max", "min", "mean", "std"])
+            gpu_kernel_time = gpu_kernel_time.groupby(by=["name"])["sum"].agg(
+                ["sum", "max", "min", "mean", "std"]
+            )
             gpu_kernel_time.reset_index(inplace=True)
             gpu_kernel_time["std"].fillna(0, inplace=True)
 
@@ -308,7 +343,9 @@ class BreakdownAnalysis:
 
             # Isolate computation kernels and merge each one of them.
             comp_kernels = merge_kernel_intervals(
-                gpu_kernels[gpu_kernels["kernel_type"].eq(KernelType.COMPUTATION.name)].copy()
+                gpu_kernels[
+                    gpu_kernels["kernel_type"].eq(KernelType.COMPUTATION.name)
+                ].copy()
             )
             compute_time = comp_kernels.end.sum() - comp_kernels.ts.sum()
             non_compute_time = kernel_time - compute_time - idle_time
@@ -322,19 +359,29 @@ class BreakdownAnalysis:
         result: Dict[str, List[float]] = defaultdict(list)
         for rank, trace_df in t.traces.items():
             result["rank"].append(rank)
-            idle_time, compute_time, non_compute_time, kernel_time = idle_time_per_rank(trace_df)
+            idle_time, compute_time, non_compute_time, kernel_time = idle_time_per_rank(
+                trace_df
+            )
             result["idle_time(us)"].append(idle_time)
             result["compute_time(us)"].append(compute_time)
             result["non_compute_time(us)"].append(non_compute_time)
             result["kernel_time(us)"].append(kernel_time)
 
         result_df = pd.DataFrame(result)
-        result_df["idle_time"] = result_df["idle_time(us)"] / result_df["kernel_time(us)"]
+        result_df["idle_time"] = (
+            result_df["idle_time(us)"] / result_df["kernel_time(us)"]
+        )
         result_df["idle_time_pctg"] = round(100 * result_df["idle_time"], 2)
-        result_df["compute_time"] = result_df["compute_time(us)"] / result_df["kernel_time(us)"]
+        result_df["compute_time"] = (
+            result_df["compute_time(us)"] / result_df["kernel_time(us)"]
+        )
         result_df["compute_time_pctg"] = round(100 * result_df["compute_time"], 2)
-        result_df["non_compute_time"] = result_df["non_compute_time(us)"] / result_df["kernel_time(us)"]
-        result_df["non_compute_time_pctg"] = round(100 * result_df["non_compute_time"], 2)
+        result_df["non_compute_time"] = (
+            result_df["non_compute_time(us)"] / result_df["kernel_time(us)"]
+        )
+        result_df["non_compute_time_pctg"] = round(
+            100 * result_df["non_compute_time"], 2
+        )
 
         if visualize:  # pragma: no cover
             fig = px.bar(
@@ -386,11 +433,15 @@ class BreakdownAnalysis:
         logger.info(f"Processing stream {stream}")
         idle_interval_stats: Optional[pd.DataFrame] = None
 
-        gpu_kernels_s = gpu_kernels[gpu_kernels.stream == stream].copy().sort_values(by="ts")
+        gpu_kernels_s = (
+            gpu_kernels[gpu_kernels.stream == stream].copy().sort_values(by="ts")
+        )
 
         gpu_kernels_s["end_ts"] = gpu_kernels_s.ts + gpu_kernels_s.dur
         gpu_kernels_s["prev_end_ts"] = gpu_kernels_s.end_ts.shift(1)
-        gpu_kernels_s["idle_interval"] = gpu_kernels_s["ts"] - gpu_kernels_s["prev_end_ts"]
+        gpu_kernels_s["idle_interval"] = (
+            gpu_kernels_s["ts"] - gpu_kernels_s["prev_end_ts"]
+        )
 
         # Default idle time category
         gpu_kernels_s["idle_category"] = IdleTimeType.OTHER.value
@@ -410,12 +461,18 @@ class BreakdownAnalysis:
             If the gap between kernels is below a threshold the idle time is
             likely due to the overhead for launching kernels.
         """
-        is_kernel_kernel_delay = ~is_host_wait & (gpu_kernels_s["idle_interval"] < consecutive_kernel_delay)
-        gpu_kernels_s.loc[is_kernel_kernel_delay, "idle_category"] = IdleTimeType.KERNEL_WAIT.value
+        is_kernel_kernel_delay = ~is_host_wait & (
+            gpu_kernels_s["idle_interval"] < consecutive_kernel_delay
+        )
+        gpu_kernels_s.loc[
+            is_kernel_kernel_delay, "idle_category"
+        ] = IdleTimeType.KERNEL_WAIT.value
 
         gpu_kernels_groupby = gpu_kernels_s.groupby("idle_category")
         if show_idle_interval_stats:
-            logger.info(f"Computing descriptive statistics for idle time intervals on stream {stream}:")
+            logger.info(
+                f"Computing descriptive statistics for idle time intervals on stream {stream}:"
+            )
             idle_interval_stats = gpu_kernels_groupby.idle_interval.describe()
             idle_interval_stats.insert(0, "stream", stream)
 
@@ -452,10 +509,14 @@ class BreakdownAnalysis:
            the idleness category (default = False).
         """
         trace_df: pd.DataFrame = t.get_trace(rank)
-        gpu_kernels_pre = trace_df[trace_df["stream"].ne(-1)].copy().set_index("index_correlation")
+        gpu_kernels_pre = (
+            trace_df[trace_df["stream"].ne(-1)].copy().set_index("index_correlation")
+        )
 
         # correlate with the runtime event whenever possible
-        gpu_kernels = gpu_kernels_pre.join(trace_df[["ts", "index"]], on="index_correlation", rsuffix="_runtime")
+        gpu_kernels = gpu_kernels_pre.join(
+            trace_df[["ts", "index"]], on="index_correlation", rsuffix="_runtime"
+        )
 
         if streams is None or len(streams) == 0:
             streams = list(gpu_kernels.stream.unique())
@@ -476,7 +537,10 @@ class BreakdownAnalysis:
 
         result_df = pd.concat(result_list)
 
-        idle_category_name_map = {member.value: name.lower() for name, member in IdleTimeType.__members__.items()}
+        idle_category_name_map = {
+            member.value: name.lower()
+            for name, member in IdleTimeType.__members__.items()
+        }
         result_df.rename(mapper=idle_category_name_map, axis=0, inplace=True)
         result_df.reset_index(inplace=True)
 
@@ -498,16 +562,26 @@ class BreakdownAnalysis:
                     legend_title="Idle Time Breakdown",
                 )
             else:
-                fig.update_layout(yaxis_title="Idle time (us)", legend_title="Idle Time Breakdown")
+                fig.update_layout(
+                    yaxis_title="Idle time (us)", legend_title="Idle Time Breakdown"
+                )
             fig.show()
 
         result_df["rank"] = rank
-        interval_stats_df = pd.concat(interval_stats_list).round(2) if show_idle_interval_stats else None
+        interval_stats_df = (
+            pd.concat(interval_stats_list).round(2)
+            if show_idle_interval_stats
+            else None
+        )
         if interval_stats_df is not None:
             # add rank column to the starting
             interval_stats_df.insert(0, "rank", rank)
-            interval_stats_df.rename(mapper=idle_category_name_map, axis=0, inplace=True)
+            interval_stats_df.rename(
+                mapper=idle_category_name_map, axis=0, inplace=True
+            )
 
-        result_df = result_df[["rank", "stream", "idle_category", "idle_time", "idle_time_ratio"]].round(2)
+        result_df = result_df[
+            ["rank", "stream", "idle_category", "idle_time", "idle_time_ratio"]
+        ].round(2)
 
         return result_df, interval_stats_df

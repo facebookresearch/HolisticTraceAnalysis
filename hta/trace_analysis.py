@@ -3,7 +3,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from collections import defaultdict
-from enum import Flag, auto
+from enum import auto, Flag
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import pandas as pd
@@ -11,6 +11,7 @@ import pandas as pd
 from hta.analyzers.breakdown_analysis import BreakdownAnalysis
 from hta.analyzers.communication_analysis import CommunicationAnalysis
 from hta.analyzers.cuda_kernel_analysis import CudaKernelAnalysis
+from hta.analyzers.cupti_counter_analysis import CuptiCounterAnalysis
 from hta.analyzers.straggler import find_stragglers_with_late_start_comm_kernels
 from hta.analyzers.straggler_analysis import StragglerAnalysis
 from hta.analyzers.trace_counters import TraceCounters
@@ -65,7 +66,9 @@ class TraceAnalysis:
         profiler_steps: Optional[List[int]] = None,
         num_candidates: int = 2,
         visualize: bool = False,
-        straggler_identification_impl: Callable[..., pd.Series] = find_stragglers_with_late_start_comm_kernels,
+        straggler_identification_impl: Callable[
+            ..., pd.Series
+        ] = find_stragglers_with_late_start_comm_kernels,
     ) -> List[int]:
         r"""
         Identify potential stragglers based on a pre-defined metric computed from the trace.
@@ -286,19 +289,25 @@ class TraceAnalysis:
             ranks = [0]
 
         if time_series is None:
-            time_series = TimeSeriesTypes.QUEUE_LENGTH | TimeSeriesTypes.MEMCPY_BANDWIDTH
+            time_series = (
+                TimeSeriesTypes.QUEUE_LENGTH | TimeSeriesTypes.MEMCPY_BANDWIDTH
+            )
 
         counter_events: Dict[int, List[Dict[str, Any]]] = defaultdict(list)
         if output_suffix == "":
             output_suffix = "_with_counters"
 
-        def add_time_series(series_dict: Dict[int, pd.DataFrame], counter_name: str, counter_col: str):
+        def add_time_series(
+            series_dict: Dict[int, pd.DataFrame], counter_name: str, counter_col: str
+        ):
             nonlocal counter_events
             """accept a rank -> time series dict and append it"""
             for rank, series in series_dict.items():
                 if "stream" in series.columns:
                     series.rename(columns={"stream": "id"}, inplace=True)
-                ce = self.t.convert_time_series_to_events(series, counter_name, counter_col)
+                ce = self.t.convert_time_series_to_events(
+                    series, counter_name, counter_col
+                )
                 counter_events[rank].extend(ce)
 
         if TimeSeriesTypes.QUEUE_LENGTH in time_series:
@@ -317,7 +326,9 @@ class TraceAnalysis:
         for rank, ev_list in counter_events.items():
             raw_trace_content = self.t.get_raw_trace_for_one_rank(rank=rank)
             raw_trace_content["traceEvents"].extend(ev_list)
-            output_file = self.t.trace_files[rank].replace(".json", f"{output_suffix}.json")
+            output_file = self.t.trace_files[rank].replace(
+                ".json", f"{output_suffix}.json"
+            )
             logger.info(f"Writing trace with counters for rank {rank} to {output_file}")
             self.t.write_raw_trace(output_file, raw_trace_content)
 
@@ -462,3 +473,34 @@ class TraceAnalysis:
             pd.concat(idle_time_df_list),
             pd.concat(interval_df_list) if show_idle_interval_stats else None,
         )
+
+    def get_cupti_counter_data_with_operators(
+        self,
+        ranks: Optional[List[int]] = None,
+    ) -> List[pd.DataFrame]:
+        r"""Performance counters provide insights on how to speed up GPU
+        kernels. The PyTorch Profiler has a lightweight API [CUPTI Range
+        Profiler API](https://docs.nvidia.com/cupti/r_main.html#r_profiler)
+        that enables users to monitor performance counters from the device.
+
+        When the CUPTI Profiler mode is enabled then PyTorch will emit the
+        performance counters and annotates them in the trace.
+            * The events are logged under the `cuda_profiler_range` category.
+            * Counter values are logged in the `args` section of the trace.
+
+        This API can investigate performance measurements per kernel and
+        associate them to operators that the kernel belongs to. A single kernel
+        can map to multiple levels of operators (as operators can be nested).
+        To represent this we basically provide a list column called `op_stack`.
+        For further convenience we add the top and bottom level operator column
+        as well.
+
+        Args:
+            ranks (List[int]): List of ranks on which to run the analysis. Default = [0].
+        Returns:
+            List[pd.DataFrame]
+                A list of dataframes, one per rank, containing kernel name,
+                op_stack (operator stack), top and bottom level op, and columns
+                for individual performance counters.
+        """
+        return CuptiCounterAnalysis.get_counter_data_with_operators(self.t, ranks)

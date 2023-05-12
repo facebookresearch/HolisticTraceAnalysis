@@ -24,11 +24,10 @@ repos:
     -   id: flake8
         args: [--show-source, --statistics]
 
--   repo: https://github.com/pycqa/isort
-    rev: 5.12.0
+-   repo: https://github.com/omnilib/ufmt
+    rev: v1.3.2
     hooks:
-    -   id: isort
-        exclude: README.md
+      - id: ufmt
         additional_dependencies: [toml]
 
 -   repo: https://github.com/pre-commit/mirrors-mypy
