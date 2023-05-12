@@ -31,6 +31,9 @@ HTA provides the following features:
    insights into memory bandwidth utilized and number of outstanding operations on each CUDA stream.
 1. __Trace Comparison__ - A trace comparison tool to identify and visualize the differences between
    traces.
+1. __CUPTI Counter Analysis__ - An experimental API to interpret GPU performance counters. It
+   attributes performance measurements from kernels to PyTorch operators, and can help with kernel
+   optimization and roofline analysis.
 
 ## Installation
 
