@@ -62,9 +62,9 @@ class TraceAnalysisTestCase(unittest.TestCase):
         )
         self.assertEqual(frequent_patterns_dfs.iloc[2]["count"], 48)
         self.assertEqual(
-            frequent_patterns_dfs.iloc[2]["GPU kernel duration (ns)"], 11300
+            frequent_patterns_dfs.iloc[2]["GPU kernel duration (us)"], 11300
         )
-        self.assertEqual(frequent_patterns_dfs.iloc[2]["CPU op duration (ns)"], 9652)
+        self.assertEqual(frequent_patterns_dfs.iloc[2]["CPU op duration (us)"], 9652)
         mock_write_trace.assert_called_once()
         trace_output_filename, _ = mock_write_trace.call_args.args
         self.assertEqual(trace_output_filename, self.overlaid_trace_file)
@@ -188,9 +188,9 @@ class TraceAnalysisTestCase(unittest.TestCase):
         self.assertEqual(kernel_type_breakdown.iloc[0]["kernel_type"], "COMMUNICATION")
         self.assertEqual(kernel_type_breakdown.iloc[0]["sum"], 8040285)
         self.assertEqual(kernel_breakdown.iloc[0]["kernel_type"], "COMMUNICATION")
-        self.assertEqual(kernel_breakdown.iloc[0]["sum (ns)"], 627683)
+        self.assertEqual(kernel_breakdown.iloc[0]["sum (us)"], 627683)
         self.assertEqual(kernel_breakdown.iloc[151]["kernel_type"], "MEMORY")
-        self.assertEqual(kernel_breakdown.iloc[151]["sum (ns)"], 1064)
+        self.assertEqual(kernel_breakdown.iloc[151]["sum (us)"], 1064)
 
     def test_get_queue_length_summary(self):
         qd_summary = self.vision_transformer_t.get_queue_length_summary(ranks=[0])

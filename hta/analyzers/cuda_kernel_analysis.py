@@ -172,10 +172,10 @@ class CudaKernelAnalysis:
         for pattern, count in pattern_counts.items():
             patterns_result["pattern"].append("|".join(sym_table[x] for x in pattern))
             patterns_result["count"].append(count)
-            patterns_result["GPU kernel duration (ns)"].append(
+            patterns_result["GPU kernel duration (us)"].append(
                 pattern_durations[pattern][0]
             )
-            patterns_result["CPU op duration (ns)"].append(
+            patterns_result["CPU op duration (us)"].append(
                 pattern_durations[pattern][1]
             )
             patterns_result["pattern_indices"].append(pattern_occurrences[pattern])

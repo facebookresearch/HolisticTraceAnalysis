@@ -125,10 +125,10 @@ class BreakdownAnalysis:
         )
         all_kernel_df.rename(
             columns={
-                "sum": "sum (ns)",
-                "mean": "mean (ns)",
-                "max": "max (ns)",
-                "min": "min (ns)",
+                "sum": "sum (us)",
+                "mean": "mean (us)",
+                "max": "max (us)",
+                "min": "min (us)",
                 "std": "stddev",
             },
             inplace=True,
@@ -191,16 +191,16 @@ class BreakdownAnalysis:
                         fig = px.bar(
                             kernel_name_df,
                             x="rank",
-                            y="mean (ns)",
+                            y="mean (us)",
                             title=name,
                             labels={
                                 "rank": "Rank",
-                                "mean (ns)": "Mean Duration (ns)",
+                                "mean (us)": "Mean Duration (us)",
                             },
-                            error_y=kernel_name_df["max (ns)"]
-                            - kernel_name_df["mean (ns)"],
-                            error_y_minus=kernel_name_df["mean (ns)"]
-                            - kernel_name_df["min (ns)"],
+                            error_y=kernel_name_df["max (us)"]
+                            - kernel_name_df["mean (us)"],
+                            error_y_minus=kernel_name_df["mean (us)"]
+                            - kernel_name_df["min (us)"],
                         )
                         fig.update_layout(
                             title_text=f'Kernel type "{kernel}" - {name}',
@@ -313,8 +313,8 @@ class BreakdownAnalysis:
         """
         Compute idle time for given set of GPU kernels :
           returns :
-            idle time (ns) = kernel time - merged execution time of all kernels
-            kernel time (ns) = defined as the time difference between end of the
+            idle time (us) = kernel time - merged execution time of all kernels
+            kernel time (us) = defined as the time difference between end of the
                          last kernel and start of the first kernel.
             PS: we exclude the last profiler iteration while reading trace
             so total time is exclusive of that.
@@ -333,7 +333,7 @@ class BreakdownAnalysis:
         sym_table = t.symbol_table.get_sym_table()
 
         def idle_time_per_rank(trace_df: pd.DataFrame) -> Tuple[int, int, int, int]:
-            """returns idle_time (ns) , compute_time (ns), non_compute_time (ns), total_time (ns)"""
+            """returns idle_time (us) , compute_time (us), non_compute_time (us), total_time (us)"""
             gpu_kernels = trace_df[trace_df["stream"].ne(-1)].copy()
             idle_time, kernel_time = cls._get_idle_time_for_kernels(gpu_kernels)
 
@@ -362,22 +362,22 @@ class BreakdownAnalysis:
             idle_time, compute_time, non_compute_time, kernel_time = idle_time_per_rank(
                 trace_df
             )
-            result["idle_time(ns)"].append(idle_time)
-            result["compute_time(ns)"].append(compute_time)
-            result["non_compute_time(ns)"].append(non_compute_time)
-            result["kernel_time(ns)"].append(kernel_time)
+            result["idle_time(us)"].append(idle_time)
+            result["compute_time(us)"].append(compute_time)
+            result["non_compute_time(us)"].append(non_compute_time)
+            result["kernel_time(us)"].append(kernel_time)
 
         result_df = pd.DataFrame(result)
         result_df["idle_time"] = (
-            result_df["idle_time(ns)"] / result_df["kernel_time(ns)"]
+            result_df["idle_time(us)"] / result_df["kernel_time(us)"]
         )
         result_df["idle_time_pctg"] = round(100 * result_df["idle_time"], 2)
         result_df["compute_time"] = (
-            result_df["compute_time(ns)"] / result_df["kernel_time(ns)"]
+            result_df["compute_time(us)"] / result_df["kernel_time(us)"]
         )
         result_df["compute_time_pctg"] = round(100 * result_df["compute_time"], 2)
         result_df["non_compute_time"] = (
-            result_df["non_compute_time(ns)"] / result_df["kernel_time(ns)"]
+            result_df["non_compute_time(us)"] / result_df["kernel_time(us)"]
         )
         result_df["non_compute_time_pctg"] = round(
             100 * result_df["non_compute_time"], 2
@@ -403,10 +403,10 @@ class BreakdownAnalysis:
         return result_df[
             [
                 "rank",
-                "idle_time(ns)",
-                "compute_time(ns)",
-                "non_compute_time(ns)",
-                "kernel_time(ns)",
+                "idle_time(us)",
+                "compute_time(us)",
+                "non_compute_time(us)",
+                "kernel_time(us)",
                 "idle_time_pctg",
                 "compute_time_pctg",
                 "non_compute_time_pctg",
@@ -563,7 +563,7 @@ class BreakdownAnalysis:
                 )
             else:
                 fig.update_layout(
-                    yaxis_title="Idle time (ns)", legend_title="Idle Time Breakdown"
+                    yaxis_title="Idle time (us)", legend_title="Idle Time Breakdown"
                 )
             fig.show()
 
