@@ -306,7 +306,17 @@ class TraceAnalysisTestCase(unittest.TestCase):
         cupti_profiler_t = TraceAnalysis(trace_dir=cupti_profiler_trace_dir)
         counters_df = cupti_profiler_t.get_cupti_counter_data_with_operators()[0]
 
-        test_row = counters_df.iloc[5].to_dict()
+        self.assertEqual(len(counters_df), 77)
+
+        # Example trace has CUPTI SASS FLOPS instruction counters
+        counter_names = set(CUDA_SASS_INSTRUCTION_COUNTER_FLOPS.keys())
+        self.assertEqual(
+            set(counters_df.columns.unique()) & counter_names, counter_names
+        )
+
+        # Pick 5th kernel to execute
+        test_row = counters_df.sort_values(axis=0, by="ts").loc[5].to_dict()
+
         self.assertEqual(test_row["cat"], "cuda_profiler_range")
         self.assertTrue("fft2d_r2c_32x32" in test_row["name"])
 
@@ -315,12 +325,6 @@ class TraceAnalysisTestCase(unittest.TestCase):
         )
         self.assertEqual(test_row["top_level_op"], "aten::conv2d")
         self.assertEqual(test_row["bottom_level_op"], "aten::_convolution")
-
-        # Example trace has CUPTI SASS FLOPS instruction counters
-        counter_names = set(CUDA_SASS_INSTRUCTION_COUNTER_FLOPS.keys())
-        self.assertEqual(
-            set(counters_df.columns.unique()) & counter_names, counter_names
-        )
 
 
 if __name__ == "__main__":  # pragma: no cover
