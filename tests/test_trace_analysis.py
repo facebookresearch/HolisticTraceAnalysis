@@ -315,7 +315,7 @@ class TraceAnalysisTestCase(unittest.TestCase):
         )
 
         # Pick 5th kernel that executed.
-        test_row = counters_df.sort_values(axis=0, by="ts").loc[5].to_dict()
+        test_row = counters_df.sort_values(axis=0, by="ts").iloc[5].to_dict()
 
         self.assertEqual(test_row["cat"], "cuda_profiler_range")
         self.assertTrue("fft2d_r2c_32x32" in test_row["name"])
