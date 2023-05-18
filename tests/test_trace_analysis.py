@@ -314,7 +314,7 @@ class TraceAnalysisTestCase(unittest.TestCase):
             set(counters_df.columns.unique()) & counter_names, counter_names
         )
 
-        # Pick 5th kernel to execute
+        # Pick 5th kernel that executed.
         test_row = counters_df.sort_values(axis=0, by="ts").loc[5].to_dict()
 
         self.assertEqual(test_row["cat"], "cuda_profiler_range")
