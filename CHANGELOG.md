@@ -5,7 +5,6 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 #### Added
-- Added CUPTI Counter analyzer feature to parse kernel and operator level counter statistics.
 
 #### Changed
 
@@ -14,6 +13,17 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 #### Removed
 
 #### Fixed
+
+## [0.2.0] - 2023-05-22
+#### Added
+- (Experimental) Added CUPTI Counter analyzer feature to parse kernel and operator level counter statistics.
+
+#### Changed
+- Improved loading time by parallelizing reads in teh `create_rank_to_trace_dict` function.
+
+#### Fixed
+- Fix unit of time in `get_gpu_kernel_breakdown` API.
+- Optimized multiprocessing strategy to handle OOMs when process pool is too large.
 
 ## [0.1.3] - 2023-02-09
 
