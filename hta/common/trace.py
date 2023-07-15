@@ -147,6 +147,7 @@ def compress_df(df: pd.DataFrame) -> Tuple[pd.DataFrame, TraceSymbolTable]:
     args_to_keep = {
         "stream",
         "correlation",
+        "External id",
         "Trace iteration",
         "memory bandwidth (GB/s)",
     }

@@ -1,5 +1,6 @@
 [tool.black]
 line-length = 88
+# temp remove third_party
 exclude = '''
 /(
     \.git
@@ -8,6 +9,7 @@ exclude = '''
   | build
   | docs
   | stubs
+  | hta/third_party
 )/
 '''
 
@@ -18,4 +20,4 @@ multi_line_output = 3
 include_trailing_comma = true
 use_parentheses = true
 src_paths = ["hta", "tests"]
-skip_glob = ["examples/*"]
+skip_glob = ["examples/*", "hta/third_party/"]  # temp

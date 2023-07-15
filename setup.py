@@ -12,6 +12,12 @@ def fetch_requirements():
     return reqs
 
 
+print(
+    setuptools.find_packages(
+        include=["hta.*", "third_party/param/train/compute/python/tools.*"]
+    )
+)
+
 setuptools.setup(
     name="HolisticTraceAnalysis",
     description="A python library for analyzing PyTorch Profiler traces",
@@ -25,6 +31,7 @@ setuptools.setup(
     include_package_data=True,
     packages=setuptools.find_packages(
         include=["hta*"]
+        # include=["hta*", "third_party/param/train/compute/python/tools.*"]
     ),  # Only include code within hta.
     classifiers=[
         "Programming Language :: Python :: 3.8",
