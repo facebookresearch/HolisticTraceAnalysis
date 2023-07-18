@@ -13,12 +13,9 @@ import numpy as np
 import pandas as pd
 
 from hta.common.trace import Trace
-
-# FIXME use third_party directly
-from hta.third_party.param.train.compute.python.tools.execution_graph import (
-    ExecutionGraph,
-)
 from hta.utils.utils import normalize_path
+
+from param.python.tools.execution_graph import ExecutionGraph
 
 
 def load_execution_trace(et_file: str) -> ExecutionGraph:
