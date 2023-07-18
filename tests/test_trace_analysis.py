@@ -210,8 +210,10 @@ class TraceAnalysisTestCase(unittest.TestCase):
         }
         for key, expval in expected_stats.items():
             self.assertAlmostEqual(
-                stream7_stats[key], expval, 
-                places=3, msg=f"Stream 7 stats mismatch key={key}"
+                stream7_stats[key],
+                expval,
+                places=3,
+                msg=f"Stream 7 stats mismatch key={key}",
             )
 
     @patch.object(hta.common.trace.Trace, "write_raw_trace")
