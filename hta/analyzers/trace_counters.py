@@ -65,20 +65,24 @@ class TraceCounters:
         gpu_kernels = trace_df[trace_df["stream"].ne(-1)].copy()
         gpu_kernels["queue"] = -1
 
+        # use the pid, tid and cuda stream from the correlated GPU event.
+        rutime_calls_filt = runtime_calls.join(
+            gpu_kernels[["stream", "pid", "tid", "correlation"]].set_index(
+                "correlation"
+            ),
+            on="correlation",
+        )
+
+        # filter GPU kernels with valid parent runtime events only, use a semi-join
+        gpu_kernels_filt = gpu_kernels[
+            gpu_kernels["correlation"].isin(runtime_calls["correlation"])
+        ]
+
+        assert len(rutime_calls_filt) == len(gpu_kernels_filt)
+
         # Concat the series of runtime launch events and GPU kernel events
         merged_df = (
-            pd.concat(
-                [
-                    # use the pid, tid and cuda stream from the correlated GPU event.
-                    runtime_calls.join(
-                        gpu_kernels[["stream", "pid", "tid", "correlation"]].set_index(
-                            "correlation"
-                        ),
-                        on="correlation",
-                    ),
-                    gpu_kernels,
-                ]
-            )
+            pd.concat([rutime_calls_filt, gpu_kernels_filt])
             .sort_values(by="ts")
             .set_index("index")
         )
