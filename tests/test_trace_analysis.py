@@ -218,7 +218,11 @@ class TraceAnalysisTestCase(unittest.TestCase):
 
     @patch.object(hta.common.trace.Trace, "write_raw_trace")
     def test_generate_trace_with_counters(self, mock_write_trace):
-        self.vision_transformer_t.generate_trace_with_counters(
+        # Use a trace with some kernels missing attribution to operators
+        # to check if our logic is robust and does not lead to negative values.
+        queue_length_trace: str = "tests/data/negative_queue_length_values_check/"
+        analyzer_t = TraceAnalysis(trace_dir=queue_length_trace)
+        analyzer_t.generate_trace_with_counters(
             time_series=TimeSeriesTypes.QUEUE_LENGTH | TimeSeriesTypes.MEMCPY_BANDWIDTH
         )
         mock_write_trace.assert_called_once()
@@ -230,7 +234,7 @@ class TraceAnalysisTestCase(unittest.TestCase):
             ev for ev in trace_json["traceEvents"] if ev["ph"] == PHASE_COUNTER
         ]
         print(f"Trace has {len(counter_events)} counter events")
-        self.assertGreaterEqual(len(counter_events), 21000)
+        self.assertGreaterEqual(len(counter_events), 12000)
 
         counter_names = {ev["name"] for ev in counter_events}
         self.assertEqual(
@@ -238,23 +242,19 @@ class TraceAnalysisTestCase(unittest.TestCase):
             {"Queue Length", "Memcpy DtoH", "Memcpy HtoD", "Memcpy DtoD", "Memset"},
         )
 
-        membw_ts = self.vision_transformer_t.get_memory_bw_time_series()[0]
+        membw_ts = analyzer_t.get_memory_bw_time_series()[0]
         self.assertEqual(len(membw_ts[membw_ts.memory_bw_gbps < 0]), 0)
 
-        queue_len_ts = self.vision_transformer_t.get_queue_length_time_series()[0]
+        queue_len_ts = analyzer_t.get_queue_length_time_series()[0]
         self.assertEqual(len(queue_len_ts[queue_len_ts.queue_length < 0]), 0)
 
-        mem_bw_summary_df = self.vision_transformer_t.get_memory_bw_summary(
-            ranks=[0, 2]
-        )
-        # 2 ranks x 4 types of memcpy/memset
-        self.assertEqual(len(mem_bw_summary_df), 8)
+        mem_bw_summary_df = analyzer_t.get_memory_bw_summary(ranks=[0])
+        # 1 ranks x 4 types of memcpy/memset
+        self.assertEqual(len(mem_bw_summary_df), 4)
 
-        queue_len_summary_df = self.vision_transformer_t.get_queue_length_summary(
-            ranks=[0, 2]
-        )
-        # 2 ranks x 6 streams
-        self.assertEqual(len(queue_len_summary_df), 12)
+        queue_len_summary_df = analyzer_t.get_queue_length_summary(ranks=[0])
+        # 1 ranks x 6 streams
+        self.assertEqual(len(queue_len_summary_df), 6)
 
         # Test traces without GPU kernels, these should return empty dicts or dataframes
         queue_len_ts_dict = self.rank_non_gpu_t.get_queue_length_time_series()
