@@ -50,6 +50,13 @@ setup_venv: &setup_venv
         which pip
         pip install --upgrade pip
 
+init_submodules: &init_submodules
+  - run:
+      name: Init Git Submodules
+      command: |
+        git submodule sync
+        git submodule update --init
+
 install_repo: &install_repo
   - run:
       name: Install Repository
@@ -88,6 +95,7 @@ jobs:
 
     steps:
       - checkout
+      - <<: *init_submodules
       - <<: *setup_venv
       - <<: *install_repo
       - <<: *install_dev_requirements
@@ -113,6 +121,7 @@ jobs:
 
     steps:
       - checkout
+      - <<: *init_submodules
       - <<: *setup_venv
       - <<: *install_repo
 
@@ -136,6 +145,7 @@ jobs:
 
     steps:
       - checkout
+      - <<: *init_submodules
       - <<: *setup_venv
       - <<: *install_repo
 
@@ -158,6 +168,7 @@ jobs:
 
     steps:
       - checkout
+      - <<: *init_submodules
       - <<: *setup_venv
       - <<: *install_repo
 
@@ -180,6 +191,7 @@ jobs:
 
     steps:
       - checkout
+      - <<: *init_submodules
       - <<: *setup_venv
       - <<: *install_repo
 
