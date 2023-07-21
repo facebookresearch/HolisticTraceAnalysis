@@ -23,7 +23,7 @@ class TraceAnalysisTestCase(unittest.TestCase):
         self.assertIsNotNone(et)
         self.assertEqual(len(et.nodes), 38)
 
-    def _validate_execution_trace(
+    def _validate_correlated_trace(
         self, trace_df: pd.DataFrame, et: execution_trace.ExecutionGraph
     ):
         """Common checks for correlated traces"""
@@ -66,4 +66,4 @@ class TraceAnalysisTestCase(unittest.TestCase):
         execution_trace.correlate_execution_trace(self.analyzer_t.t, 0, et)
         trace_df = self.analyzer_t.t.get_trace(0).copy()
 
-        self._validate_execution_trace(trace_df, et)
+        self._validate_correlated_trace(trace_df, et)

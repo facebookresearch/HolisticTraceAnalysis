@@ -1,6 +1,5 @@
 [tool.black]
 line-length = 88
-# temp remove third_party
 exclude = '''
 /(
     \.git
