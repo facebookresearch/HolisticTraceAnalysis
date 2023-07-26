@@ -46,7 +46,7 @@ class TraceAnalysisTestCase(unittest.TestCase):
         execution_trace.add_et_column(trace_df, et, "output_types")
 
         # Check if correlated nodes and actual nodes have same name
-        self.analyzer_t.t.symbol_table.add_back_symbols(trace_df, col="name")
+        self.analyzer_t.t.symbol_table.add_symbols_to_trace_df(trace_df, col="name")
 
         correlated_rows = trace_df.loc[~trace_df.et_node.isna()]
         compare_names = correlated_rows["name"] == correlated_rows["et_node_name"]

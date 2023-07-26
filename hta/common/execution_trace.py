@@ -8,7 +8,7 @@ import logging
 import sys
 import time
 
-from typing import List  # Dict, , NamedTuple, Optional
+from typing import List
 
 import numpy as np
 import pandas as pd
@@ -42,7 +42,6 @@ def load_execution_trace(et_file: str) -> ExecutionGraph:
         et = ExecutionGraph(json.load(f))
     t_end = time.perf_counter()
 
-    t_end = time.perf_counter()
     logger.info(
         f"Parsed Execution Trace file {et_file}, "
         f"time = {(t_end - t_start):.2f} seconds "
@@ -52,7 +51,15 @@ def load_execution_trace(et_file: str) -> ExecutionGraph:
 
 def _et_has_overlap(trace_df: pd.DataFrame, et: ExecutionGraph) -> bool:
     """Use record function IDs (rf_id) to find out if ET and Kineto trace
-    have overlap"""
+    have overlap
+
+    Args:
+        trace_df (pd.DataFrame): Trace dataframe for one rank.
+        et (ExecutionGraph: Execution Trace object for the same rank.
+
+    Returns:
+        True if Kineto Trace and Execution Trace have overlap.
+    """
     et_min_rf, et_max_rf = sys.maxsize, 0
     rf_ids = (
         node.rf_id
@@ -86,6 +93,9 @@ def correlate_execution_trace(trace: Trace, rank: int, et: ExecutionGraph) -> No
         rank (int): Rank to correlate with.
         et (ExecutionGraph): An Execution Trace object to correlate with.
 
+    Returns:
+        None
+
     Outcome is the trace dataframe for specified rank will have a new column
     'et_node' that includes the correlated node index in Execution Trace.
 
@@ -95,6 +105,7 @@ def correlate_execution_trace(trace: Trace, rank: int, et: ExecutionGraph) -> No
             trees using a graph edit distance similarity algorithm.
 
     Please note (2) is not supported yet and will come in future PRs.
+
     """
     trace_df = trace.get_trace(rank)
 
@@ -128,6 +139,10 @@ def add_et_column(trace_df: pd.DataFrame, et: ExecutionGraph, column: str) -> No
                                  first so that the `et_node` is populated..
         et (ExecutionGraph): The Execution Trace object.
         column (stR): Column to add from the corresponding Execution Trace node.
+
+    Returns:
+        None
+
     """
     if "et_node" not in trace_df:
         logger.error("Please run correlate_execution_trace() first")

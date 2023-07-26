@@ -5,7 +5,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 #### Added
-- (Experimental) Support to read PyTorch Execution Trace and correlate it with PyTorch Trace.
+- (Experimental) Support to read PyTorch Execution Trace and correlate it with PyTorch Profiler Trace.
 
 #### Changed
 

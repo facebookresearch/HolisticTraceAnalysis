@@ -91,9 +91,15 @@ class TraceSymbolTable:
     def get_sym_table(self) -> List[str]:
         return self.sym_table
 
-    def add_back_symbols(self, trace_df: pd.dataframe, col: str) -> None:
+    def add_symbols_to_trace_df(self, trace_df: pd.dataframe, col: str) -> None:
         """
-        Take a dataframe and add back symbols to one of its columns.
+        Take a trace dataframe and expand symbols in one of its columns.
+        Args:
+            trace_df (pd.DataFrame): Dataframe for trace from one rank.
+            col (str): column to expand symbols on.
+
+        Returns:
+            None
         """
         trace_df[col] = trace_df[col].apply(
             lambda i: self.sym_table[i] if (i >= 0 and i < len(self.sym_table)) else ""
