@@ -108,7 +108,7 @@ class CuptiCounterAnalysis:
         # add back strings for readability
         for col in ["cat", "name"]:
             gpu_kernels[col] = gpu_kernels[col].apply(
-                lambda i: sym_table[i] if (i > 0 and i < len(sym_table)) else ""
+                lambda i: sym_table[i] if (i >= 0 and i < len(sym_table)) else ""
             )
         for col in ["top_level_op", "bottom_level_op"]:
             gpu_kernels[col] = gpu_kernels[col].apply(

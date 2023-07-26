@@ -69,6 +69,7 @@ pip install HolisticTraceAnalysis
 ```
 git clone https://github.com/facebookresearch/HolisticTraceAnalysis.git
 cd HolisticTraceAnalysis
+git submodule update --init
 pip install -r requirements.txt
 pip install -e .
 ```
