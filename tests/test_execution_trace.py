@@ -24,7 +24,7 @@ class TraceAnalysisTestCase(unittest.TestCase):
         self.assertEqual(len(et.nodes), 38)
 
     def _validate_correlated_trace(
-        self, trace_df: pd.DataFrame, et: execution_trace.ExecutionGraph
+        self, trace_df: pd.DataFrame, et: execution_trace.ExecutionTrace
     ):
         """Common checks for correlated traces"""
         et_node_col = trace_df[trace_df.et_node >= 0].et_node

@@ -17,13 +17,13 @@ from hta.common.trace import Trace
 from hta.configs.config import logger
 from hta.utils.utils import normalize_path
 
-from param.python.tools.execution_graph import ExecutionGraph
+from param_bench.train.compute.python.tools.execution_trace import ExecutionTrace
 
 # PyTorch Events types that are correlated in the Execution Trace
 EXECUTION_TRACE_SUPPORTED_EVENTS: List[str] = ["cpu_op", "user_annotation"]
 
 
-def load_execution_trace(et_file: str) -> ExecutionGraph:
+def load_execution_trace(et_file: str) -> ExecutionTrace:
     """Loads Execution Trace from json file and parses it into an
     object representation. For large files this could take a lot of memory.
 
@@ -31,7 +31,7 @@ def load_execution_trace(et_file: str) -> ExecutionGraph:
         et_file (str): File path for the Execution Trace.
 
     Returns:
-        ExecutionGraph object.
+        ExecutionTrace object.
     """
     et_file_path = normalize_path(et_file)
 
@@ -39,7 +39,7 @@ def load_execution_trace(et_file: str) -> ExecutionGraph:
     with gzip.open(et_file_path, "rb") if et_file.endswith("gz") else open(
         et_file_path, "r"
     ) as f:
-        et = ExecutionGraph(json.load(f))
+        et = ExecutionTrace(json.load(f))
     t_end = time.perf_counter()
 
     logger.info(
@@ -49,13 +49,13 @@ def load_execution_trace(et_file: str) -> ExecutionGraph:
     return et
 
 
-def _et_has_overlap(trace_df: pd.DataFrame, et: ExecutionGraph) -> bool:
+def _et_has_overlap(trace_df: pd.DataFrame, et: ExecutionTrace) -> bool:
     """Use record function IDs (rf_id) to find out if ET and Kineto trace
     have overlap
 
     Args:
         trace_df (pd.DataFrame): Trace dataframe for one rank.
-        et (ExecutionGraph: Execution Trace object for the same rank.
+        et (ExecutionTrace: Execution Trace object for the same rank.
 
     Returns:
         True if Kineto Trace and Execution Trace have overlap.
@@ -84,14 +84,14 @@ def _et_has_overlap(trace_df: pd.DataFrame, et: ExecutionGraph) -> bool:
     return has_overlap
 
 
-def correlate_execution_trace(trace: Trace, rank: int, et: ExecutionGraph) -> None:
+def correlate_execution_trace(trace: Trace, rank: int, et: ExecutionTrace) -> None:
     """Correlate the trace from a specific rank with Execution Trace object.
 
     Args:
         trace (Trace): Trace object loaded using `TraceAnalysis(trace_dir=trace_dir)`
                         or other method.
         rank (int): Rank to correlate with.
-        et (ExecutionGraph): An Execution Trace object to correlate with.
+        et (ExecutionTrace): An Execution Trace object to correlate with.
 
     Returns:
         None
@@ -130,14 +130,14 @@ def correlate_execution_trace(trace: Trace, rank: int, et: ExecutionGraph) -> No
     return
 
 
-def add_et_column(trace_df: pd.DataFrame, et: ExecutionGraph, column: str) -> None:
+def add_et_column(trace_df: pd.DataFrame, et: ExecutionTrace, column: str) -> None:
     """Add columns from Execution Trace nodes into the trace dataframe. Please
     run this after running correlate_execution_trace(...).
     Args:
         trace_df (pd.DataFrame): Dataframe for trace from one rank. Please
                                  run correlate_execution_trace() on the trace dataframe
                                  first so that the `et_node` is populated..
-        et (ExecutionGraph): The Execution Trace object.
+        et (ExecutionTrace): The Execution Trace object.
         column (stR): Column to add from the corresponding Execution Trace node.
 
     Returns:

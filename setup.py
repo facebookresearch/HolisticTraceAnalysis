@@ -25,7 +25,7 @@ setuptools.setup(
     include_package_data=True,
     package_dir={
         "hta": "hta",
-        "param": "third_party/param/train/compute",
+        "param_bench": "third_party/param/",
     },
     classifiers=[
         "Programming Language :: Python :: 3.8",
