@@ -48,6 +48,7 @@ class TraceCounters:
         # cudaLaunchKernel, cudaMemcpyAsync, cudaMemsetAsync
         sym_index = t.symbol_table.get_sym_id_map()
         cudaLaunchKernel_id = sym_index.get("cudaLaunchKernel", None)
+        cudaLaunchKernelExC_id = sym_index.get("cudaLaunchKernelExC", None)
         cudaMemcpyAsync_id = sym_index.get("cudaMemcpyAsync", None)
         cudaMemsetAsync_id = sym_index.get("cudaMemsetAsync", None)
 
@@ -55,7 +56,7 @@ class TraceCounters:
         # - filter events that have a correlated kernel event only.
         runtime_calls: pd.DataFrame = trace_df.query(
             "((name == @cudaMemsetAsync_id) or (name == @cudaMemcpyAsync_id) or "
-            " (name == @cudaLaunchKernel_id))"
+            " (name == @cudaLaunchKernel_id) or (name == @cudaLaunchKernelExC_id))"
             "and (index_correlation > 0)"
         ).copy()
         runtime_calls.drop(["stream", "pid", "tid"], axis=1, inplace=True)

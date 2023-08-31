@@ -372,14 +372,16 @@ class CudaKernelAnalysis:
             trace_df: pd.DataFrame = t.get_trace(rank)
 
             # filter out events which have correlation value matching to
-            # cudaLaunchKernel, cudaMemcpyAsync, cudaMemsetAsync
+            # cudaLaunchKernel, cudaLaunchKernelExC, cudaMemcpyAsync, cudaMemsetAsync
             cudaLaunchKernel_id = sym_index.get("cudaLaunchKernel", None)
+            cudaLaunchKernelExC_id = sym_index.get("cudaLaunchKernelExC", None)
             cudaMemcpyAsync_id = sym_index.get("cudaMemcpyAsync", None)
             cudaMemsetAsync_id = sym_index.get("cudaMemsetAsync", None)
 
             # get correlation id's of cudaLaunchKernel events
             cudaLaunchKernel_correlation_series: pd.Series = trace_df[
-                trace_df["name"] == cudaLaunchKernel_id
+                (trace_df["name"] == cudaLaunchKernel_id)
+                | (trace_df["name"] == cudaLaunchKernelExC_id)
             ].correlation
 
             # whether to use memory events - cudaMemsetAsync and cudaMemcpyAsync.
