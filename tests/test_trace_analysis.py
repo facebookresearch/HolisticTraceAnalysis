@@ -28,10 +28,12 @@ class TraceAnalysisTestCase(unittest.TestCase):
         inference_trace_dir: str = "tests/data/inference_single_rank"
         df_index_resolver_trace_dir: str = "tests/data/df_index_resolver"
         rank_non_gpu_trace_dir: str = "tests/data/rank_non_gpu/"
+        h100_trace_dir: str = "tests/data/h100"
         cls.vision_transformer_t = TraceAnalysis(trace_dir=vision_transformer_trace_dir)
         cls.inference_t = TraceAnalysis(trace_dir=inference_trace_dir)
         cls.df_index_resolver_t = TraceAnalysis(trace_dir=df_index_resolver_trace_dir)
         cls.rank_non_gpu_t = TraceAnalysis(trace_dir=rank_non_gpu_trace_dir)
+        cls.h100_trace_t = TraceAnalysis(trace_dir=h100_trace_dir)
 
     def setUp(self):
         self.overlaid_trace_dir = "tests/data"
@@ -104,6 +106,18 @@ class TraceAnalysisTestCase(unittest.TestCase):
         self.assertEqual(row["cpu_duration"].item(), 9)
         self.assertEqual(row["gpu_duration"].item(), 3)
         self.assertEqual(row["launch_delay"].item(), 20)
+
+    def test_get_cuda_kernel_launch_stats_for_h100(self):
+        dataframe_dict = self.h100_trace_t.get_cuda_kernel_launch_stats(
+            ranks=[1], visualize=False
+        )
+        rank_1_df = dataframe_dict[1]
+        row = rank_1_df[rank_1_df["correlation"] == 1281474]
+
+        self.assertEqual(rank_1_df.shape[0], 32835)
+        self.assertEqual(row["cpu_duration"].item(), 20)
+        self.assertEqual(row["gpu_duration"].item(), 31)
+        self.assertEqual(row["launch_delay"].item(), 41)
 
     def test_get_profiler_steps(self):
         results = self.vision_transformer_t.get_profiler_steps()
