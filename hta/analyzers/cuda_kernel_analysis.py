@@ -48,7 +48,7 @@ class CudaKernelAnalysis:
             return pd.DataFrame()
 
         # check output_dir is a valid path and a directory
-        path = Path(output_dir)
+        path = Path(output_dir).expanduser()
         if not path.exists():
             logger.error(f"The path {str(path)} does not exist.")
             return pd.DataFrame()

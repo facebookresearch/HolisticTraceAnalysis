@@ -367,6 +367,23 @@ class CallStackGraph:
         """
         return self.depth
 
+    def dfs_traverse(self, enter_func, exit_func) -> None:
+        """Depth first traversal on a specific call stack.
+        Call enter_func() and exit_func() on each callstack node.
+        """
+        self._dfs_traverse_node(-1, enter_func, exit_func)
+
+    def _dfs_traverse_node(self, nid: int, enter_func, exit_func) -> None:
+        node = self.nodes[nid]
+        enter_func(nid, node)
+
+        all_nodes = self.nodes.keys()
+        for child_nid in node.children:
+            if child_nid in all_nodes:
+                self._dfs_traverse_node(child_nid, enter_func, exit_func)
+
+        exit_func(nid, node)
+
 
 class CallGraph:
     """
