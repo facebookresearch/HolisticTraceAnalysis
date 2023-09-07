@@ -93,7 +93,7 @@ class CuptiCounterAnalysis:
 
         def get_top_or_bottom_op(ops: List[int], top: bool) -> int:
             # only get ops that are cpu_op
-            filterd_ops = [op for op in ops if trace_df.loc[op]["cat"] == cpu_op_cat]
+            filterd_ops = [op for op in ops if trace_df["cat"].loc[op] == cpu_op_cat]
             if len(filterd_ops) < 1:
                 return -1
             return filterd_ops[-1 if top else 0]
@@ -112,11 +112,11 @@ class CuptiCounterAnalysis:
             )
         for col in ["top_level_op", "bottom_level_op"]:
             gpu_kernels[col] = gpu_kernels[col].apply(
-                lambda op: sym_table[trace_df.loc[op]["name"]] if op >= 0 else ""
+                lambda op: sym_table[trace_df["name"].loc[op]] if op >= 0 else ""
             )
 
         def stringify_op_stack(ops: List[int]) -> List[str]:
-            return [sym_table[trace_df.loc[op]["name"]] for op in ops]
+            return [sym_table[trace_df["name"].loc[op]] for op in ops]
 
         gpu_kernels["op_stack"] = gpu_kernels["op_stack"].apply(stringify_op_stack)
 
