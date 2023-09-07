@@ -15,6 +15,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 #### Removed
 
 #### Fixed
+- Fixed issue #65 to handle floating point counter values in cupti\_counter\_analysis.
 
 ## [0.2.0] - 2023-05-22
 #### Added
