@@ -71,7 +71,13 @@ class CPGraph(nx.DiGraph):
     and use the integer as a node in the networkx graph datastructure.
     Edges are directly used as the type is hashable.
 
-
+    Attributes:
+        trace_df (pd.DataFrame) : dataframe of trace events used to construct this graph.
+        symbol_table (TraceSymbolTable) : a symbol table used to encode the symbols in the trace.
+        node_list (List[int]) : list of critical path node objects, index in this list is always the node id..
+        critical_path_nodes (List[int]) : list of node ids on the critical path.
+        critical_path_nodes_set (Set[int]) : set of node ids on the critical path.
+        critical_path_events_set (Set[int]) : set of event ids corresponding to the critical path nodes.
     """
 
     def __init__(self, t: "Trace", rank: int) -> None:
@@ -100,13 +106,13 @@ class CPGraph(nx.DiGraph):
         self.node_list.append(node)
         idx = node.idx = len(self.node_list) - 1
         self.add_node(idx)  # Call to networkx.DiGraph
-        logger.info(f"Adding critical path node = {node}")
+        logger.debug(f"Adding critical path node = {node}")
         return idx
 
     def _add_edge(self, edge: CPEdge) -> None:
         """Adds a edge to the graph.
         Args: node (CPEdge): edge object"""
-        logger.info(f"Adding critical path edge: {edge}")
+        logger.debug(f"Adding critical path edge: {edge}")
         self.add_edge(edge.begin, edge.end, weight=edge.weight, object=edge)
 
     def _add_edge_between(
@@ -114,7 +120,7 @@ class CPGraph(nx.DiGraph):
     ) -> None:
         """Adds a edge between two nodes
         Args: src, dest (CPNode): node objects for source and dest."""
-        logger.info(
+        logger.debug(
             f"Adding an edge between nodes {src.idx} -> {dest.idx}" f" type = {type}"
         )
         assert src.idx != dest.idx, f"Src node {src} == Dest node {dest}"
@@ -137,6 +143,12 @@ class CPGraph(nx.DiGraph):
         assert len(node_ids) == 2
         self.event_to_node_map[eid] = (node_ids[0], node_ids[1])
         return (nodes[0], nodes[1])
+
+    def _get_node_name(self, eid: int):
+        if eid < 0:
+            return "ROOT"
+        name_id = self.trace_df.name.loc[eid]
+        return self.sym_table[name_id]
 
     def get_nodes_for_event(
         self, ev_id: int
@@ -169,7 +181,7 @@ class CPGraph(nx.DiGraph):
     #     self, source: int, sink: int
     # ) -> None:
     #     """Add an edge between two dependent operations"""
-    #     if source.getSn() == sink.getSn():
+    #     if source == sink:
     #         return
     #     _, source_end_node = self.get_nodes_for_event(source)
     #     if source_end_node is None:
@@ -210,15 +222,8 @@ class CPGraph(nx.DiGraph):
             @args: csg (CallStackGraph): HTA CallStackGraph object for one CPU thread.
             @args link_operators (bool): If set add an automatic dependency edge
                 between consecutive operators on a single thread.
-        """
 
-        def get_node_name(eid):
-            if eid < 0:
-                return "ROOT"
-            trace_entry = self.trace_df.loc[eid].to_dict()
-            return self.sym_table[int(trace_entry["name"])]
-
-        """To enable nested operators we basicaly add edges between start/end
+        To enable nested operators we basicaly add edges between start/end
         nodes for events. For example say we have op A and op B and C nested
              |----------------------- Op A ----------------------|
                         |--- Op B ---|        |-- Op C--|
@@ -242,8 +247,9 @@ class CPGraph(nx.DiGraph):
             nonlocal last_node
             nonlocal last_highlevel_op
             nonlocal op_depth
-            print(
-                "=" * csnode.depth + f"Entering node {get_node_name(eid)}, id = {eid}"
+            logger.debug(
+                "=" * csnode.depth
+                + f"Entering node {self._get_node_name(eid)}, id = {eid}"
             )
             if not is_op_or_runtime(eid):
                 return
@@ -261,13 +267,18 @@ class CPGraph(nx.DiGraph):
                 self._add_edge_between(last_node, start_node)
             last_node = start_node
 
-            print("=" * csnode.depth + f"Op depth = {op_depth} last_node={last_node}")
+            logger.debug(
+                "=" * csnode.depth + f"Op depth = {op_depth} last_node={last_node}"
+            )
 
         def exit_func(eid, csnode):
             nonlocal last_node
             nonlocal last_highlevel_op
             nonlocal op_depth
-            print("=" * csnode.depth + f"Exiting node {get_node_name(eid)}, id = {eid}")
+            logger.debug(
+                "=" * csnode.depth
+                + f"Exiting node {self._get_node_name(eid)}, id = {eid}"
+            )
             if not is_op_or_runtime(eid):
                 return
 
@@ -283,7 +294,9 @@ class CPGraph(nx.DiGraph):
             else:
                 last_node = end_node
 
-            print("=" * csnode.depth + f"Op depth = {op_depth} last_node={last_node}")
+            logger.debug(
+                "=" * csnode.depth + f"Op depth = {op_depth} last_node={last_node}"
+            )
 
         csg.dfs_traverse(enter_func, exit_func)
 
@@ -308,11 +321,14 @@ class CPGraph(nx.DiGraph):
         }
         return True
 
-    def _show_critical_path(self) -> None:
-        print(self.critical_path_nodes)
+    def show_critical_path(self) -> None:
+        """List out the nodes in the critical path graph"""
         for n in self.critical_path_nodes:
             node = self.node_list[n]
-            logger.info(f"Critical node {n}, {node}, ev_name = TODO")
+            print(
+                f"Critical {node}, ev_id = {node.ev_idx} "
+                f"ev_name = {self._get_node_name(node.ev_idx)}"
+            )
 
 
 class CriticalPathAnalysis:
@@ -474,7 +490,7 @@ class CriticalPathAnalysis:
                 continue
 
             # XXX need to assert if raw event name and dataframe name are same
-            logger.info(f"Adding cp edge between {start_ev_id} and {end_ev_id}")
+            logger.debug(f"Adding cp edge between {start_ev_id} and {end_ev_id}")
 
             flow_events.append(get_flow_event(u, start_ev, e, flow_id, is_start=True))
             flow_events.append(get_flow_event(u, end_ev, e, flow_id, is_start=False))
