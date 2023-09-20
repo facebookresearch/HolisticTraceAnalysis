@@ -12,7 +12,11 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 import networkx as nx
 import pandas as pd
+<<<<<<< HEAD
 
+=======
+from hta.analyzers.trace_counters import TraceCounters
+>>>>>>> 1d030d0 (add basic implemenation of kernel links and sync events)
 from hta.common.call_stack import CallGraph, CallStackGraph, DeviceType
 
 from hta.common.trace import Trace
@@ -43,7 +47,7 @@ class CPEdgeType(Enum):
     DEPENDENCY = 1
     KERNEL_LAUNCH_DELAY = 2
     KERNEL_KERNEL_DELAY = 3
-    SYNC_DELAY = 4
+    SYNC_DEPENDENCY = 4
 
 
 @dataclass
@@ -91,6 +95,8 @@ class CPGraph(nx.DiGraph):
         self.critical_path_nodes: List[int] = []
         self.critical_path_events_set: Set[int] = set()
 
+        self.t = t
+        self.rank: int = rank
         self.node_list: List[CPNode] = []
 
         # map from event id in trace dataframe -> node_id pair
@@ -126,7 +132,11 @@ class CPGraph(nx.DiGraph):
             f"Adding an edge between nodes {src.idx} -> {dest.idx}" f" type = {type}"
         )
         assert src.idx != dest.idx, f"Src node {src} == Dest node {dest}"
-        weight = (dest.ts - src.ts) if type == CPEdgeType.OPERATOR_KERNEL else 0
+        weight = (
+            (dest.ts - src.ts)
+            if type not in [CPEdgeType.DEPENDENCY, CPEdgeType.SYNC_DEPENDENCY]
+            else 0
+        )
         self._add_edge(CPEdge(begin=src.idx, end=dest.idx, weight=weight, type=type))
 
     def _add_event(self, ev_id: int) -> Tuple[CPNode, CPNode]:
@@ -185,6 +195,7 @@ class CPGraph(nx.DiGraph):
         )
         for csg in cpu_call_stacks:
             self._construct_graph_from_call_stack(csg)
+        self._construct_graph_from_kernels()
 
     def _construct_graph_from_call_stack(
         self, csg: CallStackGraph, link_operators: bool = True
@@ -272,6 +283,99 @@ class CPGraph(nx.DiGraph):
             )
 
         csg.dfs_traverse(enter_func, exit_func)
+
+    def _add_gpu_cpu_sync_edge(self, gpu_node: CPNode, runtime_eid: int) -> None:
+        """Add an edge between gpu_node and the runtime event on CPU"""
+        _, end_node = self.get_nodes_for_event(runtime_eid)
+        logger.info(f"Adding a sync edge between nodes {gpu_node} -> {end_node}")
+        self._add_edge_between(gpu_node, end_node, type=CPEdgeType.SYNC_DEPENDENCY)
+
+    def _construct_graph_from_kernels(self) -> None:
+        """Create nodes and edges for GPU kernels"""
+        q = TraceCounters._get_queue_length_time_series_for_rank(self.t, self.rank)
+        gpu_kernels = (
+            self.trace_df[self.trace_df["stream"].ne(-1)]
+            .join(q[["queue_length"]], on="index_correlation")
+            .rename(columns={"queue_length": "queue_length_runtime"})
+            .join(q[["queue_length"]], on="index")
+        )
+        gpu_kernels["end_ts"] = gpu_kernels["ts"] + gpu_kernels["dur"]
+        gpu_kernels.sort_values(by="end_ts", axis=0, inplace=True)
+
+        sym_id_map = self.symbol_table.get_sym_id_map()
+        sync_cat = sym_id_map.get("cuda_sync", -1)
+        context_sync = sym_id_map.get("Context Sync", -1)
+        stream_sync = sym_id_map.get("Stream Sync", -1)
+        stream_wait_event = sym_id_map.get("Stream Wait Event", -1)
+
+        # Last node on a stream
+        last_node: Dict[int, CPNode] = {}
+
+        def hanlde_cuda_sync(row):
+            nonlocal last_node
+            eid = int(row["index"])
+            logger.info(
+                f"CUDA Sync event eid = {eid}, " f"name = {self._get_node_name(eid)}"
+            )
+
+            name = int(row["name"])
+            if name == stream_wait_event:
+                # XXX to handle later
+                return
+            # For context sync add a sync edge on events on all streams
+            # and for stream sync only add a sync edge on specific stream
+            gpu_nodes_to_sync = (
+                list(last_node.values())
+                if name == context_sync
+                else [last_node.get(int(row["stream"]))]
+            )
+            for gpu_node in gpu_nodes_to_sync:
+                if gpu_node is not None:
+                    self._add_gpu_cpu_sync_edge(gpu_node, row["index_correlation"])
+
+        for _, row in gpu_kernels.iterrows():
+            # TODO filter earlier?
+            if row.get("index_correlation", -1) <= 0:
+                continue
+
+            if row["cat"] == sync_cat:
+                hanlde_cuda_sync(row)
+                continue
+
+            eid, queue_length = int(row["index"]), int(row["queue_length"])
+            stream, queue_length_runtime = int(row["stream"]), int(
+                row["queue_length_runtime"]
+            )
+
+            logger.info(
+                f"Adding node for eid = {eid}, stream = {stream}, "
+                f"name = {self._get_node_name(eid)}"
+            )
+
+            start_node, end_node = self._add_event(eid)
+            self._add_edge_between(start_node, end_node)
+
+            if queue_length_runtime == 1 and queue_length == 0:
+                # Add launch delay edge if there were no outstanding kernels
+                # when the CUDA runtime was launching it.
+                runtime_index = int(row["index_correlation"])
+                runtime_start, _ = self.get_nodes_for_event(runtime_index)
+                assert runtime_start is not None
+                self._add_edge_between(
+                    runtime_start, start_node, type=CPEdgeType.KERNEL_LAUNCH_DELAY
+                )
+            elif last_node.get(stream) is not None:
+                # Add Kernel-kernel delay
+                self._add_edge_between(
+                    last_node[stream], start_node, type=CPEdgeType.KERNEL_KERNEL_DELAY
+                )
+            else:
+                logger.error(
+                    f"Queue length is {queue_length_runtime}!= 1 but no "
+                    f"last kernel on stream {stream}"
+                )
+
+            last_node[stream] = end_node
 
     def _show_digraph(self) -> None:
         """Prints the networkx digraph"""
@@ -441,6 +545,12 @@ class CriticalPathAnalysis:
                 return "critical_path_operator"
             if edge_type == CPEdgeType.DEPENDENCY:
                 return "critical_path_dependency"
+            if edge_type == CPEdgeType.KERNEL_LAUNCH_DELAY:
+                return "critical_path_kernel_launch_delay"
+            if edge_type == CPEdgeType.KERNEL_KERNEL_DELAY:
+                return "critical_path_kernel_kernel_delay"
+            if edge_type == CPEdgeType.SYNC_DEPENDENCY:
+                return "critical_path_sync_dependency"
             return "critical_path_other"
 
         def get_flow_event(
