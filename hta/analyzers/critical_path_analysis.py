@@ -493,7 +493,7 @@ class CriticalPathAnalysis:
             logger.debug(f"Adding cp edge between {start_ev_id} and {end_ev_id}")
 
             flow_events.append(get_flow_event(u, start_ev, e, flow_id, is_start=True))
-            flow_events.append(get_flow_event(u, end_ev, e, flow_id, is_start=False))
+            flow_events.append(get_flow_event(v, end_ev, e, flow_id, is_start=False))
             flow_id += 1
 
         raw_events.extend(flow_events)
