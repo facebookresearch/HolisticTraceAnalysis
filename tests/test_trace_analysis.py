@@ -13,7 +13,7 @@ from typing import List, Tuple
 from unittest.mock import patch
 
 import hta
-from hta.analyzers.critical_path_analysis import CPEdgeType
+from hta.analyzers.critical_path_analysis import CPEdge, CPEdgeType
 from hta.analyzers.cupti_counter_analysis import CUDA_SASS_INSTRUCTION_COUNTER_FLOPS
 from hta.common.trace import PHASE_COUNTER
 from hta.trace_analysis import TimeSeriesTypes, TraceAnalysis
@@ -359,9 +359,6 @@ class TraceAnalysisTestCase(unittest.TestCase):
 
         self.assertTrue(success)
 
-        # Make sure critical path is as expected
-        self.assertEqual(len(cp_graph.critical_path_nodes), 334)
-
         trace_df = critical_path_t.t.get_trace(0)
         sym_table = critical_path_t.t.symbol_table.get_sym_table()
 
@@ -410,6 +407,63 @@ class TraceAnalysisTestCase(unittest.TestCase):
         check_edge(expected_node_ids[2][1], expected_node_ids[1][1], 15)
         check_edge(expected_node_ids[1][1], expected_node_ids[0][1], 32)
 
+        # Check kernel launch and kernel-kernel delays
+        # fft kernel correlation ID 5597
+        fft_kernel_idx = 1051
+        fft_runtime_idx = trace_df.index_correlation.loc[fft_kernel_idx]
+        self.assertEqual(
+            get_node_name(fft_kernel_idx),
+            "void fft2d_r2c_32x32<float, false, 0u, false>(float2*, float const*, int, int, int, int, int, int, int, int, int, cudnn::reduced_divisor, bool, int2, int, int)",
+        )
+        kstart, kend = cp_graph.get_nodes_for_event(fft_kernel_idx)
+        rstart, _ = cp_graph.get_nodes_for_event(fft_runtime_idx)
+
+        kernel_launch_edge = cp_graph.edges[rstart.idx, kstart.idx]["object"]
+        self.assertEqual(
+            kernel_launch_edge,
+            CPEdge(
+                begin=rstart.idx,
+                end=kstart.idx,
+                weight=27,
+                type=CPEdgeType.KERNEL_LAUNCH_DELAY,
+            ),
+        )
+
+        # next kernel is ampere_sgemm correlation ID 5604
+        ampere_kernel_idx = 1067
+        k2start, _ = cp_graph.get_nodes_for_event(ampere_kernel_idx)
+        kernel_kernel_edge = cp_graph.edges[kend.idx, k2start.idx]["object"]
+        self.assertEqual(
+            kernel_kernel_edge,
+            CPEdge(
+                begin=kend.idx,
+                end=k2start.idx,
+                weight=7,
+                type=CPEdgeType.KERNEL_KERNEL_DELAY,
+            ),
+        )
+
+        # Check device sync event
+        epilogue_kernel_idx = 1275
+        cuda_device_sync_idx = 1281
+
+        _, k3end = cp_graph.get_nodes_for_event(epilogue_kernel_idx)
+        _, syncend = cp_graph.get_nodes_for_event(cuda_device_sync_idx)
+        device_sync_edge = cp_graph.edges[k3end.idx, syncend.idx]["object"]
+        self.assertEqual(
+            device_sync_edge,
+            CPEdge(
+                begin=k3end.idx,
+                end=syncend.idx,
+                weight=0,
+                type=CPEdgeType.SYNC_DEPENDENCY,
+            ),
+        )
+
+        # Make sure critical path is as expected
+        self.assertEqual(len(cp_graph.critical_path_nodes), 315)
+
+        # check overlaid trace matches up correctly
         with TemporaryDirectory(dir="/tmp") as tmpdir:
             overlaid_trace = critical_path_t.overlay_critical_path_analysis(
                 0, cp_graph, output_dir=tmpdir, show_all_edges=True
@@ -421,7 +475,7 @@ class TraceAnalysisTestCase(unittest.TestCase):
                 marked_critical_events = sum(
                     e["args"].get("critical", 0) for e in trace_events if "args" in e
                 )
-                self.assertEqual(marked_critical_events, 167)
+                self.assertEqual(marked_critical_events, 159)
                 self.assertEqual(
                     marked_critical_events, len(cp_graph.critical_path_events_set)
                 )
@@ -435,14 +489,11 @@ class TraceAnalysisTestCase(unittest.TestCase):
                     cp_graph.edges[u, v]["object"].type for (u, v) in cp_graph.edges
                 )
 
-                self.assertEqual(
-                    trace_edge_counts["critical_path_operator"],
-                    cpgraph_edge_counts[CPEdgeType.OPERATOR_KERNEL] * 2,
-                )
-                self.assertEqual(
-                    trace_edge_counts["critical_path_dependency"],
-                    cpgraph_edge_counts[CPEdgeType.DEPENDENCY] * 2,
-                )
+                for etype in CPEdgeType:
+                    self.assertEqual(
+                        trace_edge_counts[etype.value],
+                        cpgraph_edge_counts[etype] * 2,
+                    )
 
 
 if __name__ == "__main__":  # pragma: no cover
