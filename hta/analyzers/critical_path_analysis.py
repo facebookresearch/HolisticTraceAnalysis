@@ -281,10 +281,70 @@ class CPGraph(nx.DiGraph):
 
         csg.dfs_traverse(enter_func, exit_func)
 
+    def _get_cuda_event_record_df(self) -> Optional[pd.DataFrame]:
+        """For Event based synchronization we need to track the last
+        kernel/memcpy launched on a CPU thread just before the cudaEventRecord
+        was called i.e. the CUDA event was recorded.
+
+        This function returns a dataframe of cudaEventRecord events,
+        and includes an additional column 'index_previous_launch'
+        that specifies the closest CUDA kernel launch on the same CPU thread.
+        """
+        sym_index = self.symbol_table.get_sym_id_map()
+        if "cudaEventRecord" not in sym_index:
+            return None
+
+        # CUDA launch runtime calls
+        runtime_calls: pd.DataFrame = (
+            self.trace_df.query(self.symbol_table.get_runtime_launch_events_query())
+            .copy()
+            .sort_values(by="ts", axis=0)
+        )
+
+        cudaEventRecord_id = sym_index.get("cudaEventRecord")
+
+        # CUDA Record Event calls
+        cuda_record_calls = (
+            self.trace_df.query("name == @cudaEventRecord_id")
+            .copy()
+            .sort_values(by="ts", axis=0)
+        )
+
+        def previous_launch(ts: int, pid: int, tid: int) -> Optional[int]:
+            """Find the previous CUDA launch on same pid and tid"""
+            df = runtime_calls.query(f"pid == {pid} and tid == {tid}")
+            lowerneighbours = df[df["ts"] < ts]["ts"]
+            return lowerneighbours.idxmax() if len(lowerneighbours) else None
+
+        cuda_record_calls["index_previous_launch"] = cuda_record_calls.apply(
+            lambda x: previous_launch(x["ts"], x["pid"], x["tid"]), axis=1
+        )
+
+        return cuda_record_calls
+
+    def _check_stream_wait_event_helper(self, row) -> bool:
+        eid = row["index"]
+        if "wait_on_cuda_event_record_corr_id" not in row:
+            logger.warning(
+                "CUDA Stream Wait event does not have correlation id of "
+                f"cudaEventRecord, name = {self._get_node_name(eid)}"
+            )
+            return False
+
+        if "index_previous_launch" not in row or (row["index_previous_launch"] == -1):
+            logger.warning(
+                "CUDA Stream Wait event was not matched to a cudaRecordEvent"
+                f", name = {self._get_node_name(eid)}"
+            )
+            return False
+        return True
+
     def _add_gpu_cpu_sync_edge(self, gpu_node: CPNode, runtime_eid: int) -> None:
         """Add an edge between gpu_node and the runtime event on CPU"""
         _, end_node = self.get_nodes_for_event(runtime_eid)
-        logger.debug(f"Adding a sync edge between nodes {gpu_node} -> {end_node}")
+        logger.debug(
+            f"Adding a GPU->CPU sync edge between nodes {gpu_node} -> {end_node}"
+        )
         self._add_edge_helper(gpu_node, end_node, type=CPEdgeType.SYNC_DEPENDENCY)
 
     def _construct_graph_from_kernels(self) -> None:
@@ -296,6 +356,31 @@ class CPGraph(nx.DiGraph):
             .rename(columns={"queue_length": "queue_length_runtime"})
             .join(q[["queue_length"]], on="index")
         )
+
+        # For "Wait on CUDA Event" syncs we look up all cudaRecord calls
+        # and find the previous GPU kernel/memcpy launch, this is recorded
+        # in the index_previous_launch column
+        cuda_record_calls = self._get_cuda_event_record_df()
+
+        if (
+            "wait_on_cuda_event_record_corr_id" in self.trace_df
+            and cuda_record_calls is not None
+        ):
+            # Join the event sync event with the index of the kernel/memcpy launch
+            # that is was syncing on.
+            gpu_kernels = (
+                pd.merge(
+                    gpu_kernels,
+                    cuda_record_calls[["correlation", "index_previous_launch"]],
+                    left_on="wait_on_cuda_event_record_corr_id",
+                    right_on="correlation",
+                    how="left",
+                    suffixes=["", "_cuda_record"],
+                )
+                .fillna(-1)
+                .astype(int)
+            )
+            # Note convert NAN to -1 and then turn all records to int
 
         # Sort kernels by end timestamp, this handles the case where a stream
         # sync event overlaps with an actual kernel or memcpy
@@ -313,6 +398,10 @@ class CPGraph(nx.DiGraph):
         # Last node on a stream
         last_node: Dict[int, CPNode] = {}
 
+        # Scheduled a GPU-GPU sync on a stream
+        #  map from stream -> event ID of kernel to sync on
+        kernel_sync: Dict[int, int] = {}
+
         def handle_cuda_sync(row):
             nonlocal last_node
             eid = row["index"]
@@ -322,8 +411,22 @@ class CPGraph(nx.DiGraph):
 
             name = row["name"]
             if name == stream_wait_event:
-                # XXX to handle later, stream wait events will likely result in
-                # dependencies between GPU kernels on different streams.
+                # Stream Wait event is indicating a dependency between
+                # the next GPU kernel on this stream and another GPU kernel
+
+                if not self._check_stream_wait_event_helper(row):
+                    return
+
+                kernel_index = self.trace_df.index_correlation[
+                    row["index_previous_launch"]
+                ]
+                # Schedule a sync on this stream with above kernel
+                logger.info(
+                    f"Scheduling a Stream Sync on stream {row['stream']} "
+                    f"on kernel with index = {kernel_index}, corr id = "
+                    f"{self.trace_df.correlation.loc[kernel_index]}"
+                )
+                kernel_sync[row["stream"]] = kernel_index
                 return
             assert name == stream_sync or name == context_sync
 
@@ -360,13 +463,37 @@ class CPGraph(nx.DiGraph):
             start_node, end_node = self._add_event(eid)
             self._add_edge_helper(start_node, end_node)
 
+            kernel_sync_index = kernel_sync.get(stream)
+            kernel_sync_end: Optional[CPNode] = None
+
+            # We need to sync between two kernels
+            if kernel_sync_index is not None:
+                _, kernel_sync_end = self.get_nodes_for_event(kernel_sync_index)
+                assert kernel_sync_end is not None
+                # note that the sync dependency has 0 weight
+                self._add_edge_between(
+                    kernel_sync_end, start_node, type=CPEdgeType.SYNC_DEPENDENCY
+                )
+                logger.info(
+                    "Adding a GPU->GPU sync edge between nodes "
+                    f"{kernel_sync_end} -> {start_node}"
+                )
+                # reset the kernel-kernel sync
+                kernel_sync[stream] = None
+
             if (
+                # There were no outstanding kernels on this stream during the launch
                 queue_length_runtime == 1
                 and queue_length == 0
                 # and the kernel was launched after previous kernel finished
                 and (
                     last_node.get(stream) is None
                     or last_node[stream].ts < self.trace_df.ts.loc[runtime_index]
+                )
+                # and the kernel sync dependency if any finished earlier
+                and (
+                    kernel_sync_index is None
+                    or kernel_sync_end.ts < self.trace_df.ts.loc[runtime_index]
                 )
             ):
                 # Add launch delay edge if there were no outstanding kernels
@@ -376,8 +503,9 @@ class CPGraph(nx.DiGraph):
                 self._add_edge_helper(
                     runtime_start, start_node, type=CPEdgeType.KERNEL_LAUNCH_DELAY
                 )
-            elif last_node.get(stream) is not None:
-                # Else add Kernel-kernel delay
+            elif last_node.get(stream) is not None and kernel_sync_index is None:
+                # If neither launch nor CUDA event sync occurs it is a kernel-kernel
+                # delay
                 self._add_edge_helper(
                     last_node[stream], start_node, type=CPEdgeType.KERNEL_KERNEL_DELAY
                 )

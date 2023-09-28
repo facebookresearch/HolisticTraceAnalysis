@@ -47,19 +47,10 @@ class TraceCounters:
         # get trace for a rank
         trace_df: pd.DataFrame = t.get_trace(rank)
 
-        # cudaLaunchKernel, cudaMemcpyAsync, cudaMemsetAsync
-        sym_index = t.symbol_table.get_sym_id_map()
-        cudaLaunchKernel_id = sym_index.get("cudaLaunchKernel", None)
-        cudaLaunchKernelExC_id = sym_index.get("cudaLaunchKernelExC", None)
-        cudaMemcpyAsync_id = sym_index.get("cudaMemcpyAsync", None)
-        cudaMemsetAsync_id = sym_index.get("cudaMemsetAsync", None)
-
         # CUDA Runtime events that may launch kernels
         # - filter events that have a correlated kernel event only.
         runtime_calls: pd.DataFrame = trace_df.query(
-            "((name == @cudaMemsetAsync_id) or (name == @cudaMemcpyAsync_id) or "
-            " (name == @cudaLaunchKernel_id) or (name == @cudaLaunchKernelExC_id))"
-            "and (index_correlation > 0)"
+            t.symbol_table.get_runtime_launch_events_query()
         ).copy()
         runtime_calls.drop(["stream", "pid", "tid"], axis=1, inplace=True)
         runtime_calls["queue"] = 1

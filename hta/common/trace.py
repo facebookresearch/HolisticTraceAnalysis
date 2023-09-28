@@ -115,6 +115,20 @@ class TraceSymbolTable:
         """Check if an event is a CPU operator"""
         return trace_df["cat"].loc[idx] == self.sym_index["cpu_op"]
 
+    def get_runtime_launch_events_query(self) -> str:
+        """Returns a SQL query you can pass to trace dataframe query()
+        to filter events that are CUDA runtime kernel and memcpy launches."""
+        cudaLaunchKernel_id = self.sym_index.get("cudaLaunchKernel", None)
+        cudaLaunchKernelExC_id = self.sym_index.get("cudaLaunchKernelExC", None)
+        cudaMemcpyAsync_id = self.sym_index.get("cudaMemcpyAsync", None)
+        cudaMemsetAsync_id = self.sym_index.get("cudaMemsetAsync", None)
+
+        return (
+            f"((name == {cudaMemsetAsync_id}) or (name == {cudaMemcpyAsync_id}) or "
+            f" (name == {cudaLaunchKernel_id}) or (name == {cudaLaunchKernelExC_id}))"
+            "and (index_correlation > 0)"
+        )
+
 
 def parse_trace_dict(trace_file_path: str) -> Dict[str, Any]:
     """
@@ -174,6 +188,8 @@ def compress_df(df: pd.DataFrame) -> Tuple[pd.DataFrame, TraceSymbolTable]:
         "External id",
         "Trace iteration",
         "memory bandwidth (GB/s)",
+        "wait_on_stream",
+        "wait_on_cuda_event_record_corr_id",
     }
     # performance counters appear as args
     if "cuda_profiler_range" in df.cat.unique():
