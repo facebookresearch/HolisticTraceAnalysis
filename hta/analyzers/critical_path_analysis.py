@@ -2,14 +2,17 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+import os
+
 from copy import deepcopy
 from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 import networkx as nx
-
 import pandas as pd
+
 from hta.common.call_stack import CallGraph, CallStackGraph, DeviceType
 
 from hta.common.trace import Trace
@@ -30,8 +33,8 @@ class CPNode:
 
     def __repr__(self) -> str:
         return (
-            f"CPNode(event: {self.ev_idx}, nid={self.idx}, ts={self.ts}, "
-            f"is_start={self.is_start})"
+            f"CPNode(event: {self.ev_idx}, node_id={self.idx}, "
+            f"ts={self.ts}, is_start={self.is_start})"
         )
 
 
@@ -53,7 +56,8 @@ class CPEdge:
     3) synchronization delay.
 
     The weight represents time in the graph, cases 1) and 3)
-    above have non-zero weights
+    above have non-zero weights.
+    Once we initialize the edge we should not modify the data members below.
     """
 
     # begin and end node indices
@@ -72,12 +76,11 @@ class CPGraph(nx.DiGraph):
     Edges are directly used as the type is hashable.
 
     Attributes:
-        trace_df (pd.DataFrame) : dataframe of trace events used to construct this graph.
-        symbol_table (TraceSymbolTable) : a symbol table used to encode the symbols in the trace.
-        node_list (List[int]) : list of critical path node objects, index in this list is always the node id..
-        critical_path_nodes (List[int]) : list of node ids on the critical path.
-        critical_path_nodes_set (Set[int]) : set of node ids on the critical path.
-        critical_path_events_set (Set[int]) : set of event ids corresponding to the critical path nodes.
+        trace_df (pd.DataFrame): dataframe of trace events used to construct this graph.
+        symbol_table (TraceSymbolTable): a symbol table used to encode the symbols in the trace.
+        node_list (List[int]): list of critical path node objects, index in this list is always the node id..
+        critical_path_nodes (List[int]): list of node ids on the critical path.
+        critical_path_events_set (Set[int]): set of event ids corresponding to the critical path nodes.
     """
 
     def __init__(self, t: "Trace", rank: int) -> None:
@@ -86,7 +89,6 @@ class CPGraph(nx.DiGraph):
         self.sym_table = t.symbol_table.get_sym_table()
         self.symbol_table = t.symbol_table
         self.critical_path_nodes: List[int] = []
-        self.critical_path_nodes_set: Set[int] = set()
         self.critical_path_events_set: Set[int] = set()
 
         self.node_list: List[CPNode] = []
@@ -115,7 +117,7 @@ class CPGraph(nx.DiGraph):
         logger.debug(f"Adding critical path edge: {edge}")
         self.add_edge(edge.begin, edge.end, weight=edge.weight, object=edge)
 
-    def _add_edge_between(
+    def _add_edge_helper(
         self, src: CPNode, dest: CPNode, type: CPEdgeType = CPEdgeType.OPERATOR_KERNEL
     ) -> None:
         """Adds a edge between two nodes
@@ -127,27 +129,27 @@ class CPGraph(nx.DiGraph):
         weight = (dest.ts - src.ts) if type == CPEdgeType.OPERATOR_KERNEL else 0
         self._add_edge(CPEdge(begin=src.idx, end=dest.idx, weight=weight, type=type))
 
-    def _add_event(self, eid: int) -> Tuple[CPNode, CPNode]:
+    def _add_event(self, ev_id: int) -> Tuple[CPNode, CPNode]:
         """Takes an event from the trace and generates two critical path nodes,
         one for start and one for the end.
-        Args: eid (int): index of the event in trace dataframe.
+        Args: ev_id (int): index of the event in trace dataframe.
         Returns: pair of CPNodes aka start and end CPNode
         """
-        start_ts = self.trace_df["ts"].loc[eid]
-        end_ts = start_ts + self.trace_df["dur"].loc[eid]
+        start_ts = self.trace_df["ts"].loc[ev_id]
+        end_ts = start_ts + self.trace_df["dur"].loc[ev_id]
         nodes = [
-            CPNode(ev_idx=eid, ts=start_ts, is_start=True),
-            CPNode(ev_idx=eid, ts=end_ts, is_start=False),
+            CPNode(ev_idx=ev_id, ts=start_ts, is_start=True),
+            CPNode(ev_idx=ev_id, ts=end_ts, is_start=False),
         ]
         node_ids = [self._add_node(n) for n in nodes]
         assert len(node_ids) == 2
-        self.event_to_node_map[eid] = (node_ids[0], node_ids[1])
+        self.event_to_node_map[ev_id] = (node_ids[0], node_ids[1])
         return (nodes[0], nodes[1])
 
-    def _get_node_name(self, eid: int):
-        if eid < 0:
+    def _get_node_name(self, ev_id: int) -> str:
+        if ev_id < 0:
             return "ROOT"
-        name_id = self.trace_df.name.loc[eid]
+        name_id = self.trace_df.name.loc[ev_id]
         return self.sym_table[name_id]
 
     def get_nodes_for_event(
@@ -158,7 +160,7 @@ class CPGraph(nx.DiGraph):
             ev_id (int): index of the event in trace dataframe.
         Returns:
             Tuple[Optional[CPNode], Optional[CPNode]]
-                Pair of CPNodes aka start and end CPNode
+                Pair of CPNodes aka start and end CPNode for the event.
         """
         start_node, end_node = self.event_to_node_map.get(ev_id, (-1, -1))
         return (
@@ -177,36 +179,7 @@ class CPGraph(nx.DiGraph):
         start_node, end_node = edge.begin, edge.end
         return (self.node_list[start_node].ev_idx, self.node_list[end_node].ev_idx)
 
-    # def _add_edge_for_depedency(
-    #     self, source: int, sink: int
-    # ) -> None:
-    #     """Add an edge between two dependent operations"""
-    #     if source == sink:
-    #         return
-    #     _, source_end_node = self.get_nodes_for_event(source)
-    #     if source_end_node is None:
-    #         logger.warning(
-    #             f"Count not find critical path di-graph node for src event {source}"
-    #         )
-    #         return
-    #     sink_begin_node, _ = self.get_nodes_for_event(sink)
-    #     if sink_begin_node is None:
-    #         logger.warning(
-    #             f"Count not find critical path di-graph node for sink event {sink}"
-    #         )
-    #         return
-    #     logger.info(
-    #         f"Adding dependency edge between {source_end_node} -> {sink_begin_node}"
-    #     )
-    #     self._add_edge(
-    #         CPEdge(
-    #             begin=source_end_node.idx,
-    #             end=sink_begin_node.idx,
-    #             weight=0,
-    #         )
-    #     )
-
-    def _construct_graph(self):
+    def _construct_graph(self) -> None:
         cpu_call_stacks = (
             csg for csg in self.cg.call_stacks if csg.device_type == DeviceType.CPU
         )
@@ -215,7 +188,7 @@ class CPGraph(nx.DiGraph):
 
     def _construct_graph_from_call_stack(
         self, csg: CallStackGraph, link_operators: bool = True
-    ):
+    ) -> None:
         """Perform a depth first traversal of the Call Stack for CPU threads
         and generated CP node events.
 
@@ -228,7 +201,7 @@ class CPGraph(nx.DiGraph):
              |----------------------- Op A ----------------------|
                         |--- Op B ---|        |-- Op C--|
         Critical graph
-             (OpA.b)----(ObB.b)------(OpB.e)--(OpC.b)---(OpC.e)--(OpA.e)
+             (OpA.b)--->(ObB.b)----->(OpB.e)->(OpC.b)-->(OpC.e)->(OpA.e)
         """
 
         # Track the stack of last seen events
@@ -236,57 +209,57 @@ class CPGraph(nx.DiGraph):
         last_highlevel_op: Optional[CPNode] = None
         op_depth = 0
 
-        def is_op_or_runtime(eid):
+        def is_op_or_runtime(ev_id):
             # ops to consider
-            return eid > 0 and (
-                self.symbol_table.is_operator(self.trace_df, eid)
-                or self.symbol_table.is_runtime(self.trace_df, eid)
+            return ev_id > 0 and (
+                self.symbol_table.is_operator(self.trace_df, ev_id)
+                or self.symbol_table.is_cuda_runtime(self.trace_df, ev_id)
             )
 
-        def enter_func(eid, csnode):
+        def enter_func(ev_id, csnode):
             nonlocal last_node
             nonlocal last_highlevel_op
             nonlocal op_depth
             logger.debug(
                 "=" * csnode.depth
-                + f"Entering node {self._get_node_name(eid)}, id = {eid}"
+                + f"Entering node {self._get_node_name(ev_id)}, id = {ev_id}"
             )
-            if not is_op_or_runtime(eid):
+            if not is_op_or_runtime(ev_id):
                 return
 
-            start_node, end_node = self._add_event(eid)
+            start_node, end_node = self._add_event(ev_id)
 
             if link_operators and op_depth == 0 and last_highlevel_op is not None:
-                self._add_edge_between(
+                self._add_edge_helper(
                     last_highlevel_op, start_node, CPEdgeType.DEPENDENCY
                 )
 
             op_depth += 1
 
             if last_node is not None:
-                self._add_edge_between(last_node, start_node)
+                self._add_edge_helper(last_node, start_node)
             last_node = start_node
 
             logger.debug(
                 "=" * csnode.depth + f"Op depth = {op_depth} last_node={last_node}"
             )
 
-        def exit_func(eid, csnode):
+        def exit_func(ev_id, csnode):
             nonlocal last_node
             nonlocal last_highlevel_op
             nonlocal op_depth
             logger.debug(
                 "=" * csnode.depth
-                + f"Exiting node {self._get_node_name(eid)}, id = {eid}"
+                + f"Exiting node {self._get_node_name(ev_id)}, id = {ev_id}"
             )
-            if not is_op_or_runtime(eid):
+            if not is_op_or_runtime(ev_id):
                 return
 
             op_depth -= 1
-            _, end_node = self.get_nodes_for_event(eid)
+            _, end_node = self.get_nodes_for_event(ev_id)
 
             if last_node is not None:
-                self._add_edge_between(last_node, end_node)
+                self._add_edge_helper(last_node, end_node)
 
             if op_depth == 0:
                 last_node = None
@@ -315,7 +288,6 @@ class CPGraph(nx.DiGraph):
         except nx.NetworkXUnfeasible as err:
             logger.error(f"Critical path algorithm failed due to {err}")
             return False
-        self.critical_path_nodes_set = set(self.critical_path_nodes)
         self.critical_path_events_set = {
             self.node_list[nid].ev_idx for nid in self.critical_path_nodes
         }
@@ -337,13 +309,13 @@ class CriticalPathAnalysis:
         self.cp_nodes = {}
 
     @classmethod
-    def critical_path_analysis_for_rank(
+    def critical_path_analysis(
         cls,
         t: "Trace",
         rank: int,
         annotation: str,
         instance_id: Optional[int],
-    ) -> Optional[CPGraph]:
+    ) -> Tuple[CPGraph, bool]:
         r"""
         Perform critical path analysis for trace events within a rank.
         We further reduce the region of interest by selecting
@@ -360,7 +332,10 @@ class CriticalPathAnalysis:
             intance (int): optionally specify which instance of the annotation
                 to consider. Defaults to the first instance.
 
-        Returns:
+        Returns: Tuple[CPGraph, bool] a pair of CPGraph object and a success or
+            fail boolean value. True indicates that the critical path analysis
+            algorithm succeeded.
+
             CPGraph object that can be used to obtain statistics and further
             visualize the critical path.
 
@@ -392,9 +367,19 @@ class CriticalPathAnalysis:
         # Consider all events that start within the annotatated window.
         # and also fiter out 0 duration events as they mess up the
         # event stack generation
-        clipped_df = trace_df.query(
-            f"(ts >= {start_ts} and ts <= {end_ts}) and " " dur > 0"
-        ).copy()
+        a = trace_df.query(f"(ts >= {start_ts} and ts <= {end_ts}) and dur > 0")
+
+        # Also consider GPU kernels whose runtime events are in the correct
+        # time window
+        gpu_kernels = trace_df[trace_df["stream"].ne(-1)]
+        cpu_events = trace_df[trace_df["stream"].eq(-1)].set_index("index_correlation")
+        b = (
+            gpu_kernels[["ts", "dur", "correlation"]]
+            .join(cpu_events["ts"], rsuffix="_runtime")
+            .query(f"(ts_runtime >= {start_ts} and ts_runtime <= {end_ts}) and dur > 0")
+        )
+
+        clipped_df = trace_df.loc[a.index.union(b.index)].copy()
         logger.info(f"Clipped dataframe has {len(clipped_df)} events")
 
         # XXX This is a bit hacky but CallGraph does not really support a way
@@ -404,10 +389,10 @@ class CriticalPathAnalysis:
 
         cp_graph = CPGraph(t_copy, rank)
 
-        return cp_graph
+        return cp_graph, cp_graph.critical_path()
 
     @classmethod
-    def overlay_critical_path_analysis_for_rank(
+    def overlay_critical_path_analysis(
         cls,
         t: "Trace",
         rank: int,
@@ -430,9 +415,6 @@ class CriticalPathAnalysis:
 
         Returns: the overlaid_trace_file path.
         """
-        import os
-        from pathlib import Path
-
         path = Path(output_dir).expanduser()
         if not path.exists():
             logger.error(f"The path {str(path)} does not exist.")
@@ -442,7 +424,7 @@ class CriticalPathAnalysis:
             return ""
 
         output_file = os.path.join(
-            str(path), "overlaid_" + t.trace_files[rank].split("/")[-1]
+            str(path), "overlaid_critical_path_" + t.trace_files[rank].split("/")[-1]
         )
         overlaid_trace = t.get_raw_trace_for_one_rank(rank=rank)
         raw_events = overlaid_trace["traceEvents"]

@@ -5,6 +5,7 @@
 import functools
 import logging
 from collections import namedtuple
+from collections.abc import Callable
 from enum import Enum
 from time import perf_counter
 from typing import Dict, List, NamedTuple, Optional
@@ -157,6 +158,9 @@ class CallStackIdentity(NamedTuple):
     rank: int = -1
     pid: int = -1
     tid: int = -1
+
+
+DFSCallback = Callable[[int, CallStackNode], None]
 
 
 class CallStackGraph:
@@ -367,22 +371,24 @@ class CallStackGraph:
         """
         return self.depth
 
-    def dfs_traverse(self, enter_func, exit_func) -> None:
+    def dfs_traverse(self, enter_func: DFSCallback, exit_func: DFSCallback) -> None:
         """Depth first traversal on a specific call stack.
         Call enter_func() and exit_func() on each callstack node.
         """
         self._dfs_traverse_node(-1, enter_func, exit_func)
 
-    def _dfs_traverse_node(self, nid: int, enter_func, exit_func) -> None:
-        node = self.nodes[nid]
-        enter_func(nid, node)
+    def _dfs_traverse_node(
+        self, node_id: int, enter_func: DFSCallback, exit_func: DFSCallback
+    ) -> None:
+        node = self.nodes[node_id]
+        enter_func(node_id, node)
 
         all_nodes = self.nodes.keys()
         for child_nid in node.children:
             if child_nid in all_nodes:
                 self._dfs_traverse_node(child_nid, enter_func, exit_func)
 
-        exit_func(nid, node)
+        exit_func(node_id, node)
 
 
 class CallGraph:

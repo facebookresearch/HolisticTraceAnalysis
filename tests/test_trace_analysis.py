@@ -353,15 +353,14 @@ class TraceAnalysisTestCase(unittest.TestCase):
 
         annotation = "[param|pytorch.model.alex_net|0|0|0|measure|forward]"
         instance_id = 1
-        cp_graph = critical_path_t.critical_path_analysis_for_rank(
+        cp_graph, success = critical_path_t.critical_path_analysis(
             rank=0, annotation=annotation, instance_id=instance_id
         )
 
-        self.assertTrue(cp_graph.critical_path())
+        self.assertTrue(success)
 
         # Make sure critical path is as expected
         self.assertEqual(len(cp_graph.critical_path_nodes), 334)
-        self.assertEqual(len(cp_graph.critical_path_nodes_set), 334)
 
         trace_df = critical_path_t.t.get_trace(0)
         sym_table = critical_path_t.t.symbol_table.get_sym_table()
@@ -412,9 +411,10 @@ class TraceAnalysisTestCase(unittest.TestCase):
         check_edge(expected_node_ids[1][1], expected_node_ids[0][1], 32)
 
         with TemporaryDirectory(dir="/tmp") as tmpdir:
-            overlaid_trace = critical_path_t.overlay_critical_path_analysis_for_rank(
+            overlaid_trace = critical_path_t.overlay_critical_path_analysis(
                 0, cp_graph, output_dir=tmpdir, show_all_edges=True
             )
+            self.assertTrue("overlaid_critical_path_" in overlaid_trace)
 
             with gzip.open(overlaid_trace, "r") as ovf:
                 trace_events = json.load(ovf)["traceEvents"]

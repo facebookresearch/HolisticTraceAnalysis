@@ -107,8 +107,8 @@ class TraceSymbolTable:
             lambda i: self.sym_table[i] if (i >= 0 and i < len(self.sym_table)) else ""
         )
 
-    def is_runtime(self, trace_df: pd.dataframe, idx: int) -> bool:
-        """Check if an event is a runtime event"""
+    def is_cuda_runtime(self, trace_df: pd.dataframe, idx: int) -> bool:
+        """Check if an event is a CUDA runtime event"""
         return trace_df["cat"].loc[idx] == self.sym_index["cuda_runtime"]
 
     def is_operator(self, trace_df: pd.dataframe, idx: int) -> bool:

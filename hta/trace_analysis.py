@@ -506,40 +506,53 @@ class TraceAnalysis:
         """
         return CuptiCounterAnalysis.get_counter_data_with_operators(self.t, ranks)
 
-    def critical_path_analysis_for_rank(
+    def critical_path_analysis(
         self,
         rank: int,
         annotation: str,
         instance_id: Optional[int],
-    ) -> List[pd.DataFrame]:
+    ) -> Tuple[CPGraph, bool]:
         r"""
         Perform critical path analysis for trace events within a rank.
         We further reduce the region of interest by selecting
         a trace annotation and instance id. This will
         limit the analysis to events within the time range of that annoation.
+        This will include GPU kernels launched by the cpu operators in that
+        time duration.
         For example, you can use this to limit the analysis to one iteration
-        by passing annotation='ProfilerStep500'.
+        by passing annotation='ProfilerStep500'. See notes for how to pick the iteraiton.
 
         Args:
             t (Trace): Input trace data structure.
             rank (int): rank to analyze for the critical path.
             annotation (str): a trace annotation to limit the analysis to,
-                such as "ProfilerStep1200"
+                such as "ProfilerStep500"
             instance_id (int): optionally specify which instance of the annotation
                 to consider. Defaults to the first instance.
 
-        Returns:
+        Returns: Tuple[CPGraph, bool] a pair of CPGraph object and a success or
+            fail boolean value. True indicates that the critical path analysis
+            algorithm succeeded.
+
             CPGraph object that can be used to obtain statistics and further
             visualize the critical path.
 
             CPGraph is also a subinstance of a networkx.DiGraph.
             Run 'CPGraph?' for more info and APIs.
+
+        Notes:
+            1. Avoid using the first step / iteration in a trace as it usually
+               has some missing events.
+            2. The analysis requires CUDA synchronization events in the GPU trace,
+               that were added in https://github.com/pytorch/pytorch/pull/105187
+               Please see the documentation of this PR on how to enable CUDA sync
+               events in the trace.
         """
-        return CriticalPathAnalysis.critical_path_analysis_for_rank(
+        return CriticalPathAnalysis.critical_path_analysis(
             self.t, rank, annotation, instance_id
         )
 
-    def overlay_critical_path_analysis_for_rank(
+    def overlay_critical_path_analysis(
         self,
         rank: int,
         critical_path_graph: CPGraph,
@@ -558,8 +571,10 @@ class TraceAnalysis:
                 all types of edges in the critical path graph. This is useful
                 for debugging the algorithm.
 
-        Returns: the overlaid_trace_file path.
+        Returns: the overlaid trace file path. The generated trace file will
+        have a prefix of "overlaid_critical_path_" in its name compared
+        to the original trace file.
         """
-        return CriticalPathAnalysis.overlay_critical_path_analysis_for_rank(
+        return CriticalPathAnalysis.overlay_critical_path_analysis(
             self.t, rank, critical_path_graph, output_dir, show_all_edges
         )
