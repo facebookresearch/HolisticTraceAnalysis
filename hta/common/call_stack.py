@@ -7,7 +7,7 @@ import logging
 from collections import namedtuple
 from enum import Enum
 from time import perf_counter
-from typing import Dict, List, NamedTuple, Optional
+from typing import Callable, Dict, List, NamedTuple, Optional
 
 import numpy as np
 import pandas as pd
@@ -157,6 +157,9 @@ class CallStackIdentity(NamedTuple):
     rank: int = -1
     pid: int = -1
     tid: int = -1
+
+
+DFSCallback = Callable[[int, CallStackNode], None]
 
 
 class CallStackGraph:
@@ -366,6 +369,25 @@ class CallStackGraph:
             a Series with the node index as index and depth as the data
         """
         return self.depth
+
+    def dfs_traverse(self, enter_func: DFSCallback, exit_func: DFSCallback) -> None:
+        """Depth first traversal on a specific call stack.
+        Call enter_func() and exit_func() on each callstack node.
+        """
+        self._dfs_traverse_node(-1, enter_func, exit_func)
+
+    def _dfs_traverse_node(
+        self, node_id: int, enter_func: DFSCallback, exit_func: DFSCallback
+    ) -> None:
+        node = self.nodes[node_id]
+        enter_func(node_id, node)
+
+        all_nodes = self.nodes.keys()
+        for child_nid in node.children:
+            if child_nid in all_nodes:
+                self._dfs_traverse_node(child_nid, enter_func, exit_func)
+
+        exit_func(node_id, node)
 
 
 class CallGraph:

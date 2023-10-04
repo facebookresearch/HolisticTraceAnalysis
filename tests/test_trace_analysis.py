@@ -2,14 +2,18 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+import gzip
+import json
 import os
 import unittest
-from collections import namedtuple
+from collections import Counter, namedtuple
 from pathlib import Path
-from typing import List
+from tempfile import TemporaryDirectory
+from typing import List, Tuple
 from unittest.mock import patch
 
 import hta
+from hta.analyzers.critical_path_analysis import CPEdgeType
 from hta.analyzers.cupti_counter_analysis import CUDA_SASS_INSTRUCTION_COUNTER_FLOPS
 from hta.common.trace import PHASE_COUNTER
 from hta.trace_analysis import TimeSeriesTypes, TraceAnalysis
@@ -342,6 +346,103 @@ class TraceAnalysisTestCase(unittest.TestCase):
         )
         self.assertEqual(test_row["top_level_op"], "aten::conv2d")
         self.assertEqual(test_row["bottom_level_op"], "aten::_convolution")
+
+    def test_critical_path_analysis(self):
+        critical_path_trace_dir: str = "tests/data/critical_path/simple_add"
+        critical_path_t = TraceAnalysis(trace_dir=critical_path_trace_dir)
+
+        annotation = "[param|pytorch.model.alex_net|0|0|0|measure|forward]"
+        instance_id = 1
+        cp_graph, success = critical_path_t.critical_path_analysis(
+            rank=0, annotation=annotation, instance_id=instance_id
+        )
+
+        self.assertTrue(success)
+
+        # Make sure critical path is as expected
+        self.assertEqual(len(cp_graph.critical_path_nodes), 334)
+
+        trace_df = critical_path_t.t.get_trace(0)
+        sym_table = critical_path_t.t.symbol_table.get_sym_table()
+
+        def get_node_name(nid):
+            if nid < 0:
+                return "ROOT"
+            trace_entry = trace_df.loc[nid].to_dict()
+            return sym_table[int(trace_entry["name"])]
+
+        # Check the graph construction for the aten::relu_ operator
+        # There are 3 stacked operators/runtime events here;
+        #  aten::relu_
+        #    aten::clamp_min_
+        #      cudaLaunchKernel
+        # quick sanity check that we are looking at right events
+
+        relu_idx = 286
+        clamp_min_idx = 287
+        cuda_launch_idx = 1005
+        self.assertEqual(get_node_name(relu_idx), "aten::relu_")
+        self.assertEqual(get_node_name(clamp_min_idx), "aten::clamp_min_")
+        self.assertEqual(get_node_name(cuda_launch_idx), "cudaLaunchKernel")
+
+        expected_node_ids = [(32, 33), (34, 35), (36, 37)]
+
+        def check_nodes(ev_idx: int) -> Tuple[int, int]:
+            start_node, end_node = cp_graph.get_nodes_for_event(ev_idx)
+            self.assertTrue(start_node.is_start)
+            self.assertFalse(end_node.is_start)
+            return start_node.idx, end_node.idx
+
+        self.assertEqual(check_nodes(relu_idx), expected_node_ids[0])
+        self.assertEqual(check_nodes(clamp_min_idx), expected_node_ids[1])
+        self.assertEqual(check_nodes(cuda_launch_idx), expected_node_ids[2])
+
+        def check_edge(start_nid: int, end_nid: int, weight: int) -> None:
+            e = cp_graph.edges[start_nid, end_nid]["object"]
+            self.assertEqual(e.begin, start_nid)
+            self.assertEqual(e.end, end_nid)
+            self.assertEqual(e.weight, weight, msg=f"edge = {e}")
+
+        # expected_node_ids[..][0] is the start node, and ...[1] is the end node.
+        check_edge(expected_node_ids[0][0], expected_node_ids[1][0], 15)
+        check_edge(expected_node_ids[1][0], expected_node_ids[2][0], 14)
+        check_edge(expected_node_ids[2][0], expected_node_ids[2][1], 17)
+        check_edge(expected_node_ids[2][1], expected_node_ids[1][1], 15)
+        check_edge(expected_node_ids[1][1], expected_node_ids[0][1], 32)
+
+        with TemporaryDirectory(dir="/tmp") as tmpdir:
+            overlaid_trace = critical_path_t.overlay_critical_path_analysis(
+                0, cp_graph, output_dir=tmpdir, show_all_edges=True
+            )
+            self.assertTrue("overlaid_critical_path_" in overlaid_trace)
+
+            with gzip.open(overlaid_trace, "r") as ovf:
+                trace_events = json.load(ovf)["traceEvents"]
+                marked_critical_events = sum(
+                    e["args"].get("critical", 0) for e in trace_events if "args" in e
+                )
+                self.assertEqual(marked_critical_events, 167)
+                self.assertEqual(
+                    marked_critical_events, len(cp_graph.critical_path_events_set)
+                )
+
+                trace_edge_counts = Counter(
+                    e["cat"]
+                    for e in trace_events
+                    if "critical_path" in e.get("cat", "")
+                )
+                cpgraph_edge_counts = Counter(
+                    cp_graph.edges[u, v]["object"].type for (u, v) in cp_graph.edges
+                )
+
+                self.assertEqual(
+                    trace_edge_counts["critical_path_operator"],
+                    cpgraph_edge_counts[CPEdgeType.OPERATOR_KERNEL] * 2,
+                )
+                self.assertEqual(
+                    trace_edge_counts["critical_path_dependency"],
+                    cpgraph_edge_counts[CPEdgeType.DEPENDENCY] * 2,
+                )
 
 
 if __name__ == "__main__":  # pragma: no cover

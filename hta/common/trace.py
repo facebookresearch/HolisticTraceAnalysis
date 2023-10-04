@@ -24,6 +24,8 @@ from hta.utils.utils import get_mp_pool_size, normalize_path
 
 MetaData = Dict[str, Any]
 PHASE_COUNTER: str = "C"
+PHASE_FLOW_START: str = "s"
+PHASE_FLOW_END: str = "f"
 
 
 class _SymbolCollector:
@@ -104,6 +106,14 @@ class TraceSymbolTable:
         trace_df[col] = trace_df[col].apply(
             lambda i: self.sym_table[i] if (i >= 0 and i < len(self.sym_table)) else ""
         )
+
+    def is_cuda_runtime(self, trace_df: pd.dataframe, idx: int) -> bool:
+        """Check if an event is a CUDA runtime event"""
+        return trace_df["cat"].loc[idx] == self.sym_index["cuda_runtime"]
+
+    def is_operator(self, trace_df: pd.dataframe, idx: int) -> bool:
+        """Check if an event is a CPU operator"""
+        return trace_df["cat"].loc[idx] == self.sym_index["cpu_op"]
 
 
 def parse_trace_dict(trace_file_path: str) -> Dict[str, Any]:
@@ -737,3 +747,29 @@ class Trace:
         events_df.args = events_df.args.apply(convert_to_args)
 
         return events_df.to_dict("records")
+
+    @staticmethod
+    def flow_event(
+        id: int,
+        pid: int,
+        tid: int,
+        ts: int,
+        is_start: bool,
+        name: str,
+        cat: str,
+        args: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        res = {
+            "ph": PHASE_FLOW_START if is_start else PHASE_FLOW_END,
+            "id": id,
+            "pid": pid,
+            "tid": tid,
+            "ts": ts,
+            "cat": cat,
+            "name": name,
+        }
+        if args is not None:
+            res["args"] = args
+        if not is_start:
+            res["bp"] = "e"
+        return res

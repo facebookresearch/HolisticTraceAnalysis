@@ -10,6 +10,7 @@ import pandas as pd
 
 from hta.analyzers.breakdown_analysis import BreakdownAnalysis
 from hta.analyzers.communication_analysis import CommunicationAnalysis
+from hta.analyzers.critical_path_analysis import CPGraph, CriticalPathAnalysis
 from hta.analyzers.cuda_kernel_analysis import CudaKernelAnalysis
 from hta.analyzers.cupti_counter_analysis import CuptiCounterAnalysis
 from hta.analyzers.straggler import find_stragglers_with_late_start_comm_kernels
@@ -504,3 +505,76 @@ class TraceAnalysis:
                 for individual performance counters.
         """
         return CuptiCounterAnalysis.get_counter_data_with_operators(self.t, ranks)
+
+    def critical_path_analysis(
+        self,
+        rank: int,
+        annotation: str,
+        instance_id: Optional[int],
+    ) -> Tuple[CPGraph, bool]:
+        r"""
+        Perform critical path analysis for trace events within a rank.
+        We further reduce the region of interest by selecting
+        a trace annotation and instance id. This will
+        limit the analysis to events within the time range of that annoation.
+        This will include GPU kernels launched by the cpu operators in that
+        time duration.
+        For example, you can use this to limit the analysis to one iteration
+        by passing annotation='ProfilerStep500'. See notes for how to pick the iteration.
+
+        Args:
+            t (Trace): Input trace data structure.
+            rank (int): rank to analyze for the critical path.
+            annotation (str): a trace annotation to limit the analysis to,
+                such as "ProfilerStep500"
+            instance_id (int): optionally specify which instance of the annotation
+                to consider. Defaults to the first instance.
+
+        Returns: Tuple[CPGraph, bool] a pair of CPGraph object and a success or
+            fail boolean value. True indicates that the critical path analysis
+            algorithm succeeded.
+
+            CPGraph object that can be used to obtain statistics and further
+            visualize the critical path.
+
+            CPGraph is also a subinstance of a networkx.DiGraph.
+            Run 'CPGraph?' for more info and APIs.
+
+        Notes:
+            1. Avoid using the first step / iteration in a trace as it usually
+               has some missing events.
+            2. The analysis requires CUDA synchronization events in the GPU trace,
+               that were added in https://github.com/pytorch/pytorch/pull/105187
+               Please see the documentation of this PR on how to enable CUDA sync
+               events in the trace.
+        """
+        return CriticalPathAnalysis.critical_path_analysis(
+            self.t, rank, annotation, instance_id
+        )
+
+    def overlay_critical_path_analysis(
+        self,
+        rank: int,
+        critical_path_graph: CPGraph,
+        output_dir: str,
+        show_all_edges: bool = False,
+    ) -> str:
+        r"""
+        Overlay the identified critical path on top of the trace file
+        for visualization.
+
+        Args:
+            rank (int): rank to generate the time series for.
+            critical_path_graph: Critical Path Graph object generated previously
+            output_dir (str): Output directory to store overlaid trace.
+            show_all_edges (bool): When set this will add edge events for
+                all types of edges in the critical path graph. This is useful
+                for debugging the algorithm.
+
+        Returns: the overlaid trace file path. The generated trace file will
+        have a prefix of "overlaid_critical_path_" in its name compared
+        to the original trace file.
+        """
+        return CriticalPathAnalysis.overlay_critical_path_analysis(
+            self.t, rank, critical_path_graph, output_dir, show_all_edges
+        )
