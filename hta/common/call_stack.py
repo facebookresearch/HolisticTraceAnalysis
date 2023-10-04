@@ -5,10 +5,9 @@
 import functools
 import logging
 from collections import namedtuple
-from collections.abc import Callable
 from enum import Enum
 from time import perf_counter
-from typing import Dict, List, NamedTuple, Optional
+from typing import Callable, Dict, List, NamedTuple, Optional
 
 import numpy as np
 import pandas as pd

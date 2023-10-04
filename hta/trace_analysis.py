@@ -520,7 +520,7 @@ class TraceAnalysis:
         This will include GPU kernels launched by the cpu operators in that
         time duration.
         For example, you can use this to limit the analysis to one iteration
-        by passing annotation='ProfilerStep500'. See notes for how to pick the iteraiton.
+        by passing annotation='ProfilerStep500'. See notes for how to pick the iteration.
 
         Args:
             t (Trace): Input trace data structure.
@@ -566,7 +566,7 @@ class TraceAnalysis:
         Args:
             rank (int): rank to generate the time series for.
             critical_path_graph: Critical Path Graph object generated previously
-            output_dir (str): Output director to store overlaid trace.
+            output_dir (str): Output directory to store overlaid trace.
             show_all_edges (bool): When set this will add edge events for
                 all types of edges in the critical path graph. This is useful
                 for debugging the algorithm.

@@ -408,7 +408,7 @@ class CriticalPathAnalysis:
             t (Trace): Input trace data structure.
             rank (int): rank to generate the time series for.
             critical_path_graph: Critical Path Graph object generated previously
-            output_dir (str): Output director to store overlaid trace.
+            output_dir (str): Output directory to store overlaid trace.
             show_all_edges (bool): When set this will add edge events for
                 all types of edges in the critical path graph. This is useful
                 for debugging the algorithm.
