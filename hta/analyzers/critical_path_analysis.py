@@ -344,7 +344,6 @@ class CriticalPathAnalysis:
         """
         trace_df: pd.DataFrame = t.get_trace(rank)
         sym_index = t.symbol_table.get_sym_id_map()
-        sym_table = t.symbol_table.get_sym_table()
 
         annotation_id = sym_index.get(annotation, None)
         if annotation_id is None:
