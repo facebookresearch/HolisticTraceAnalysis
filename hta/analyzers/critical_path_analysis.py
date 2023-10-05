@@ -284,7 +284,7 @@ class CPGraph(nx.DiGraph):
     def _add_gpu_cpu_sync_edge(self, gpu_node: CPNode, runtime_eid: int) -> None:
         """Add an edge between gpu_node and the runtime event on CPU"""
         _, end_node = self.get_nodes_for_event(runtime_eid)
-        logger.info(f"Adding a sync edge between nodes {gpu_node} -> {end_node}")
+        logger.debug(f"Adding a sync edge between nodes {gpu_node} -> {end_node}")
         self._add_edge_helper(gpu_node, end_node, type=CPEdgeType.SYNC_DEPENDENCY)
 
     def _construct_graph_from_kernels(self) -> None:
@@ -393,8 +393,8 @@ class CPGraph(nx.DiGraph):
         n = 0
         for n in self.nodes:
             node = self.node_list[n]
-            print(f"node id = {n}, node = {node}")
-            print("  neighbors = ", ",".join((str(n) for n in self.neighbors(n))))
+            logger.info(f"node id = {n}, node = {node}")
+            logger.info("  neighbors = ", ",".join((str(n) for n in self.neighbors(n))))
 
     def critical_path(self) -> bool:
         """Calculates the critical path across nodes"""
