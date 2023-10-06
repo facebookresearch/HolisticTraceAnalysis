@@ -557,6 +557,7 @@ class TraceAnalysis:
         rank: int,
         critical_path_graph: CPGraph,
         output_dir: str,
+        only_show_critical_events: bool = True,
         show_all_edges: bool = False,
     ) -> str:
         r"""
@@ -567,6 +568,9 @@ class TraceAnalysis:
             rank (int): rank to generate the time series for.
             critical_path_graph: Critical Path Graph object generated previously
             output_dir (str): Output directory to store overlaid trace.
+            only_show_critical_events (bool): When set the output trace will only
+                have operators and GPU kernels on the critical path. It will
+                still retain the user annotations.
             show_all_edges (bool): When set this will add edge events for
                 all types of edges in the critical path graph. This is useful
                 for debugging the algorithm.
@@ -576,5 +580,10 @@ class TraceAnalysis:
         to the original trace file.
         """
         return CriticalPathAnalysis.overlay_critical_path_analysis(
-            self.t, rank, critical_path_graph, output_dir, show_all_edges
+            self.t,
+            rank,
+            critical_path_graph,
+            output_dir,
+            only_show_critical_events,
+            show_all_edges,
         )
