@@ -325,6 +325,7 @@ class CPGraph(nx.DiGraph):
                 # XXX to handle later, stream wait events will likely result in
                 # dependencies between GPU kernels on different streams.
                 return
+            assert name == stream_sync or name == context_sync
 
             # For Context Sync add a sync edge on the last event on all streams,
             # while for Stream Sync only add a sync edge on the specific stream.
