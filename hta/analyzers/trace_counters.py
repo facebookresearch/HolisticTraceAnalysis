@@ -17,7 +17,9 @@ class TraceCounters:
 
     @classmethod
     def _get_queue_length_time_series_for_rank(
-        cls, t: "Trace", rank: int
+        cls,
+        t: "Trace",
+        rank: int,
     ) -> Optional[pd.DataFrame]:
         """
         Returns an (optional) dataframe with time series for the queue length
