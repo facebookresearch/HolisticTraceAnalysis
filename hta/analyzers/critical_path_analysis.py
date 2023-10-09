@@ -405,7 +405,7 @@ class CPGraph(nx.DiGraph):
         def handle_cuda_sync(row):
             nonlocal last_node
             eid = row["index"]
-            logger.info(
+            logger.debug(
                 f"CUDA Sync event eid = {eid}, name = {self._get_node_name(eid)}"
             )
 
@@ -421,7 +421,7 @@ class CPGraph(nx.DiGraph):
                     row["index_previous_launch"]
                 ]
                 # Schedule a sync on this stream with above kernel
-                logger.info(
+                logger.debug(
                     f"Scheduling a Stream Sync on stream {row['stream']} "
                     f"on kernel with index = {kernel_index}, corr id = "
                     f"{self.trace_df.correlation.loc[kernel_index]}"
@@ -471,10 +471,10 @@ class CPGraph(nx.DiGraph):
                 _, kernel_sync_end = self.get_nodes_for_event(kernel_sync_index)
                 assert kernel_sync_end is not None
                 # note that the sync dependency has 0 weight
-                self._add_edge_between(
+                self._add_edge_helper(
                     kernel_sync_end, start_node, type=CPEdgeType.SYNC_DEPENDENCY
                 )
-                logger.info(
+                logger.debug(
                     "Adding a GPU->GPU sync edge between nodes "
                     f"{kernel_sync_end} -> {start_node}"
                 )
@@ -509,10 +509,10 @@ class CPGraph(nx.DiGraph):
                 self._add_edge_helper(
                     last_node[stream], start_node, type=CPEdgeType.KERNEL_KERNEL_DELAY
                 )
-            else:
+            elif kernel_sync_index is None:
                 logger.error(
                     f"Queue length is {queue_length_runtime}!= 1 but no "
-                    f"last kernel on stream {stream}"
+                    f"last kernel on stream {stream}, current kernel = {row}"
                 )
 
             last_node[stream] = end_node

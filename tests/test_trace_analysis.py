@@ -356,7 +356,6 @@ class TraceAnalysisTestCase(unittest.TestCase):
         cp_graph, success = critical_path_t.critical_path_analysis(
             rank=0, annotation=annotation, instance_id=instance_id
         )
-
         self.assertTrue(success)
 
         trace_df = critical_path_t.t.get_trace(0)
@@ -494,6 +493,47 @@ class TraceAnalysisTestCase(unittest.TestCase):
                         trace_edge_counts[etype.value],
                         cpgraph_edge_counts[etype] * 2,
                     )
+
+        # AlexNet has inter stream synchronization using CUDA Events
+        critical_path_trace_dir2: str = "tests/data/critical_path/alexnet"
+        critical_path_t = TraceAnalysis(trace_dir=critical_path_trace_dir2)
+
+        trace_df = critical_path_t.t.get_trace(0)
+        sym_table = critical_path_t.t.symbol_table.get_sym_table()
+
+        cp_graph, success = critical_path_t.critical_path_analysis(
+            rank=0, annotation=annotation, instance_id=instance_id
+        )
+        self.assertTrue(success)
+
+        # Make sure critical path is as expected
+        self.assertEqual(len(cp_graph.critical_path_nodes), 149)
+
+        # Check GPU->GPU sync edge between kernel on stream 20 -> stream 7
+        # In the trace in tests/data/critical_path/alexnet look for correlation
+        # IDs 5606 and 5629
+        fft_src_kernel_idx = 1109
+        self.assertEqual(
+            get_node_name(fft_src_kernel_idx),
+            "void fft2d_c2r_32x32<float, false, false, 0u, false, false>(float*, float2 const*, int, int, int, int, int, int, int, int, int, float, float, cudnn::reduced_divisor, bool, float*, float*, int2, int, int)",
+        )
+        _, fft_kernel_end = cp_graph.get_nodes_for_event(fft_src_kernel_idx)
+
+        elwise_dest_kernel_idx = 1161
+        elwise_kernel_start, _ = cp_graph.get_nodes_for_event(elwise_dest_kernel_idx)
+
+        gpu_gpu_sync_edge = cp_graph.edges[fft_kernel_end.idx, elwise_kernel_start.idx][
+            "object"
+        ]
+        self.assertEqual(
+            gpu_gpu_sync_edge,
+            CPEdge(
+                begin=fft_kernel_end.idx,
+                end=elwise_kernel_start.idx,
+                weight=0,
+                type=CPEdgeType.SYNC_DEPENDENCY,
+            ),
+        )
 
 
 if __name__ == "__main__":  # pragma: no cover
