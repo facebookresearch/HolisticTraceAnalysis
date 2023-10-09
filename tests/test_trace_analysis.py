@@ -465,14 +465,20 @@ class TraceAnalysisTestCase(unittest.TestCase):
         # check overlaid trace matches up correctly
         with TemporaryDirectory(dir="/tmp") as tmpdir:
             overlaid_trace = critical_path_t.overlay_critical_path_analysis(
-                0, cp_graph, output_dir=tmpdir, show_all_edges=True
+                0,
+                cp_graph,
+                output_dir=tmpdir,
+                only_show_critical_events=False,
+                show_all_edges=True,
             )
             self.assertTrue("overlaid_critical_path_" in overlaid_trace)
 
             with gzip.open(overlaid_trace, "r") as ovf:
                 trace_events = json.load(ovf)["traceEvents"]
                 marked_critical_events = sum(
-                    e["args"].get("critical", 0) for e in trace_events if "args" in e
+                    e["args"].get("critical", 0)
+                    for e in trace_events
+                    if "args" in e and e["ph"] == "X"
                 )
                 self.assertEqual(marked_critical_events, 159)
                 self.assertEqual(
@@ -493,6 +499,50 @@ class TraceAnalysisTestCase(unittest.TestCase):
                         trace_edge_counts[etype.value],
                         cpgraph_edge_counts[etype] * 2,
                     )
+                marked_critical_edges = sum(
+                    e["args"].get("critical", 0)
+                    for e in trace_events
+                    if "args" in e and e["ph"] == "f"
+                )
+                self.assertEqual(marked_critical_edges, 314)
+                self.assertEqual(
+                    marked_critical_edges,
+                    len(cp_graph.critical_path_edges_set),
+                )
+
+        with TemporaryDirectory(dir="/tmp") as tmpdir:
+            overlaid_trace = critical_path_t.overlay_critical_path_analysis(
+                0,
+                cp_graph,
+                output_dir=tmpdir,
+                only_show_critical_events=True,
+                show_all_edges=True,  # this should be overriden to false
+            )
+            self.assertTrue("overlaid_critical_path_" in overlaid_trace)
+            with gzip.open(overlaid_trace, "r") as ovf:
+                trace_events = json.load(ovf)["traceEvents"]
+                events_to_check = [
+                    e
+                    for e in trace_events
+                    if e["ph"] == "X" and e.get("cat", "") not in ["user_annotation"]
+                ]
+                num_events_to_check = len(events_to_check)
+                marked_critical_events = sum(
+                    e["args"].get("critical", 0) for e in events_to_check if "args" in e
+                )
+                self.assertEqual(marked_critical_events, 159)
+                # Only critical events are written out to the trace
+                self.assertEqual(marked_critical_events, num_events_to_check)
+
+                trace_edge_counts = Counter(
+                    "critical" if e["args"].get("critical", 0) else "non_critical"
+                    for e in trace_events
+                    if "critical_path" in e.get("cat", "")
+                )
+                # Only critical edges are shown
+                self.assertEqual(
+                    trace_edge_counts["critical"], sum(trace_edge_counts.values())
+                )
 
         # AlexNet has inter stream synchronization using CUDA Events
         critical_path_trace_dir2: str = "tests/data/critical_path/alexnet"

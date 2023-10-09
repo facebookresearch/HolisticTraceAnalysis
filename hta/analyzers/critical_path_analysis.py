@@ -678,10 +678,12 @@ class CriticalPathAnalysis:
             only_show_critical_events (bool): When set the output trace will only
                 have operators and GPU kernels on the critical path. It will
                 still retain the user annotations.
+                Default value = True.
             show_all_edges (bool): When set this will add edge events for
                 all types of edges in the critical path graph. This is useful
                 for debugging the algorithm. The value will be forced to False
                 if only_show_critical_events is True.
+                Default value = False.
 
         Returns: the overlaid_trace_file path.
         """
@@ -773,7 +775,7 @@ class CriticalPathAnalysis:
                     or ("args" in event and event["args"].get("critical", 0) == 1)
                 )
             ]
-            logger.info("len of new raw events = {raw_events2}")
+            logger.debug("Length of new raw events = {raw_events2}")
             overlaid_trace["traceEvents"] = raw_events2
 
         overlaid_trace["traceEvents"].extend(flow_events)
