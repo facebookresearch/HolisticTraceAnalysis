@@ -28,7 +28,7 @@ def setup_logger(config_file: str = "logging.config") -> logging.Logger:
     return logger
 
 
-logger: logging.Logger = setup_logger()
+logger: logging.Logger = logging.getLogger(__name__)
 
 
 class HtaConfig:
