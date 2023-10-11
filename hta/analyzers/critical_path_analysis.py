@@ -305,19 +305,19 @@ class CPGraph(nx.DiGraph):
 
         # CUDA Record Event calls
         cuda_record_calls = (
-            self.trace_df.query("name == @cudaEventRecord_id")
+            self.trace_df.query(f"name == {cudaEventRecord_id}")
             .copy()
             .sort_values(by="ts", axis=0)
         )
 
-        def previous_launch(ts: int, pid: int, tid: int) -> Optional[int]:
+        def _previous_launch(ts: int, pid: int, tid: int) -> Optional[int]:
             """Find the previous CUDA launch on same pid and tid"""
             df = runtime_calls.query(f"pid == {pid} and tid == {tid}")
-            lowerneighbours = df[df["ts"] < ts]["ts"]
-            return lowerneighbours.idxmax() if len(lowerneighbours) else None
+            lower_neighbors = df[df["ts"] < ts]["ts"]
+            return lower_neighbors.idxmax() if len(lower_neighbors) else None
 
         cuda_record_calls["index_previous_launch"] = cuda_record_calls.apply(
-            lambda x: previous_launch(x["ts"], x["pid"], x["tid"]), axis=1
+            lambda x: _previous_launch(x["ts"], x["pid"], x["tid"]), axis=1
         )
 
         return cuda_record_calls
