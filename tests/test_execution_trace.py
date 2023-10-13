@@ -10,7 +10,7 @@ from hta.common import execution_trace
 from hta.trace_analysis import TraceAnalysis
 
 
-class TraceAnalysisTestCase(unittest.TestCase):
+class ExecutionTraceTestCase(unittest.TestCase):
     def setUp(self):
         self.execution_trace_dir: str = "tests/data/execution_trace/"
         self.analyzer_t = TraceAnalysis(trace_dir=self.execution_trace_dir)
