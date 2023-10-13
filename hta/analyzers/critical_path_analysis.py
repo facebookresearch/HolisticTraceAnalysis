@@ -47,7 +47,7 @@ class CPEdgeType(Enum):
     SYNC_DEPENDENCY = "critical_path_sync_dependency"
 
 
-@dataclass
+@dataclass(frozen=True)
 class CPEdge:
     """An edge in the critical path di-graph.
     This represents either a
@@ -82,6 +82,7 @@ class CPGraph(nx.DiGraph):
         node_list (List[int]): list of critical path node objects, index in this list is always the node id..
         critical_path_nodes (List[int]): list of node ids on the critical path.
         critical_path_events_set (Set[int]): set of event ids corresponding to the critical path nodes.
+        critical_path_edges_set (Set[CPEdge]): set of edge objects that are on the critical path.
     """
 
     def __init__(self, t: "Trace", rank: int) -> None:
@@ -91,6 +92,7 @@ class CPGraph(nx.DiGraph):
         self.symbol_table = t.symbol_table
         self.critical_path_nodes: List[int] = []
         self.critical_path_events_set: Set[int] = set()
+        self.critical_path_edges_set: Set[CPEdge] = set()
 
         self.t = t
         self.rank: int = rank
@@ -532,16 +534,26 @@ class CPGraph(nx.DiGraph):
         except nx.NetworkXUnfeasible as err:
             logger.error(f"Critical path algorithm failed due to {err}")
             return False
+        assert len(self.critical_path_nodes) >= 2
+
         self.critical_path_events_set = {
             self.node_list[nid].ev_idx for nid in self.critical_path_nodes
         }
+
+        critical_path_nodes_set = set(self.critical_path_nodes)
+
+        for u, v in self.edges:
+            e = self.edges[u, v]["object"]
+            if u in critical_path_nodes_set and v in critical_path_nodes_set:
+                self.critical_path_edges_set.add(e)
+
         return True
 
     def show_critical_path(self) -> None:
         """List out the nodes in the critical path graph"""
         for n in self.critical_path_nodes:
             node = self.node_list[n]
-            print(
+            logger.info(
                 f"Critical {node}, ev_id = {node.ev_idx} "
                 f"ev_name = {self._get_node_name(node.ev_idx)}"
             )
@@ -651,7 +663,8 @@ class CriticalPathAnalysis:
         rank: int,
         critical_path_graph: CPGraph,
         output_dir: str,
-        show_all_edges: bool = False,
+        only_show_critical_events: bool,
+        show_all_edges: bool,
     ) -> str:
         r"""
         Overlay the identified critical path on top of the trace file
@@ -660,14 +673,23 @@ class CriticalPathAnalysis:
         Args:
             t (Trace): Input trace data structure.
             rank (int): rank to generate the time series for.
-            critical_path_graph: Critical Path Graph object generated previously
+            critical_path_graph: Critical Path Graph object generated previously.
             output_dir (str): Output directory to store overlaid trace.
+            only_show_critical_events (bool): When set the output trace will only
+                have operators and GPU kernels on the critical path. It will
+                still retain the user annotations.
+                Default value = True.
             show_all_edges (bool): When set this will add edge events for
                 all types of edges in the critical path graph. This is useful
-                for debugging the algorithm.
+                for debugging the algorithm. The value will be forced to False
+                if only_show_critical_events is True.
+                Default value = False.
 
         Returns: the overlaid_trace_file path.
         """
+        if only_show_critical_events:
+            show_all_edges = False
+
         path = Path(output_dir).expanduser()
         if not path.exists():
             logger.error(f"The path {str(path)} does not exist.")
@@ -691,12 +713,18 @@ class CriticalPathAnalysis:
         flow_id = 0
 
         def get_flow_event(
-            nid: int, event: Dict[str, Any], edge: CPEdge, flow_id: int, is_start: bool
+            nid: int,
+            event: Dict[str, Any],
+            edge: CPEdge,
+            flow_id: int,
+            is_start: bool,
         ):
             # This helps with showing the arrows in chrome trace
             end_ts = event["ts"] + event["dur"]
             if event["args"].get("device", -1) >= 0:
                 end_ts -= min(1, event["dur"])
+
+            is_critical = e in critical_path_graph.critical_path_edges_set
 
             return Trace.flow_event(
                 id=flow_id,
@@ -710,20 +738,25 @@ class CriticalPathAnalysis:
                 is_start=is_start,
                 name="critical_path",
                 cat=str(edge.type.value),
-                args={"weight": int(edge.weight)},
+                args={
+                    "weight": int(edge.weight),
+                    "critical": is_critical,
+                },
             )
 
-        # Networkx provides iteration over the edges represented as (u, v)
-        for u, v in critical_path_graph.edges:
-            e = critical_path_graph.edges[u, v]["object"]
+        if show_all_edges:
+            # Networkx provides iteration over the edges represented as (u, v)
+            edges = (
+                critical_path_graph.edges[u, v]["object"]
+                for u, v in critical_path_graph.edges
+            )
+        else:
+            edges = (e for e in critical_path_graph.critical_path_edges_set)
+
+        for e in edges:
+            u, v = e.begin, e.end
             start_ev_id, end_ev_id = critical_path_graph.get_events_for_edge(e)
             start_ev, end_ev = raw_events[start_ev_id], raw_events[end_ev_id]
-
-            if (
-                e.type in {CPEdgeType.OPERATOR_KERNEL, CPEdgeType.KERNEL_KERNEL_DELAY}
-                and not show_all_edges
-            ):
-                continue
 
             # XXX need to assert if raw event name and dataframe name are same
             logger.debug(f"Adding cp edge between {start_ev_id} and {end_ev_id}")
@@ -732,7 +765,21 @@ class CriticalPathAnalysis:
             flow_events.append(get_flow_event(v, end_ev, e, flow_id, is_start=False))
             flow_id += 1
 
-        raw_events.extend(flow_events)
+        if only_show_critical_events:
+            raw_events2 = [
+                event
+                for event in raw_events
+                if (
+                    event["ph"] != "X"
+                    or event.get("cat", "") in ["user_annotation"]
+                    or ("args" in event and event["args"].get("critical", 0) == 1)
+                )
+            ]
+            logger.debug("Length of new raw events = {raw_events2}")
+            overlaid_trace["traceEvents"] = raw_events2
+
+        overlaid_trace["traceEvents"].extend(flow_events)
+
         t.write_raw_trace(output_file, overlaid_trace)
 
         return output_file
