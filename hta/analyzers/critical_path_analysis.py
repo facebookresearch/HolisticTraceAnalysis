@@ -771,7 +771,7 @@ class CriticalPathAnalysis:
                 for event in raw_events
                 if (
                     event["ph"] != "X"
-                    or event.get("cat", "") in ["user_annotation"]
+                    or event.get("cat", "") in ["user_annotation", "python_function"]
                     or ("args" in event and event["args"].get("critical", 0) == 1)
                 )
             ]

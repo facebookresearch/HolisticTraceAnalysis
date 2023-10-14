@@ -524,7 +524,8 @@ class TraceAnalysisTestCase(unittest.TestCase):
                 events_to_check = [
                     e
                     for e in trace_events
-                    if e["ph"] == "X" and e.get("cat", "") not in ["user_annotation"]
+                    if e["ph"] == "X"
+                    and e.get("cat", "") not in ["user_annotation", "python_function"]
                 ]
                 num_events_to_check = len(events_to_check)
                 marked_critical_events = sum(
