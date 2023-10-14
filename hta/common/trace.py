@@ -118,10 +118,10 @@ class TraceSymbolTable:
     def get_runtime_launch_events_query(self) -> str:
         """Returns a SQL query you can pass to trace dataframe query()
         to filter events that are CUDA runtime kernel and memcpy launches."""
-        cudaLaunchKernel_id = self.sym_index.get("cudaLaunchKernel", None)
-        cudaLaunchKernelExC_id = self.sym_index.get("cudaLaunchKernelExC", None)
-        cudaMemcpyAsync_id = self.sym_index.get("cudaMemcpyAsync", None)
-        cudaMemsetAsync_id = self.sym_index.get("cudaMemsetAsync", None)
+        cudaLaunchKernel_id = self.sym_index.get("cudaLaunchKernel", -128)
+        cudaLaunchKernelExC_id = self.sym_index.get("cudaLaunchKernelExC", -128)
+        cudaMemcpyAsync_id = self.sym_index.get("cudaMemcpyAsync", -128)
+        cudaMemsetAsync_id = self.sym_index.get("cudaMemsetAsync", -128)
 
         return (
             f"((name == {cudaMemsetAsync_id}) or (name == {cudaMemcpyAsync_id}) or "
