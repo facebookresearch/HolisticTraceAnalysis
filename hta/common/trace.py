@@ -20,6 +20,7 @@ import pandas as pd
 from hta.common.trace_file import get_trace_files
 from hta.configs.config import logger
 from hta.configs.default_values import DEFAULT_TRACE_DIR
+from hta.configs.parser_config import AttributeSpec, ParserConfig, ValueType
 from hta.utils.utils import get_mp_pool_size, normalize_path
 
 MetaData = Dict[str, Any]
@@ -157,18 +158,22 @@ def parse_trace_dict(trace_file_path: str) -> Dict[str, Any]:
     return trace_record
 
 
-def compress_df(df: pd.DataFrame) -> Tuple[pd.DataFrame, TraceSymbolTable]:
+def compress_df(
+    df: pd.DataFrame, cfg: Optional[ParserConfig] = None
+) -> Tuple[pd.DataFrame, TraceSymbolTable]:
     """
     Compress a Dataframe to reduce its memory footprint.
 
     Args:
         df (pd.DataFrame): the input DataFrame
+        cfg (Optional[ParserConfig]): an object to customize how to parse/compress the trace.
 
     Returns:
         Tuple[pd.DataFrame, TraceSymbolTable]
             The first item is the compressed dataframe.
             The second item is the local symbol table specific to this dataframe.
     """
+    cfg = cfg or ParserConfig.get_default_cfg()
     # assign an index to each event
     df.reset_index(inplace=True)
     df["index"] = pd.to_numeric(df["index"], downcast="integer")
@@ -182,28 +187,35 @@ def compress_df(df: pd.DataFrame) -> Tuple[pd.DataFrame, TraceSymbolTable]:
     df.drop(list(columns_to_drop), axis=1, inplace=True)
 
     # extract arguments; the argument list needs to update when more arguments are used in the analysis.
-    args_to_keep = {
-        "stream",
-        "correlation",
-        "External id",
-        "Trace iteration",
-        "memory bandwidth (GB/s)",
-        "wait_on_stream",
-        "wait_on_cuda_event_record_corr_id",
-    }
+    # args_to_keep = {
+    #     "stream",
+    #     "correlation",
+    #     "External id",
+    #     "Trace iteration",
+    #     "memory bandwidth (GB/s)",
+    #     "wait_on_stream",
+    #     "wait_on_cuda_event_record_corr_id",
+    # }
+    # args_to_keep = cfg.get_args()
     # performance counters appear as args
     if "cuda_profiler_range" in df.cat.unique():
         counter_names = set.union(
             *[set(d.keys()) for d in df[df.cat == "cuda_profiler_range"]["args"].values]
         )
-        args_to_keep = args_to_keep.union(counter_names)
+        # args_to_keep = args_to_keep.union(counter_names)
+        cfg.add_args(
+            [AttributeSpec(name, name, ValueType.Int, -1) for name in counter_names]
+        )
 
+    args_to_keep = cfg.get_args()
     for arg in args_to_keep:
-        df[arg] = df["args"].apply(
-            lambda row: row.get(arg, -1) if isinstance(row, dict) else -1
+        df[arg.name] = df["args"].apply(
+            lambda row: row.get(arg.raw_name, arg.default_value)
+            if isinstance(row, dict)
+            else arg.default_value
         )
     df.drop(["args"], axis=1, inplace=True)
-    df.rename(columns={"memory bandwidth (GB/s)": "memory_bw_gbps"}, inplace=True)
+    # df.rename(columns={"memory bandwidth (GB/s)": "memory_bw_gbps"}, inplace=True)
 
     # create a local symbol table
     local_symbol_table = TraceSymbolTable()
@@ -216,7 +228,8 @@ def compress_df(df: pd.DataFrame) -> Tuple[pd.DataFrame, TraceSymbolTable]:
 
     # data type downcast
     for col in df.columns:
-        df[col] = pd.to_numeric(df[col], errors="coerce", downcast="integer")
+        if df[col].dtype.kind == "i":
+            df[col] = pd.to_numeric(df[col], errors="coerce", downcast="integer")
 
     return df, local_symbol_table
 
@@ -357,7 +370,7 @@ def add_iteration(df: pd.DataFrame, symbol_table: TraceSymbolTable) -> pd.DataFr
 
 
 def parse_trace_dataframe(
-    trace_file_path: str,
+    trace_file_path: str, cfg: Optional[ParserConfig] = None
 ) -> Tuple[MetaData, pd.DataFrame, TraceSymbolTable]:
     """parse a single trace file into a meat test_data dictionary and a dataframe of events.
     Args:
@@ -382,7 +395,7 @@ def parse_trace_dataframe(
     df: pd.DataFrame = pd.DataFrame()
     if "traceEvents" in trace_record:
         df = pd.DataFrame(trace_record["traceEvents"])
-        df, local_symbol_table = compress_df(df)
+        df, local_symbol_table = compress_df(df, cfg)
         transform_correlation_to_index(df)
         add_iteration(df, local_symbol_table)
 

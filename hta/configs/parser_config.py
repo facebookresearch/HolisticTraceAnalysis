@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import List, NamedTuple, Optional, Union
+from typing import Dict, List, NamedTuple, Optional, Union
 
 
 class ValueType(Enum):
@@ -27,6 +27,67 @@ class AttributeSpec(NamedTuple):
     default_value: Union[int, float, str, object]
 
 
+AVAILABLE_ARGS: Dict[str, AttributeSpec] = {
+    "index::ev_idx": AttributeSpec("ev_idx", "Ev Idx", ValueType.Int, -1),
+    "index::external_id": AttributeSpec(
+        "external_id", "External id", ValueType.Int, -1
+    ),
+    "cpu_op::concrete_inputs": AttributeSpec(
+        "concrete_inputs", "Concrete Inputs", ValueType.Int, -1
+    ),
+    "cpu_op::fwd_thread": AttributeSpec(
+        "fwd_thread_id", "Fwd thread id", ValueType.Int, -1
+    ),
+    "cpu_op::input_dims": AttributeSpec(
+        "input_dims", "Input Dims", ValueType.Object, "-1"
+    ),
+    "cpu_op::input_type": AttributeSpec(
+        "input_type", "Input type", ValueType.Object, "-1"
+    ),
+    "cpu_op::sequence_number": AttributeSpec(
+        "sequence", "Sequence number", ValueType.Int, -1
+    ),
+    "correlation::cbid": AttributeSpec("cbid", "cbid", ValueType.Int, -1),
+    "correlation::cpu_gpu": AttributeSpec(
+        "correlation", "correlation", ValueType.Int, -1
+    ),
+    "sm::blocks": AttributeSpec("blocks_per_sm", "blocks per SM", ValueType.Int, -1),
+    "sm::occupancy": AttributeSpec(
+        "est_occupancy", "est. achieved occupancy %", ValueType.Int, -1
+    ),
+    "sm::warps": AttributeSpec("warps_per_sm", "warps per SM", ValueType.Int, -1),
+    "data::bytes": AttributeSpec("bytes", "bytes", ValueType.Int, -1),
+    "data::bandwidth": AttributeSpec(
+        "memory_bw_gbps)", "memory bandwidth (GB/s)", ValueType.Int, -1
+    ),
+    "cuda::context": AttributeSpec("context", "context", ValueType.Int, -1),
+    "cuda::device": AttributeSpec("device", "device", ValueType.Int, -1),
+    "cuda::stream": AttributeSpec("stream", "stream", ValueType.Int, -1),
+    "kernel::queued": AttributeSpec("queued", "queued", ValueType.Int, -1),
+    "kernel::shared_memory": AttributeSpec(
+        "shared_memory", "shared memory", ValueType.Int, -1
+    ),
+    "threads::block": AttributeSpec("block", "block", ValueType.Object, "-1"),
+    "threads::grid": AttributeSpec("grid", "grid", ValueType.Int, -1),
+    "threads::registers": AttributeSpec(
+        "registers_per_thread", "registers per thread", ValueType.Int, -1
+    ),
+    "cuda_sync::stream": AttributeSpec(
+        "wait_on_stream", "wait_on_stream", ValueType.Int, -1
+    ),
+    "cuda_sync::event": AttributeSpec(
+        "wait_on_cuda_event_record_corr_id",
+        "wait_on_cuda_event_record_corr_id",
+        ValueType.Int,
+        -1,
+    ),
+    "info::labels": AttributeSpec("labels", "labels", ValueType.String, ""),
+    "info::name": AttributeSpec("name", "name", ValueType.Int, -1),
+    "info::op_count": AttributeSpec("op_count", "Op count", ValueType.Int, -1),
+    "info::sort_index": AttributeSpec("sort_index", "sort_index", ValueType.Int, -1),
+}
+
+
 class ParserConfig:
     """TraceParserConfig specifies how to parse a json trace file.
 
@@ -35,51 +96,38 @@ class ParserConfig:
     """
 
     ARGS_INPUT_SHAPE: List[AttributeSpec] = [
-        AttributeSpec("input_dims", "input_dims", ValueType.Object, "-1"),
-        AttributeSpec("input_type", "input_type", ValueType.Object, "-1"),
-    ]
-    ARGS_CUDA_THREADS: List[AttributeSpec] = [
-        AttributeSpec("grid", "grid", ValueType.Object, "-1"),
-        AttributeSpec("block", "block", ValueType.Object, "-1"),
-        AttributeSpec("blocks_per_sm", "blocks_per_sm", ValueType.Int, -1),
-        AttributeSpec(
-            "registers_per_thread", "registers_per_thread", ValueType.Int, -1
-        ),
+        AVAILABLE_ARGS[k] for k in ["cpu_op::input_dims", "cpu_op::input_type"]
     ]
     ARGS_BANDWIDTH: List[AttributeSpec] = [
-        AttributeSpec("memory_bw_gbps", "memory bandwidth (GB/s)", ValueType.Float, -1),
-        AttributeSpec("bytes", "bytes", ValueType.Int, -1),
+        AVAILABLE_ARGS[k] for k in ["data::bytes", "data::bandwidth"]
     ]
-    ARGS_CUDA_MINIMUM: List[AttributeSpec] = [
-        AttributeSpec("stream", "stream", ValueType.Int, -1),
-        AttributeSpec("correlation", "correlation", ValueType.Int, -1),
+    ARGS_MINIMUM: List[AttributeSpec] = [
+        AVAILABLE_ARGS[k] for k in ["cuda::stream", "correlation::cpu_gpu"]
     ]
     ARGS_SYNC: List[AttributeSpec] = [
-        AttributeSpec("wait_on_stream", "wait_on_stream", ValueType.Int, -1),
-        AttributeSpec(
-            "wait_on_cuda_event_record_corr_id",
-            "wait_on_cuda_event_record_corr_id",
-            ValueType.Int,
-            -1,
-        ),
+        AVAILABLE_ARGS[k] for k in ["cuda_sync::stream", "cuda_sync::event"]
     ]
+    ARGS_DEFAULT: List[AttributeSpec] = ARGS_MINIMUM + ARGS_BANDWIDTH
 
     def __init__(self, args: Optional[List[AttributeSpec]] = None):
         self.args: List[AttributeSpec] = []
         self.set_args(args if args else self.get_default_args())
 
     @classmethod
+    def get_default_cfg(cls) -> "ParserConfig":
+        return _DEFAULT_PARSER_CONFIG
+
+    @classmethod
+    def set_default_cfg(cls, cfg: "ParserConfig") -> None:
+        _DEFAULT_PARSER_CONFIG.set_args(cfg.get_args())
+
+    @classmethod
     def get_minimum_args(cls) -> List[AttributeSpec]:
-        return cls.ARGS_CUDA_MINIMUM
+        return cls.ARGS_MINIMUM
 
     @classmethod
     def get_default_args(cls) -> List[AttributeSpec]:
-        return (
-            cls.ARGS_CUDA_MINIMUM
-            + cls.ARGS_INPUT_SHAPE
-            + cls.ARGS_SYNC
-            + cls.ARGS_BANDWIDTH
-        )
+        return cls.ARGS_DEFAULT
 
     def set_args(self, args: List[AttributeSpec]) -> None:
         self.args.clear()
@@ -93,3 +141,8 @@ class ParserConfig:
         for arg in args:
             if arg.name not in arg_set:
                 self.args.append(arg)
+
+
+# Define a global ParserConfig variable for internal use. To access this variable,
+# Clients should use ParserConfig.get_default_cfg and ParserConfig.set_default_cfg.
+_DEFAULT_PARSER_CONFIG: ParserConfig = ParserConfig()

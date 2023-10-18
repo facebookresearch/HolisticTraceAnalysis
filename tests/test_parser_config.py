@@ -10,7 +10,7 @@ class ParserConfigTestCase(unittest.TestCase):
         expect_result: List[AttributeSpec]
 
     @classmethod
-    def _compare_config(
+    def _compare_attributes(
         cls, args1: List[AttributeSpec], args2: List[AttributeSpec]
     ) -> bool:
         if len(args1) != len(args2):
@@ -22,7 +22,7 @@ class ParserConfigTestCase(unittest.TestCase):
                 return False
         return True
 
-    def test_constructor(self):
+    def test_constructor(self) -> None:
         t_cases = [
             self._TCase(None, ParserConfig.get_default_args()),
             self._TCase(
@@ -34,18 +34,16 @@ class ParserConfigTestCase(unittest.TestCase):
             cfg = ParserConfig(tc.input)
             got = cfg.get_args()
             self.assertTrue(
-                self._compare_config(tc.expect_result, got),
+                self._compare_attributes(tc.expect_result, got),
                 f"case #{i}: input={tc.input} expect={tc.expect_result} got={got}",
             )
 
-    def test_add_args(self):
+    def test_add_args(self) -> None:
         t_cases = [
-            self._TCase(
-                ParserConfig.ARGS_CUDA_MINIMUM, ParserConfig.get_minimum_args()
-            ),
+            self._TCase(ParserConfig.ARGS_MINIMUM, ParserConfig.get_minimum_args()),
             self._TCase(
                 ParserConfig.ARGS_INPUT_SHAPE,
-                ParserConfig.ARGS_CUDA_MINIMUM + ParserConfig.ARGS_INPUT_SHAPE,
+                ParserConfig.ARGS_MINIMUM + ParserConfig.ARGS_INPUT_SHAPE,
             ),
         ]
         for i, tc in enumerate(t_cases):
@@ -53,6 +51,18 @@ class ParserConfigTestCase(unittest.TestCase):
             cfg.add_args(tc.input)
             got = cfg.get_args()
             self.assertTrue(
-                self._compare_config(tc.expect_result, got),
+                self._compare_attributes(tc.expect_result, got),
                 f"case #{i}: input={tc.input} expect={tc.expect_result} got={got}",
             )
+
+    def test_global_cfg(self) -> None:
+        default_cfg = ParserConfig.get_default_cfg()
+        self.assertTrue(
+            self._compare_attributes(default_cfg.get_args(), ParserConfig().get_args())
+        )
+
+        custom_cfg = ParserConfig(ParserConfig.get_minimum_args())
+        ParserConfig.set_default_cfg(custom_cfg)
+        self.assertTrue(
+            self._compare_attributes(default_cfg.get_args(), custom_cfg.get_args())
+        )
