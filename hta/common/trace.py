@@ -321,7 +321,8 @@ def add_iteration(df: pd.DataFrame, symbol_table: TraceSymbolTable) -> pd.DataFr
     """
     s_map = pd.Series(symbol_table.sym_index)
     s_tab = pd.Series(symbol_table.sym_table)
-    profiler_step_ids = s_map[s_map.index.str.startswith("ProfilerStep")]
+    # FIXME figure out how to add back profiler step annotation
+    profiler_step_ids = s_map[s_map.index.str.startswith("ProfilersdfsdfStep")]
     profiler_step_ids.sort_index()
 
     def _extract_iter(profiler_step_name: int) -> int:
@@ -694,7 +695,8 @@ class Trace:
         Filter out GPU kernels that are not launched by the CPU kernels in the traced iterations.
         """
         sym_index = self.symbol_table.get_sym_id_map()
-        profiler_steps = [v for k, v in sym_index.items() if "ProfilerStep" in k]
+        # FIXME Profiler steps
+        profiler_steps = [v for k, v in sym_index.items() if "ProfilerStepsdfdsf" in k]
 
         def filter_gpu_kernels_for_one_rank(trace_df: pd.DataFrame) -> pd.DataFrame:
             cpu_kernels = trace_df[trace_df["stream"].eq(-1)]
