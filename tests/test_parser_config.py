@@ -59,11 +59,15 @@ class ParserConfigTestCase(unittest.TestCase):
         custom_cfg = ParserConfig(ParserConfig.get_minimum_args())
         ParserConfig.set_default_cfg(custom_cfg)
         self.assertTrue(
-            self._compare_attributes(ParserConfig.get_default_cfg().get_args(), custom_cfg.get_args())
+            self._compare_attributes(
+                ParserConfig.get_default_cfg().get_args(), custom_cfg.get_args()
+            )
         )
 
         custom_cfg = ParserConfig()
         ParserConfig.set_default_cfg(custom_cfg)
         self.assertTrue(
-            self._compare_attributes(ParserConfig.get_default_cfg().get_args(), custom_cfg.get_args())
+            self._compare_attributes(
+                ParserConfig.get_default_cfg().get_args(), custom_cfg.get_args()
+            )
         )
