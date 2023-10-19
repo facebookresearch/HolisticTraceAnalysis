@@ -1,7 +1,7 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
+import importlib.util
 import json
 import logging
 import logging.config
@@ -28,7 +28,7 @@ def setup_logger(config_file: str = "logging.config") -> logging.Logger:
     return logger
 
 
-logger: logging.Logger = logging.getLogger(__name__)
+logger: logging.Logger = logging.getLogger("hta")
 
 
 class HtaConfig:
@@ -151,3 +151,15 @@ class HtaConfig:
 
     def show(self):
         print(json.dumps(self.config, indent=4, sort_keys=True))
+
+    @classmethod
+    def get_package_path(cls) -> str:
+        package_spec = importlib.util.find_spec(hta.__name__)
+        package_path = Path(package_spec.origin).parent
+        return str(package_path)
+
+    @classmethod
+    def get_test_data_path(cls, dataset: str) -> str:
+        base_path = Path(cls.get_package_path()).parent
+        test_data_path = Path.joinpath(base_path, "tests/data/", dataset)
+        return str(test_data_path)

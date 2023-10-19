@@ -186,7 +186,9 @@ class CPGraph(nx.DiGraph):
                 Pair of event ids representing src and dest of the edge.
         """
         start_node, end_node = edge.begin, edge.end
-        return (self.node_list[start_node].ev_idx, self.node_list[end_node].ev_idx)
+        return int(self.node_list[start_node].ev_idx), int(
+            self.node_list[end_node].ev_idx
+        )
 
     def _construct_graph(self) -> None:
         cpu_call_stacks = (

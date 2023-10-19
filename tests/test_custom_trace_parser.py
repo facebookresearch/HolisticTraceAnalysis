@@ -2,19 +2,9 @@ import os.path
 import tempfile
 import unittest
 
-from importlib.util import find_spec
-from pathlib import Path
-
 from hta.common.trace import Trace
 from hta.common.trace_file import write_trace
 from hta.configs.parser_config import ParserConfig
-
-
-def _get_test_data_path(dataset: str) -> str:
-    package_spec = find_spec("hta")
-    package_path = Path(package_spec.origin).parent.parent
-    test_data_path = Path.joinpath(package_path, f"tests/data/{dataset}")
-    return str(test_data_path)
 
 
 class CustomTraceParserTestCase(unittest.TestCase):
