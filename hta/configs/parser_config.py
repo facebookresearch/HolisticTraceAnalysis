@@ -58,7 +58,7 @@ AVAILABLE_ARGS: Dict[str, AttributeSpec] = {
     "sm::warps": AttributeSpec("warps_per_sm", "warps per SM", ValueType.Int, -1),
     "data::bytes": AttributeSpec("bytes", "bytes", ValueType.Int, -1),
     "data::bandwidth": AttributeSpec(
-        "memory_bw_gbps)", "memory bandwidth (GB/s)", ValueType.Int, -1
+        "memory_bw_gbps", "memory bandwidth (GB/s)", ValueType.Int, -1
     ),
     "cuda::context": AttributeSpec("context", "context", ValueType.Int, -1),
     "cuda::device": AttributeSpec("device", "device", ValueType.Int, -1),
@@ -107,7 +107,7 @@ class ParserConfig:
     ARGS_SYNC: List[AttributeSpec] = [
         AVAILABLE_ARGS[k] for k in ["cuda_sync::stream", "cuda_sync::event"]
     ]
-    ARGS_DEFAULT: List[AttributeSpec] = ARGS_MINIMUM + ARGS_BANDWIDTH
+    ARGS_DEFAULT: List[AttributeSpec] = ARGS_MINIMUM + ARGS_BANDWIDTH + ARGS_SYNC
 
     def __init__(self, args: Optional[List[AttributeSpec]] = None):
         self.args: List[AttributeSpec] = []

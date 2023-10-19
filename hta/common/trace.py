@@ -174,6 +174,7 @@ def compress_df(
             The second item is the local symbol table specific to this dataframe.
     """
     cfg = cfg or ParserConfig.get_default_cfg()
+
     # assign an index to each event
     df.reset_index(inplace=True)
     df["index"] = pd.to_numeric(df["index"], downcast="integer")
@@ -186,17 +187,6 @@ def compress_df(
     columns_to_drop = {"ph", "id", "bp", "s"}.intersection(set(df.columns))
     df.drop(list(columns_to_drop), axis=1, inplace=True)
 
-    # extract arguments; the argument list needs to update when more arguments are used in the analysis.
-    # args_to_keep = {
-    #     "stream",
-    #     "correlation",
-    #     "External id",
-    #     "Trace iteration",
-    #     "memory bandwidth (GB/s)",
-    #     "wait_on_stream",
-    #     "wait_on_cuda_event_record_corr_id",
-    # }
-    # args_to_keep = cfg.get_args()
     # performance counters appear as args
     if "cuda_profiler_range" in df.cat.unique():
         counter_names = set.union(
@@ -206,6 +196,8 @@ def compress_df(
         cfg.add_args(
             [AttributeSpec(name, name, ValueType.Int, -1) for name in counter_names]
         )
+        logger.info(f"counter_names={counter_names}")
+        logger.info(f"args={cfg.get_args()}")
 
     args_to_keep = cfg.get_args()
     for arg in args_to_keep:
@@ -215,7 +207,6 @@ def compress_df(
             else arg.default_value
         )
     df.drop(["args"], axis=1, inplace=True)
-    # df.rename(columns={"memory bandwidth (GB/s)": "memory_bw_gbps"}, inplace=True)
 
     # create a local symbol table
     local_symbol_table = TraceSymbolTable()
