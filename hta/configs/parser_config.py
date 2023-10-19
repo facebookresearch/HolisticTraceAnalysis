@@ -1,6 +1,6 @@
 import copy
 from enum import Enum
-from typing import Dict, List, NamedTuple, Optional, Union
+from typing import Dict, List, NamedTuple, Optional, Set, Union
 
 
 class ValueType(Enum):
@@ -108,7 +108,12 @@ class ParserConfig:
     ARGS_SYNC: List[AttributeSpec] = [
         AVAILABLE_ARGS[k] for k in ["cuda_sync::stream", "cuda_sync::event"]
     ]
-    ARGS_DEFAULT: List[AttributeSpec] = ARGS_MINIMUM + ARGS_BANDWIDTH + ARGS_SYNC
+    ARGS_DEFAULT: List[AttributeSpec] = (
+        ARGS_MINIMUM
+        + ARGS_BANDWIDTH
+        + ARGS_SYNC
+        + [AVAILABLE_ARGS["index::external_id"]]
+    )
 
     def __init__(self, args: Optional[List[AttributeSpec]] = None):
         self.args: List[AttributeSpec] = args if args else self.get_default_args()
@@ -138,7 +143,7 @@ class ParserConfig:
         return self.args
 
     def add_args(self, args: List[AttributeSpec]) -> None:
-        arg_set: Set(str) = {arg.name for arg in self.args}
+        arg_set: Set[str] = {arg.name for arg in self.args}
         for arg in args:
             if arg.name not in arg_set:
                 self.args.append(arg)
