@@ -31,7 +31,7 @@ class AttributeSpec(NamedTuple):
 AVAILABLE_ARGS: Dict[str, AttributeSpec] = {
     "index::ev_idx": AttributeSpec("ev_idx", "Ev Idx", ValueType.Int, -1),
     "index::external_id": AttributeSpec(
-        "external_id", "External id", ValueType.Int, -1
+        "External id", "External id", ValueType.Int, -1
     ),
     "cpu_op::concrete_inputs": AttributeSpec(
         "concrete_inputs", "Concrete Inputs", ValueType.Int, -1
@@ -138,11 +138,11 @@ class ParserConfig:
         return self.args
 
     def add_args(self, args: List[AttributeSpec]) -> None:
-        arg_set = {arg.name for arg in self.args}
+        arg_set: Set(str) = {arg.name for arg in self.args}
         for arg in args:
             if arg.name not in arg_set:
                 self.args.append(arg)
-                arg_set.add(arg)
+                arg_set.add(arg.name)
 
 
 # Define a global ParserConfig variable for internal use. To access this variable,
