@@ -5,6 +5,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 #### Added
+- Added support for trace parser customization.
 - Added support for H100 traces.
 - (Experimental) Support to read PyTorch Execution Trace and correlate it with PyTorch Profiler Trace.
 
@@ -22,7 +23,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 - (Experimental) Added CUPTI Counter analyzer feature to parse kernel and operator level counter statistics.
 
 #### Changed
-- Improved loading time by parallelizing reads in teh `create_rank_to_trace_dict` function.
+- Improved loading time by parallelizing reads in the `create_rank_to_trace_dict` function.
 
 #### Fixed
 - Fix unit of time in `get_gpu_kernel_breakdown` API.

@@ -1,3 +1,4 @@
+import copy
 from enum import Enum
 from typing import Dict, List, NamedTuple, Optional, Union
 
@@ -110,12 +111,11 @@ class ParserConfig:
     ARGS_DEFAULT: List[AttributeSpec] = ARGS_MINIMUM + ARGS_BANDWIDTH + ARGS_SYNC
 
     def __init__(self, args: Optional[List[AttributeSpec]] = None):
-        self.args: List[AttributeSpec] = []
-        self.set_args(args if args else self.get_default_args())
+        self.args: List[AttributeSpec] = args if args else self.get_default_args()
 
     @classmethod
     def get_default_cfg(cls) -> "ParserConfig":
-        return _DEFAULT_PARSER_CONFIG
+        return copy.deepcopy(_DEFAULT_PARSER_CONFIG)
 
     @classmethod
     def set_default_cfg(cls, cfg: "ParserConfig") -> None:
@@ -123,15 +123,16 @@ class ParserConfig:
 
     @classmethod
     def get_minimum_args(cls) -> List[AttributeSpec]:
-        return cls.ARGS_MINIMUM
+        return cls.ARGS_MINIMUM.copy()
 
     @classmethod
     def get_default_args(cls) -> List[AttributeSpec]:
-        return cls.ARGS_DEFAULT
+        return cls.ARGS_DEFAULT.copy()
 
     def set_args(self, args: List[AttributeSpec]) -> None:
-        self.args.clear()
-        self.add_args(args)
+        if args != self.args:
+            self.args.clear()
+            self.add_args(args)
 
     def get_args(self) -> List[AttributeSpec]:
         return self.args
@@ -141,6 +142,7 @@ class ParserConfig:
         for arg in args:
             if arg.name not in arg_set:
                 self.args.append(arg)
+                arg_set.add(arg)
 
 
 # Define a global ParserConfig variable for internal use. To access this variable,
