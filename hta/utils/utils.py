@@ -105,7 +105,7 @@ def merge_kernel_intervals(kernel_df: pd.DataFrame) -> pd.DataFrame:
     kernel_df["group"] = (kernel_df["ts"] > kernel_df["end"].shift().cummax()).cumsum()
     kernel_df = (
         kernel_df.groupby("group", as_index=False)
-        .agg({"ts": min, "end": max})
+        .agg({"ts": "min", "end": "max"})
         .drop(["group"], axis=1)
         .sort_values(by="ts")
     )

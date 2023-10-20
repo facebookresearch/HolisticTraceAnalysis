@@ -1,7 +1,7 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
+import importlib.util
 import json
 import logging
 import logging.config
@@ -15,7 +15,7 @@ from hta.configs.default_values import DEFAULT_CONFIG_FILENAME
 ConfigValue = Union[None, bool, int, float, str, Dict[str, Any], List[Any], Set[Any]]
 
 
-def setup_logger(config_file: str = "logging.config") -> logging.Logger:
+def setup_logger(config_file: str = "logging.config") -> None:
     global logger
     if config_file:
         log_filepath = os.path.join(
@@ -23,12 +23,9 @@ def setup_logger(config_file: str = "logging.config") -> logging.Logger:
         )
         logging.config.fileConfig(log_filepath)
         logger = logging.getLogger("hta")
-    elif logger is None:
-        logger = logging.getLogger()
-    return logger
 
 
-logger: logging.Logger = logging.getLogger(__name__)
+logger: logging.Logger = logging.getLogger("hta")
 
 
 class HtaConfig:
@@ -135,19 +132,26 @@ class HtaConfig:
         paths = dot_path.split(".")
         found = False
         for i, path in enumerate(paths):
-            if cfg is None:
-                break
-            if isinstance(cfg, Dict) and path in cfg:
+            if cfg and isinstance(cfg, Dict) and path in cfg:
                 cfg = cfg[path]
                 if i == len(paths) - 1:
                     found = True
             else:
                 break
 
-        if found:
-            return cfg
-        else:
-            return default_value
+        return cfg if found else default_value
 
     def show(self):
         print(json.dumps(self.config, indent=4, sort_keys=True))
+
+    @classmethod
+    def get_package_path(cls) -> str:
+        package_spec = importlib.util.find_spec(hta.__name__)
+        package_path = Path(package_spec.origin).parent
+        return str(package_path)
+
+    @classmethod
+    def get_test_data_path(cls, dataset: str) -> str:
+        base_path = Path(cls.get_package_path()).parent
+        test_data_path = Path.joinpath(base_path, "tests/data/", dataset)
+        return str(test_data_path)

@@ -43,8 +43,7 @@ def load_execution_trace(et_file: str) -> ExecutionTrace:
     t_end = time.perf_counter()
 
     logger.info(
-        f"Parsed Execution Trace file {et_file}, "
-        f"time = {(t_end - t_start):.2f} seconds "
+        f"Parsed Execution Trace file {et_file}, time = {(t_end - t_start): .2f} seconds "
     )
     return et
 
@@ -60,6 +59,8 @@ def _et_has_overlap(trace_df: pd.DataFrame, et: ExecutionTrace) -> bool:
     Returns:
         True if Kineto Trace and Execution Trace have overlap.
     """
+    assert "external_id" in trace_df.columns
+
     et_min_rf, et_max_rf = sys.maxsize, 0
     rf_ids = (
         node.rf_id
@@ -72,14 +73,13 @@ def _et_has_overlap(trace_df: pd.DataFrame, et: ExecutionTrace) -> bool:
         et_min_rf = min(rf_id, et_min_rf)
         et_max_rf = max(rf_id, et_max_rf)
 
-    kt_min_rf, kt_max_rf = trace_df["External id"].min(), trace_df["External id"].max()
+    kt_min_rf, kt_max_rf = trace_df["external_id"].min(), trace_df["external_id"].max()
 
     has_overlap = kt_min_rf <= et_min_rf and kt_max_rf >= et_max_rf
 
     logging.info(f"Trace and ET have overlap = {has_overlap}")
     logging.info(
-        f"Trace rf_ids ({kt_min_rf}, {kt_max_rf}),"
-        f"ET rf_ids ({et_min_rf}, {et_max_rf})"
+        f"Trace rf_ids ({kt_min_rf}, {kt_max_rf}), ET rf_ids ({et_min_rf}, {et_max_rf})"
     )
     return has_overlap
 
@@ -125,7 +125,7 @@ def correlate_execution_trace(trace: Trace, rank: int, et: ExecutionTrace) -> No
 
     row_indexer = trace_df["cat"].isin(sym_ids)
     trace_df.loc[row_indexer, "et_node"] = trace_df.apply(
-        lambda row: rf_id_to_et_node_id.get(row["External id"], None), axis=1
+        lambda row: rf_id_to_et_node_id.get(row["external_id"], None), axis=1
     )
     return
 
