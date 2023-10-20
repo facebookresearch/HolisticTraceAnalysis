@@ -120,13 +120,14 @@ class TraceSymbolTable:
         to filter events that are CUDA runtime kernel and memcpy launches."""
         cudaLaunchKernel_id = self.sym_index.get("cudaLaunchKernel", -128)
         cudaLaunchKernelExC_id = self.sym_index.get("cudaLaunchKernelExC", -128)
+        cuLaunchKernel_id = self.sym_index.get("cuLaunchKernel", -128)
         cudaMemcpyAsync_id = self.sym_index.get("cudaMemcpyAsync", -128)
         cudaMemsetAsync_id = self.sym_index.get("cudaMemsetAsync", -128)
 
         return (
             f"((name == {cudaMemsetAsync_id}) or (name == {cudaMemcpyAsync_id}) or "
-            f" (name == {cudaLaunchKernel_id}) or (name == {cudaLaunchKernelExC_id}))"
-            "and (index_correlation > 0)"
+            f" (name == {cudaLaunchKernel_id}) or (name == {cudaLaunchKernelExC_id})"
+            f" or (name == {cuLaunchKernel_id})) and (index_correlation > 0)"
         )
 
 
