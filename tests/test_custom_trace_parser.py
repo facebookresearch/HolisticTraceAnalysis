@@ -4,7 +4,7 @@ import unittest
 
 from hta.common.trace import Trace
 from hta.common.trace_file import write_trace
-from hta.configs.parser_config import ParserConfig, AVAILABLE_ARGS
+from hta.configs.parser_config import AVAILABLE_ARGS, ParserConfig
 
 
 class CustomTraceParserTestCase(unittest.TestCase):
@@ -97,21 +97,24 @@ class CustomTraceParserTestCase(unittest.TestCase):
             needed by other analyzers within the same run.
         """
         original_args = ParserConfig.get_default_cfg().get_args().copy()
-        args = [AVAILABLE_ARGS[key] for key in [
-            "cuda::stream",
-            "correlation::cpu_gpu",
-            "data::bandwidth",
-            "index::external_id",
-            "cpu_op::input_dims",
-            "cpu_op::input_type",
-            "correlation::cpu_gpu",
-            "sm::occupancy",
-            "data::bandwidth",
-            "cuda::stream",
-            "kernel::queued",
-            "cuda_sync::stream",
-            "cuda_sync::event",
-        ]]
+        args = [
+            AVAILABLE_ARGS[key]
+            for key in [
+                "cuda::stream",
+                "correlation::cpu_gpu",
+                "data::bandwidth",
+                "index::external_id",
+                "cpu_op::input_dims",
+                "cpu_op::input_type",
+                "correlation::cpu_gpu",
+                "sm::occupancy",
+                "data::bandwidth",
+                "cuda::stream",
+                "kernel::queued",
+                "cuda_sync::stream",
+                "cuda_sync::event",
+            ]
+        ]
         custom_cfg = cfg = ParserConfig(args)
         ParserConfig.set_default_cfg(custom_cfg)
         current_arg_names = {
@@ -128,6 +131,7 @@ class CustomTraceParserTestCase(unittest.TestCase):
 
         # Restore the default
         ParserConfig.set_default_cfg(ParserConfig())
+
 
 if __name__ == "__main__":
     unittest.main()
