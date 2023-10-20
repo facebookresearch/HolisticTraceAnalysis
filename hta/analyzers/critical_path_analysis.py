@@ -476,7 +476,7 @@ class CPGraph(nx.DiGraph):
         last_node: Dict[int, CPNode] = {}
 
         # Scheduled a GPU-GPU sync on a stream
-        #  map from source kernel event ID -> event ID of kernel to sync on
+        #  map from dest kernel event ID -> event ID of kernel to sync on
         kernel_sync: Dict[int, int] = {}
 
         def handle_cuda_sync(row):
