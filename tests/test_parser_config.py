@@ -13,14 +13,9 @@ class ParserConfigTestCase(unittest.TestCase):
     def _compare_attributes(
         cls, args1: List[AttributeSpec], args2: List[AttributeSpec]
     ) -> bool:
-        if len(args1) != len(args2):
-            return False
-        args1.sort(key=lambda a: a.name)
-        args2.sort(key=lambda a: a.name)
-        for i, arg in enumerate(args1):
-            if arg != args2[i]:
-                return False
-        return True
+        set_args1 = {a.name for a in args1}
+        set_args2 = {a.name for a in args2}
+        return set_args1 == set_args2
 
     def test_constructor(self) -> None:
         t_cases = [

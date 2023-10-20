@@ -59,9 +59,7 @@ def _et_has_overlap(trace_df: pd.DataFrame, et: ExecutionTrace) -> bool:
     Returns:
         True if Kineto Trace and Execution Trace have overlap.
     """
-    if "external_id" not in trace_df.columns:
-        logger.error(f"'external_id' is not in trace_df's columns: {trace_df.columns}")
-        return False
+    assert "external_id" in trace_df.columns
 
     et_min_rf, et_max_rf = sys.maxsize, 0
     rf_ids = (

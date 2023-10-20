@@ -15,7 +15,7 @@ from hta.configs.default_values import DEFAULT_CONFIG_FILENAME
 ConfigValue = Union[None, bool, int, float, str, Dict[str, Any], List[Any], Set[Any]]
 
 
-def setup_logger(config_file: str = "logging.config") -> logging.Logger:
+def setup_logger(config_file: str = "logging.config") -> None:
     global logger
     if config_file:
         log_filepath = os.path.join(
@@ -23,9 +23,6 @@ def setup_logger(config_file: str = "logging.config") -> logging.Logger:
         )
         logging.config.fileConfig(log_filepath)
         logger = logging.getLogger("hta")
-    elif logger is None:
-        logger = logging.getLogger()
-    return logger
 
 
 logger: logging.Logger = logging.getLogger("hta")
@@ -135,19 +132,14 @@ class HtaConfig:
         paths = dot_path.split(".")
         found = False
         for i, path in enumerate(paths):
-            if cfg is None:
-                break
-            if isinstance(cfg, Dict) and path in cfg:
+            if cfg and isinstance(cfg, Dict) and path in cfg:
                 cfg = cfg[path]
                 if i == len(paths) - 1:
                     found = True
             else:
                 break
 
-        if found:
-            return cfg
-        else:
-            return default_value
+        return cfg if found else default_value
 
     def show(self):
         print(json.dumps(self.config, indent=4, sort_keys=True))

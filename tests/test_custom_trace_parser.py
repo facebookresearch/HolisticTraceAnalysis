@@ -122,7 +122,3 @@ class CustomTraceParserTestCase(unittest.TestCase):
             df = t.get_trace(self.rank)
             self.assertTrue(all(arg.name in df.columns for arg in cfg.get_args()))
             self.assertFalse(all(arg.name in df.columns for arg in removed_args))
-
-
-if __name__ == "__main__":
-    unittest.main()
