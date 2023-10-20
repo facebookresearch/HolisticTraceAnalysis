@@ -325,6 +325,48 @@ class CPGraph(nx.DiGraph):
 
         return cuda_record_calls
 
+    def _get_cuda_stream_wait_event_df(self) -> Optional[pd.DataFrame]:
+        """For Event based synchronization we need to track the next
+        kernel/memcpy launched on a CPU thread just juast after cudaStreamWaitEvent
+
+        This function returns a dataframe of cudaEventRecord events,
+        and includes an additional column 'index_next_launch'
+        that specifies the closest CUDA kernel launch on the same CPU thread.
+        """
+        sym_index = self.symbol_table.get_sym_id_map()
+        if (
+            "cudaStreamWaitEvent" not in sym_index
+            or "Stream Wait Event" not in sym_index
+        ):
+            return None
+
+        # CUDA launch runtime calls
+        runtime_calls: pd.DataFrame = (
+            self.trace_df.query(self.symbol_table.get_runtime_launch_events_query())
+            .copy()
+            .sort_values(by="ts", axis=0)
+        )
+
+        cudaStreamWaitEvent_id = sym_index.get("cudaStreamWaitEvent")
+
+        cuda_stream_wait_events = (
+            self.trace_df.query(f"name == {cudaStreamWaitEvent_id}")
+            .copy()
+            .sort_values(by="ts", axis=0)
+        )
+
+        def _next_launch(ts: int, pid: int, tid: int) -> Optional[int]:
+            """Find the next CUDA launch on same pid and tid"""
+            df = runtime_calls.query(f"pid == {pid} and tid == {tid}")
+            upper_neighbors = df[df["ts"] > ts]["ts"]
+            return upper_neighbors.idxmin() if len(upper_neighbors) else None
+
+        cuda_stream_wait_events["index_next_launch"] = cuda_stream_wait_events.apply(
+            lambda x: _next_launch(x["ts"], x["pid"], x["tid"]), axis=1
+        )
+
+        return cuda_stream_wait_events
+
     def _check_stream_wait_event_helper(self, row) -> bool:
         eid = row["index"]
         if "wait_on_cuda_event_record_corr_id" not in row:
@@ -367,6 +409,7 @@ class CPGraph(nx.DiGraph):
         # and find the previous GPU kernel/memcpy launch, this is recorded
         # in the index_previous_launch column
         cuda_record_calls = self._get_cuda_event_record_df()
+        cuda_stream_wait_events = self._get_cuda_stream_wait_event_df()
 
         if (
             "wait_on_cuda_event_record_corr_id" in self.trace_df
@@ -410,7 +453,7 @@ class CPGraph(nx.DiGraph):
         last_node: Dict[int, CPNode] = {}
 
         # Scheduled a GPU-GPU sync on a stream
-        #  map from stream -> event ID of kernel to sync on
+        #  map from source kernel event ID -> event ID of kernel to sync on
         kernel_sync: Dict[int, int] = {}
 
         def handle_cuda_sync(row):
@@ -429,17 +472,30 @@ class CPGraph(nx.DiGraph):
                 if not self._check_stream_wait_event_helper(row):
                     return
 
-                kernel_index = self.trace_df.index_correlation[
+                src_kernel_index = self.trace_df.index_correlation[
                     row["index_previous_launch"]
                 ]
-                # Schedule a sync on this stream with above kernel
-                logger.debug(
+
+                # Get the corresponding CPU event for this StreamWaitEvent
+                dest_kernel_launch_index = cuda_stream_wait_events.loc[
+                    row["index_correlation"]
+                ]["index_next_launch"]
+
+                # Use the next lanuch to find dest_kernel
+                dest_kernel_index = self.trace_df.index_correlation[
+                    dest_kernel_launch_index
+                ]
+
+                logger.info(
                     f"Scheduling a Stream Sync on stream {row['stream']} "
-                    f"on kernel with index = {kernel_index}, corr id = "
-                    f"{self.trace_df.correlation.loc[kernel_index]}"
+                    f" dest kernel index {dest_kernel_index}, corr id = "
+                    f"{self.trace_df.correlation.loc[dest_kernel_index]}\n "
+                    f"on src kernel with index = {src_kernel_index}, corr id = "
+                    f"{self.trace_df.correlation.loc[src_kernel_index]}"
                 )
-                kernel_sync[row["stream"]] = kernel_index
+                kernel_sync[dest_kernel_index] = src_kernel_index
                 return
+
             assert name == stream_sync or name == context_sync
 
             # For Context Sync add a sync edge on the last event on all streams,
@@ -475,7 +531,7 @@ class CPGraph(nx.DiGraph):
             start_node, end_node = self._add_event(eid)
             self._add_edge_helper(start_node, end_node)
 
-            kernel_sync_index = kernel_sync.get(stream)
+            kernel_sync_index = kernel_sync.get(eid)
             kernel_sync_end: Optional[CPNode] = None
 
             # We need to sync between two kernels
@@ -487,7 +543,7 @@ class CPGraph(nx.DiGraph):
                         f" eid = {eid}, stream = {stream}, "
                         f"name = {self._get_node_name(eid)}, correlation = {row['correlation']}"
                     )
-                    kernel_sync[stream] = None
+                    kernel_sync[eid] = None
                     continue
 
                 # assert kernel_sync_end is not None
@@ -500,7 +556,7 @@ class CPGraph(nx.DiGraph):
                     f"{kernel_sync_end} -> {start_node}"
                 )
                 # reset the kernel-kernel sync
-                kernel_sync[stream] = None
+                kernel_sync[eid] = None
 
             if (
                 # There were no outstanding kernels on this stream during the launch
@@ -520,13 +576,11 @@ class CPGraph(nx.DiGraph):
                 # Add launch delay edge if there were no outstanding kernels
                 # when the CUDA runtime was launching it.
                 runtime_start, _ = self.get_nodes_for_event(runtime_index)
-                if runtime_start is None:
-                    logger.warning(
-                        f"Could not find runtime index = {runtime_index}, current kernel "
-                        f" eid = {eid}, stream = {stream}, "
-                        f"name = {self._get_node_name(eid)}, correlation = {row['correlation']}"
-                    )
-                    continue
+                assert runtime_start is not None, (
+                    f"Could not find runtime index = {runtime_index}, current kernel "
+                    f"stream = {stream}, "
+                    f"name = {self._get_node_name(eid)}, correlation = {row['correlation']}"
+                )
                 self._add_edge_helper(
                     runtime_start, start_node, type=CPEdgeType.KERNEL_LAUNCH_DELAY
                 )
