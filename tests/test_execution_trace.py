@@ -2,20 +2,22 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+import os
 import unittest
 
 import pandas as pd
 
 from hta.common import execution_trace
+from hta.configs.config import HtaConfig
 from hta.trace_analysis import TraceAnalysis
 
 
 class TraceAnalysisTestCase(unittest.TestCase):
     def setUp(self):
-        self.execution_trace_dir: str = "tests/data/execution_trace/"
+        self.execution_trace_dir: str = HtaConfig.get_test_data_path("execution_trace")
         self.analyzer_t = TraceAnalysis(trace_dir=self.execution_trace_dir)
-        self.execution_trace_file: str = (
-            self.execution_trace_dir + "benchmark_simple_add_et.json.gz"
+        self.execution_trace_file: str = os.path.join(
+            self.execution_trace_dir, "benchmark_simple_add_et.json.gz"
         )
 
     def test_execution_trace_load(self):

@@ -31,7 +31,7 @@ class AttributeSpec(NamedTuple):
 AVAILABLE_ARGS: Dict[str, AttributeSpec] = {
     "index::ev_idx": AttributeSpec("ev_idx", "Ev Idx", ValueType.Int, -1),
     "index::external_id": AttributeSpec(
-        "External id", "External id", ValueType.Int, -1
+        "external_id", "External id", ValueType.Int, -1
     ),
     "cpu_op::concrete_inputs": AttributeSpec(
         "concrete_inputs", "Concrete Inputs", ValueType.Int, -1
@@ -102,11 +102,14 @@ class ParserConfig:
     ARGS_BANDWIDTH: List[AttributeSpec] = [
         AVAILABLE_ARGS[k] for k in ["data::bytes", "data::bandwidth"]
     ]
+    ARGS_SYNC: List[AttributeSpec] = [
+        AVAILABLE_ARGS[k] for k in ["cuda_sync::stream", "cuda_sync::event"]
+    ]
     ARGS_MINIMUM: List[AttributeSpec] = [
         AVAILABLE_ARGS[k] for k in ["cuda::stream", "correlation::cpu_gpu"]
     ]
-    ARGS_SYNC: List[AttributeSpec] = [
-        AVAILABLE_ARGS[k] for k in ["cuda_sync::stream", "cuda_sync::event"]
+    ARGS_COMPLETE: List[AttributeSpec] = [
+        AVAILABLE_ARGS[k] for k in AVAILABLE_ARGS if not k.startswith("info")
     ]
     ARGS_DEFAULT: List[AttributeSpec] = (
         ARGS_MINIMUM

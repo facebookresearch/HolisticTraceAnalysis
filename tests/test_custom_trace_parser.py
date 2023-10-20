@@ -4,7 +4,7 @@ import unittest
 
 from hta.common.trace import Trace
 from hta.common.trace_file import write_trace
-from hta.configs.parser_config import ParserConfig
+from hta.configs.parser_config import ParserConfig, AVAILABLE_ARGS
 
 
 class CustomTraceParserTestCase(unittest.TestCase):
@@ -90,8 +90,30 @@ class CustomTraceParserTestCase(unittest.TestCase):
             self.assertTrue(all(arg.name in df.columns for arg in cfg.get_args()))
 
     def test_custom_config(self) -> None:
+        """
+        Note:
+            Because ParserConfig.set_default_cfg() modifies a global variable, it normally should be
+            only called once before parsing any trace to prevent accidentially removing some attributes
+            needed by other analyzers within the same run.
+        """
         original_args = ParserConfig.get_default_cfg().get_args().copy()
-        ParserConfig.set_default_cfg(ParserConfig(ParserConfig.ARGS_MINIMUM))
+        args = [AVAILABLE_ARGS[key] for key in [
+            "cuda::stream",
+            "correlation::cpu_gpu",
+            "data::bandwidth",
+            "index::external_id",
+            "cpu_op::input_dims",
+            "cpu_op::input_type",
+            "correlation::cpu_gpu",
+            "sm::occupancy",
+            "data::bandwidth",
+            "cuda::stream",
+            "kernel::queued",
+            "cuda_sync::stream",
+            "cuda_sync::event",
+        ]]
+        custom_cfg = cfg = ParserConfig(args)
+        ParserConfig.set_default_cfg(custom_cfg)
         current_arg_names = {
             arg.name for arg in ParserConfig.get_default_cfg().get_args()
         }
@@ -104,6 +126,8 @@ class CustomTraceParserTestCase(unittest.TestCase):
             self.assertTrue(all(arg.name in df.columns for arg in cfg.get_args()))
             self.assertFalse(all(arg.name in df.columns for arg in removed_args))
 
+        # Restore the default
+        ParserConfig.set_default_cfg(ParserConfig())
 
 if __name__ == "__main__":
     unittest.main()
