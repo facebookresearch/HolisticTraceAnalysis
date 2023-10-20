@@ -697,18 +697,19 @@ class CriticalPathAnalysis:
         a trace annotation and instance id. This will
         limit the analysis to events within the time range of that annoation.
         For example, you can use this to limit the analysis to one iteration
-        by passing annotation='ProfilerStep500'.
+        by passing annotation='ProfilerStep'.
 
         Args:
             t (Trace): Input trace data structure.
             rank (int): rank to analyze for the critical path.
             annotation (str): a trace annotation to limit the analysis to,
                 for example "ProfilerStep" would match all annotations that
-                match this string.
-            instance_id:
-                (int) - optionally specify which instance of the annotation
-                to consider. Defaults to the first instance.
-                (Tuple(int, int))
+                match this string (ProfilerStep100, ProfilerStep101 etc)
+            instance_id: can be either of the following
+                (int) - specify which instance of the annotation to consider. 
+                        Defaults to the first instance.
+                (Tuple(int, int)) - considers a range of annotation instances start to end,
+                        inclusive of both start and end instance.
 
         Returns: Tuple[CPGraph, bool] a pair of CPGraph object and a success or
             fail boolean value. True indicates that the critical path analysis
