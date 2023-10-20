@@ -529,7 +529,7 @@ class TraceAnalysis:
                 for example "ProfilerStep" would match all annotations that
                 match this string (ProfilerStep100, ProfilerStep101 etc)
             instance_id: can be either of the following
-                (int) - specify which instance of the annotation to consider. 
+                (int) - specify which instance of the annotation to consider.
                         Defaults to the first instance.
                 (Tuple(int, int)) - considers a range of annotation instances start to end,
                         inclusive of both start and end instance.

@@ -329,7 +329,7 @@ class CPGraph(nx.DiGraph):
         """For Event based synchronization we need to track the next
         kernel/memcpy launched on a CPU thread just juast after cudaStreamWaitEvent
 
-        This function returns a dataframe of cudaEventRecord events,
+        This function returns a dataframe of cudaStreamWaitEvent events,
         and includes an additional column 'index_next_launch'
         that specifies the closest CUDA kernel launch on the same CPU thread
         and associated CUDA stream.
@@ -706,7 +706,7 @@ class CriticalPathAnalysis:
                 for example "ProfilerStep" would match all annotations that
                 match this string (ProfilerStep100, ProfilerStep101 etc)
             instance_id: can be either of the following
-                (int) - specify which instance of the annotation to consider. 
+                (int) - specify which instance of the annotation to consider.
                         Defaults to the first instance.
                 (Tuple(int, int)) - considers a range of annotation instances start to end,
                         inclusive of both start and end instance.
