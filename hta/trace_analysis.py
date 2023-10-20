@@ -4,7 +4,7 @@
 
 from collections import defaultdict
 from enum import auto, Flag
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import pandas as pd
 
@@ -510,7 +510,7 @@ class TraceAnalysis:
         self,
         rank: int,
         annotation: str,
-        instance_id: Optional[int],
+        instance_id: Union[Optional[int], Tuple[int, int]],
     ) -> Tuple[CPGraph, bool]:
         r"""
         Perform critical path analysis for trace events within a rank.

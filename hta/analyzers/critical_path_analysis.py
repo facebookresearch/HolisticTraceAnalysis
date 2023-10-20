@@ -8,7 +8,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 import networkx as nx
 import pandas as pd
@@ -487,6 +487,7 @@ class CPGraph(nx.DiGraph):
                         f" eid = {eid}, stream = {stream}, "
                         f"name = {self._get_node_name(eid)}, correlation = {row['correlation']}"
                     )
+                    kernel_sync[stream] = None
                     continue
 
                 # assert kernel_sync_end is not None
@@ -519,7 +520,13 @@ class CPGraph(nx.DiGraph):
                 # Add launch delay edge if there were no outstanding kernels
                 # when the CUDA runtime was launching it.
                 runtime_start, _ = self.get_nodes_for_event(runtime_index)
-                assert runtime_start is not None
+                if runtime_start is None:
+                    logger.warning(
+                        f"Could not find runtime index = {runtime_index}, current kernel "
+                        f" eid = {eid}, stream = {stream}, "
+                        f"name = {self._get_node_name(eid)}, correlation = {row['correlation']}"
+                    )
+                    continue
                 self._add_edge_helper(
                     runtime_start, start_node, type=CPEdgeType.KERNEL_LAUNCH_DELAY
                 )
@@ -596,7 +603,7 @@ class CriticalPathAnalysis:
         t: "Trace",
         rank: int,
         annotation: str,
-        instance_id: Optional[int],
+        instance_id: Union[Optional[int], Tuple[int, int]],
     ) -> Tuple[CPGraph, bool]:
         r"""
         Perform critical path analysis for trace events within a rank.
@@ -610,9 +617,12 @@ class CriticalPathAnalysis:
             t (Trace): Input trace data structure.
             rank (int): rank to analyze for the critical path.
             annotation (str): a trace annotation to limit the analysis to,
-                such as "ProfilerStep1200"
-            intance (int): optionally specify which instance of the annotation
+                for example "ProfilerStep" would match all annotations that
+                match this string.
+            instance_id:
+                (int) - optionally specify which instance of the annotation
                 to consider. Defaults to the first instance.
+                (Tuple(int, int))
 
         Returns: Tuple[CPGraph, bool] a pair of CPGraph object and a success or
             fail boolean value. True indicates that the critical path analysis
@@ -640,37 +650,50 @@ class CriticalPathAnalysis:
         # XXX add logic for filter by iteration
         if 1:
             annotation_id = sym_index.get(annotation, None)
-            if annotation_id is None:
+            annotation_ids = [
+                val for key, val in sym_index.items() if annotation in key
+            ]
+
+            if len(annotation_ids) == 0:
                 logger.error(f"Could not find annotation {annotation} in the trace.")
                 return None
+
             if instance_id is None:
-                instance_id = 0
+                instance_start, instance_end = 0, 0
+            elif isinstance(instance_id, tuple):
+                instance_start, instance_end = instance_id
+            elif isinstance(instance_id, int):
+                instance_start, instance_end = instance_id, instance_id
+            else:
+                logger.error("Unexpected input type instance_id")
+                return
 
             logger.info(
-                f"Looking up events under {instance_id} instance of '{annotation}' annotation"
+                f"Looking up events under [{instance_start}, {instance_end}) "
+                f"instance(s) of '{annotation}' annotation."
             )
 
-            annotation_span = (
-                trace_df[trace_df.name == annotation_id].iloc[instance_id].to_dict()
-            )
+            annotations = trace_df[trace_df.name.isin(annotation_ids)].copy()
+            annotations["end_ts"] = annotations["ts"] + annotations["dur"]
 
-            start_ts = annotation_span["ts"]
-            end_ts = annotation_span["ts"] + annotation_span["dur"]
+            start_ts = annotations.ts[instance_start : instance_end + 1].min()
+            end_ts = annotations.end_ts[instance_start : instance_end + 1].max()
+
+            logger.info(f"Looking up events within the window ({start_ts}, {end_ts})")
 
             # Consider all events that start within the annotatated window.
             # and also fiter out 0 duration events as they mess up the
             # event stack generation
-            a = trace_df.query(f"(ts >= {start_ts} and ts <= {end_ts}) and dur > 0")
+            cpu_kernels = trace_df[trace_df["stream"].eq(-1)]
+            a = cpu_kernels.query(f"(ts >= {start_ts} and ts <= {end_ts}) and dur > 0")
 
-            # Also consider GPU kernels whose runtime events are in the correct
+            # Only consider GPU kernels whose runtime events are in the correct
             # time window
             gpu_kernels = trace_df[trace_df["stream"].ne(-1)]
-            cpu_events = trace_df[trace_df["stream"].eq(-1)].set_index(
-                "index_correlation"
-            )
+            cpu_kernels = cpu_kernels.copy().set_index("index_correlation")
             b = (
                 gpu_kernels[["ts", "dur", "correlation"]]
-                .join(cpu_events["ts"], rsuffix="_runtime")
+                .join(cpu_kernels["ts"], rsuffix="_runtime")
                 .query(
                     f"(ts_runtime >= {start_ts} and ts_runtime <= {end_ts}) and dur > 0"
                 )
