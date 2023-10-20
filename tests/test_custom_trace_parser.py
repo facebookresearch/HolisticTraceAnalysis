@@ -104,12 +104,6 @@ class CustomTraceParserTestCase(unittest.TestCase):
                 "correlation::cpu_gpu",
                 "data::bandwidth",
                 "index::external_id",
-                "cpu_op::input_dims",
-                "cpu_op::input_type",
-                "correlation::cpu_gpu",
-                "sm::occupancy",
-                "data::bandwidth",
-                "cuda::stream",
                 "kernel::queued",
                 "cuda_sync::stream",
                 "cuda_sync::event",
@@ -128,9 +122,6 @@ class CustomTraceParserTestCase(unittest.TestCase):
             df = t.get_trace(self.rank)
             self.assertTrue(all(arg.name in df.columns for arg in cfg.get_args()))
             self.assertFalse(all(arg.name in df.columns for arg in removed_args))
-
-        # Restore the default
-        ParserConfig.set_default_cfg(ParserConfig())
 
 
 if __name__ == "__main__":
