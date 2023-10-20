@@ -734,59 +734,57 @@ class CriticalPathAnalysis:
                 "events https://github.com/pytorch/pytorch/pull/105187"
             )
 
-        # XXX add logic for filter by iteration
-        if 1:
-            annotation_id = sym_index.get(annotation, None)
-            annotation_ids = [
-                val for key, val in sym_index.items() if annotation in key
-            ]
+        annotation_id = sym_index.get(annotation, None)
+        annotation_ids = [
+            val for key, val in sym_index.items() if annotation in key
+        ]
 
-            if len(annotation_ids) == 0:
-                logger.error(f"Could not find annotation {annotation} in the trace.")
-                return None
+        if len(annotation_ids) == 0:
+            logger.error(f"Could not find annotation {annotation} in the trace.")
+            return None
 
-            if instance_id is None:
-                instance_start, instance_end = 0, 0
-            elif isinstance(instance_id, tuple):
-                instance_start, instance_end = instance_id
-            elif isinstance(instance_id, int):
-                instance_start, instance_end = instance_id, instance_id
-            else:
-                logger.error("Unexpected input type instance_id")
-                return
+        if instance_id is None:
+            instance_start, instance_end = 0, 0
+        elif isinstance(instance_id, tuple):
+            instance_start, instance_end = instance_id
+        elif isinstance(instance_id, int):
+            instance_start, instance_end = instance_id, instance_id
+        else:
+            logger.error("Unexpected input type instance_id")
+            return
 
-            logger.info(
-                f"Looking up events under [{instance_start}, {instance_end}) "
-                f"instance(s) of '{annotation}' annotation."
+        logger.info(
+            f"Looking up events under [{instance_start}, {instance_end}) "
+            f"instance(s) of '{annotation}' annotation."
+        )
+
+        annotations = trace_df[trace_df.name.isin(annotation_ids)].copy()
+        annotations["end_ts"] = annotations["ts"] + annotations["dur"]
+
+        start_ts = annotations.ts[instance_start : instance_end + 1].min()
+        end_ts = annotations.end_ts[instance_start : instance_end + 1].max()
+
+        logger.info(f"Looking up events within the window ({start_ts}, {end_ts})")
+
+        # Consider all events that start within the annotatated window.
+        # and also fiter out 0 duration events as they mess up the
+        # event stack generation
+        cpu_kernels = trace_df[trace_df["stream"].eq(-1)]
+        a = cpu_kernels.query(f"(ts >= {start_ts} and ts <= {end_ts}) and dur > 0")
+
+        # Only consider GPU kernels whose runtime events are in the correct
+        # time window
+        gpu_kernels = trace_df[trace_df["stream"].ne(-1)]
+        cpu_kernels = cpu_kernels.copy().set_index("index_correlation")
+        b = (
+            gpu_kernels[["ts", "dur", "correlation"]]
+            .join(cpu_kernels["ts"], rsuffix="_runtime")
+            .query(
+                f"(ts_runtime >= {start_ts} and ts_runtime <= {end_ts}) and dur > 0"
             )
+        )
 
-            annotations = trace_df[trace_df.name.isin(annotation_ids)].copy()
-            annotations["end_ts"] = annotations["ts"] + annotations["dur"]
-
-            start_ts = annotations.ts[instance_start : instance_end + 1].min()
-            end_ts = annotations.end_ts[instance_start : instance_end + 1].max()
-
-            logger.info(f"Looking up events within the window ({start_ts}, {end_ts})")
-
-            # Consider all events that start within the annotatated window.
-            # and also fiter out 0 duration events as they mess up the
-            # event stack generation
-            cpu_kernels = trace_df[trace_df["stream"].eq(-1)]
-            a = cpu_kernels.query(f"(ts >= {start_ts} and ts <= {end_ts}) and dur > 0")
-
-            # Only consider GPU kernels whose runtime events are in the correct
-            # time window
-            gpu_kernels = trace_df[trace_df["stream"].ne(-1)]
-            cpu_kernels = cpu_kernels.copy().set_index("index_correlation")
-            b = (
-                gpu_kernels[["ts", "dur", "correlation"]]
-                .join(cpu_kernels["ts"], rsuffix="_runtime")
-                .query(
-                    f"(ts_runtime >= {start_ts} and ts_runtime <= {end_ts}) and dur > 0"
-                )
-            )
-
-            clipped_df = trace_df.loc[a.index.union(b.index)].copy()
+        clipped_df = trace_df.loc[a.index.union(b.index)].copy()
 
         logger.info(f"Clipped dataframe has {len(clipped_df)} events")
 
