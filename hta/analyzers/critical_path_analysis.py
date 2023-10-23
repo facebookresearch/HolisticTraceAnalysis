@@ -544,6 +544,8 @@ class CPGraph(nx.DiGraph):
 
         critical_path_nodes_set = set(self.critical_path_nodes)
 
+        # Reset critical_path_edges_set across invocations
+        self.critical_path_edges_set = set()
         for u, v in self.edges:
             e = self.edges[u, v]["object"]
             if u in critical_path_nodes_set and v in critical_path_nodes_set:
