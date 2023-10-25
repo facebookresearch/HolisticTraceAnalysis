@@ -12,7 +12,7 @@ from hta.configs.config import HtaConfig
 from hta.trace_analysis import TraceAnalysis
 
 
-class TraceAnalysisTestCase(unittest.TestCase):
+class ExecutionTraceTestCase(unittest.TestCase):
     def setUp(self):
         self.execution_trace_dir: str = HtaConfig.get_test_data_path("execution_trace")
         self.analyzer_t = TraceAnalysis(trace_dir=self.execution_trace_dir)
