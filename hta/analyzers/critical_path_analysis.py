@@ -735,9 +735,7 @@ class CriticalPathAnalysis:
             )
 
         annotation_id = sym_index.get(annotation, None)
-        annotation_ids = [
-            val for key, val in sym_index.items() if annotation in key
-        ]
+        annotation_ids = [val for key, val in sym_index.items() if annotation in key]
 
         if len(annotation_ids) == 0:
             logger.error(f"Could not find annotation {annotation} in the trace.")
@@ -779,9 +777,7 @@ class CriticalPathAnalysis:
         b = (
             gpu_kernels[["ts", "dur", "correlation"]]
             .join(cpu_kernels["ts"], rsuffix="_runtime")
-            .query(
-                f"(ts_runtime >= {start_ts} and ts_runtime <= {end_ts}) and dur > 0"
-            )
+            .query(f"(ts_runtime >= {start_ts} and ts_runtime <= {end_ts}) and dur > 0")
         )
 
         clipped_df = trace_df.loc[a.index.union(b.index)].copy()
