@@ -590,7 +590,9 @@ class Trace:
             f"leaving {sys._getframe().f_code.co_name} duration={t1 - t0:.2f} seconds"
         )
 
-    def align_and_filter_trace(self, include_last_profiler_step: Optional[bool] = False) -> None:
+    def align_and_filter_trace(
+        self, include_last_profiler_step: Optional[bool] = False
+    ) -> None:
         """
         Align the starting time across multiple ranks and filter events that belong to incomplete iterations.
         """
@@ -693,7 +695,9 @@ class Trace:
             trace_df["ts"] = trace_df["ts"] - self.min_ts
             self.traces[rank] = trace_df
 
-    def _filter_irrelevant_gpu_kernels(self, include_last_profiler_step: Optional[bool] = False) -> None:
+    def _filter_irrelevant_gpu_kernels(
+        self, include_last_profiler_step: Optional[bool] = False
+    ) -> None:
         """
         Filter out GPU kernels that are not launched by the CPU kernels in the traced iterations.
         """
