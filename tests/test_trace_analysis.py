@@ -21,7 +21,6 @@ from hta.trace_analysis import TimeSeriesTypes, TraceAnalysis
 
 class TraceAnalysisTestCase(unittest.TestCase):
     vision_transformer_t: TraceAnalysis
-    vision_transformer_include_last_profiler_step_t: TraceAnalysis
     inference_t: TraceAnalysis
     df_index_resolver_t: TraceAnalysis
     rank_non_gpu_t: TraceAnalysis
@@ -35,9 +34,6 @@ class TraceAnalysisTestCase(unittest.TestCase):
         rank_non_gpu_trace_dir: str = "tests/data/rank_non_gpu/"
         h100_trace_dir: str = "tests/data/h100"
         cls.vision_transformer_t = TraceAnalysis(trace_dir=vision_transformer_trace_dir)
-        cls.vision_transformer_include_last_profiler_step_t = TraceAnalysis(
-            trace_dir=vision_transformer_trace_dir, include_last_profiler_step=True
-        )
         cls.inference_t = TraceAnalysis(trace_dir=inference_trace_dir)
         cls.df_index_resolver_t = TraceAnalysis(trace_dir=df_index_resolver_trace_dir)
         cls.rank_non_gpu_t = TraceAnalysis(trace_dir=rank_non_gpu_trace_dir)
@@ -131,13 +127,6 @@ class TraceAnalysisTestCase(unittest.TestCase):
         results = self.vision_transformer_t.get_profiler_steps()
         expected = [15, 16, 17, 18]
         self.assertListEqual(results, expected)
-        results_include_last_profiler_step = (
-            self.vision_transformer_include_last_profiler_step_t.get_profiler_steps()
-        )
-        expected_include_last_profiler_step = [15, 16, 17, 18, 19]
-        self.assertListEqual(
-            results_include_last_profiler_step, expected_include_last_profiler_step
-        )
 
     def test_get_potential_stragglers(self):
         TCase = namedtuple(
