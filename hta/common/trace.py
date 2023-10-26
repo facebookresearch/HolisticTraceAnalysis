@@ -109,7 +109,10 @@ class TraceSymbolTable:
 
     def is_cuda_runtime(self, trace_df: pd.dataframe, idx: int) -> bool:
         """Check if an event is a CUDA runtime event"""
-        return trace_df["cat"].loc[idx] == self.sym_index["cuda_runtime"]
+        return trace_df["cat"].loc[idx] == self.sym_index["cuda_runtime"] or (
+            "cuda_driver" in self.sym_index.keys()
+            and (trace_df["cat"].loc[idx] == self.sym_index["cuda_driver"])
+        )
 
     def is_operator(self, trace_df: pd.dataframe, idx: int) -> bool:
         """Check if an event is a CPU operator"""
