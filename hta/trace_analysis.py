@@ -527,7 +527,7 @@ class TraceAnalysis:
             rank (int): rank to analyze for the critical path.
             annotation (str): a trace annotation to limit the analysis to,
                 for example "ProfilerStep" would match all annotations that
-                match this string (ProfilerStep100, ProfilerStep101 etc)
+                match this string (ProfilerStep#100, ProfilerStep#101 etc)
             instance_id: can be either of the following
                 (int) - specify which instance of the annotation to consider.
                         Defaults to the first instance.

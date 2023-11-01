@@ -631,8 +631,8 @@ class CPGraph(nx.DiGraph):
                 edge_added = True
             elif not edge_added:
                 # Neither of Sync, kernel-kernel or kernel launch edges were added
-                logger.error(
-                    f"Final fall through Queue length is {queue_length_runtime}!= 1 but no "
+                logger.warning(
+                    f"No edge was added - queue length is {queue_length_runtime}!= 1 but no "
                     f"last kernel on stream {stream}, current kernel = {row}"
                 )
 
@@ -704,7 +704,7 @@ class CriticalPathAnalysis:
             rank (int): rank to analyze for the critical path.
             annotation (str): a trace annotation to limit the analysis to,
                 for example "ProfilerStep" would match all annotations that
-                match this string (ProfilerStep100, ProfilerStep101 etc)
+                match this string (ProfilerStep#100, ProfilerStep#101 etc)
             instance_id: can be either of the following
                 (int) - specify which instance of the annotation to consider.
                         Defaults to the first instance.
