@@ -31,9 +31,10 @@ class TraceAnalysis:
         self,
         trace_files: Optional[Dict[int, str]] = None,
         trace_dir: str = DEFAULT_TRACE_DIR,
+        include_last_profiler_step: Optional[bool] = False,
     ):
         self.t = Trace(trace_files, trace_dir)
-        self.t.load_traces()
+        self.t.load_traces(include_last_profiler_step)
         assert self.t.is_parsed is True
 
     def get_comm_comp_overlap(self, visualize: bool = True) -> pd.DataFrame:

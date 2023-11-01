@@ -128,6 +128,17 @@ class TraceAnalysisTestCase(unittest.TestCase):
         expected = [15, 16, 17, 18]
         self.assertListEqual(results, expected)
 
+    def test_include_last_profiler_step(self):
+        vision_transformer_trace_dir = self.vision_transformer_t.t.trace_path
+        vision_transformer_include_last_profiler_step_t = TraceAnalysis(
+            trace_dir=vision_transformer_trace_dir, include_last_profiler_step=True
+        )
+        results_include_last_profiler_step = (
+            vision_transformer_include_last_profiler_step_t.get_profiler_steps()
+        )
+        expected_results = [15, 16, 17, 18, 19]
+        self.assertListEqual(results_include_last_profiler_step, expected_results)
+
     def test_get_potential_stragglers(self):
         TCase = namedtuple(
             "TCase", ["profiler_steps", "num_candidates", "expected_results"]

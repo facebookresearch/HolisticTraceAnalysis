@@ -451,12 +451,12 @@ class Trace:
             logger.debug(f"trace_files[{rank}] = {trace_file}")
         self.is_parsed = False
 
-    def load_traces(self) -> None:
+    def load_traces(self, include_last_profiler_step: Optional[bool] = False) -> None:
         if self.is_parsed:
             logger.warning("Traces are already parsed and loaded!")
             return
         self.parse_traces()
-        self.align_and_filter_trace()
+        self.align_and_filter_trace(include_last_profiler_step)
         for rank, trace_df in self.traces.items():
             df = self.traces[rank].set_index("index", drop=False)
             df.index.names = [None]
@@ -590,12 +590,14 @@ class Trace:
             f"leaving {sys._getframe().f_code.co_name} duration={t1 - t0:.2f} seconds"
         )
 
-    def align_and_filter_trace(self):
+    def align_and_filter_trace(
+        self, include_last_profiler_step: Optional[bool] = False
+    ) -> None:
         """
         Align the starting time across multiple ranks and filter events that belong to incomplete iterations.
         """
         self._align_all_ranks()
-        self._filter_irrelevant_gpu_kernels()
+        self._filter_irrelevant_gpu_kernels(include_last_profiler_step)
 
     def get_trace(self, rank: int) -> pd.DataFrame:
         """
@@ -693,7 +695,9 @@ class Trace:
             trace_df["ts"] = trace_df["ts"] - self.min_ts
             self.traces[rank] = trace_df
 
-    def _filter_irrelevant_gpu_kernels(self) -> None:
+    def _filter_irrelevant_gpu_kernels(
+        self, include_last_profiler_step: Optional[bool] = False
+    ) -> None:
         """
         Filter out GPU kernels that are not launched by the CPU kernels in the traced iterations.
         """
@@ -706,7 +710,10 @@ class Trace:
             last_profiler_start = cpu_kernels[cpu_kernels["name"].isin(profiler_steps)][
                 "ts"
             ].max()
-            cpu_kernels = cpu_kernels[cpu_kernels["ts"] < last_profiler_start]
+            if include_last_profiler_step:
+                cpu_kernels = cpu_kernels[cpu_kernels["ts"] <= last_profiler_start]
+            else:
+                cpu_kernels = cpu_kernels[cpu_kernels["ts"] < last_profiler_start]
             filtered_gpu_kernels = gpu_kernels.merge(
                 cpu_kernels["correlation"], on="correlation", how="inner"
             )
