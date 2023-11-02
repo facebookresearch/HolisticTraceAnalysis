@@ -535,9 +535,9 @@ class TraceAnalysis:
                         Defaults to the first instance.
                 (Tuple(int, int)) - considers a range of annotation instances start to end,
                         inclusive of both start and end instance.
-        Returns: 
-            Tuple[CPGraph, bool] 
-                A tuple of CPGraph object and a success or fail boolean value. 
+        Returns:
+            Tuple[CPGraph, bool]
+                A tuple of CPGraph object and a success or fail boolean value.
                 True indicates that the critical path analysis algorithm succeeded.
 
         CPGraph object that can be used to obtain statistics and further

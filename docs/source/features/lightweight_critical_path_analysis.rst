@@ -5,15 +5,15 @@ Lightweight Critical Path Analysis
 
 TLDR
 ----
--  This feature presents a performs a basic single rank critical path analysis. We demonstrated a walkthrough of using the tool.
+-  This feature performs a basic single rank critical path analysis. We demonstrated a walkthrough of using the tool.
 -  Additionally, we dive into assumptions made and implementation principles.
 
 Introduction
 ------------
 
 The key idea behind critical path analysis is to find operations in a large system that constitute the **longest path** between start and end.
-An operation on the critical path can realistically affect the overall performance of the program, i.e.
-shrinking that operation will lead to a change in overall timing.
+An operation on the critical path can significantly impact the program's overall performance.
+In other words, reducing the duration of that operation will result in a measurable change in the overall timing
 This is illustrated in the figure below.
 
 |Lightw002|
