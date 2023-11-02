@@ -4,7 +4,7 @@
 
 from collections import defaultdict
 from enum import auto, Flag
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import pandas as pd
 
@@ -511,7 +511,7 @@ class TraceAnalysis:
         self,
         rank: int,
         annotation: str,
-        instance_id: Optional[int],
+        instance_id: Union[Optional[int], Tuple[int, int]],
     ) -> Tuple[CPGraph, bool]:
         r"""
         Perform critical path analysis for trace events within a rank.
@@ -521,15 +521,20 @@ class TraceAnalysis:
         This will include GPU kernels launched by the cpu operators in that
         time duration.
         For example, you can use this to limit the analysis to one iteration
-        by passing annotation='ProfilerStep500'. See notes for how to pick the iteration.
+        by passing annotation='ProfilerStep'. See notes for how to pick the iteration.
 
         Args:
             t (Trace): Input trace data structure.
             rank (int): rank to analyze for the critical path.
             annotation (str): a trace annotation to limit the analysis to,
-                such as "ProfilerStep500"
-            instance_id (int): optionally specify which instance of the annotation
-                to consider. Defaults to the first instance.
+                for example "ProfilerStep" would match all annotations that
+                match this string (ProfilerStep#100, ProfilerStep#101 etc)
+            instance_id: can be either of the following
+                (int) - specify which instance of the annotation to consider.
+                        Defaults to the first instance.
+                (Tuple(int, int)) - considers a range of annotation instances start to end,
+                        inclusive of both start and end instance.
+
 
         Returns: Tuple[CPGraph, bool] a pair of CPGraph object and a success or
             fail boolean value. True indicates that the critical path analysis

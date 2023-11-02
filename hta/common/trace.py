@@ -110,7 +110,10 @@ class TraceSymbolTable:
 
     def is_cuda_runtime(self, trace_df: pd.dataframe, idx: int) -> bool:
         """Check if an event is a CUDA runtime event"""
-        return trace_df["cat"].loc[idx] == self.sym_index["cuda_runtime"]
+        return trace_df["cat"].loc[idx] == self.sym_index["cuda_runtime"] or (
+            "cuda_driver" in self.sym_index.keys()
+            and (trace_df["cat"].loc[idx] == self.sym_index["cuda_driver"])
+        )
 
     def is_operator(self, trace_df: pd.dataframe, idx: int) -> bool:
         """Check if an event is a CPU operator"""
@@ -119,15 +122,16 @@ class TraceSymbolTable:
     def get_runtime_launch_events_query(self) -> str:
         """Returns a SQL query you can pass to trace dataframe query()
         to filter events that are CUDA runtime kernel and memcpy launches."""
-        cudaLaunchKernel_id = self.sym_index.get("cudaLaunchKernel", None)
-        cudaLaunchKernelExC_id = self.sym_index.get("cudaLaunchKernelExC", None)
-        cudaMemcpyAsync_id = self.sym_index.get("cudaMemcpyAsync", None)
-        cudaMemsetAsync_id = self.sym_index.get("cudaMemsetAsync", None)
+        cudaLaunchKernel_id = self.sym_index.get("cudaLaunchKernel", -128)
+        cudaLaunchKernelExC_id = self.sym_index.get("cudaLaunchKernelExC", -128)
+        cuLaunchKernel_id = self.sym_index.get("cuLaunchKernel", -128)
+        cudaMemcpyAsync_id = self.sym_index.get("cudaMemcpyAsync", -128)
+        cudaMemsetAsync_id = self.sym_index.get("cudaMemsetAsync", -128)
 
         return (
             f"((name == {cudaMemsetAsync_id}) or (name == {cudaMemcpyAsync_id}) or "
-            f" (name == {cudaLaunchKernel_id}) or (name == {cudaLaunchKernelExC_id}))"
-            "and (index_correlation > 0)"
+            f" (name == {cudaLaunchKernel_id}) or (name == {cudaLaunchKernelExC_id})"
+            f" or (name == {cuLaunchKernel_id})) and (index_correlation > 0)"
         )
 
 

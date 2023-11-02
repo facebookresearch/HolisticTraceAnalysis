@@ -8,7 +8,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 import networkx as nx
 import pandas as pd
@@ -85,9 +85,10 @@ class CPGraph(nx.DiGraph):
         critical_path_edges_set (Set[CPEdge]): set of edge objects that are on the critical path.
     """
 
-    def __init__(self, t: "Trace", rank: int) -> None:
+    def __init__(self, t: "Trace", t_full: "Trace", rank: int) -> None:
         self.cg = CallGraph(t, ranks=[rank])
         self.trace_df: pd.DataFrame = t.get_trace(rank)
+        self.t_full: pd.DataFrame = t_full
         self.sym_table = t.symbol_table.get_sym_table()
         self.symbol_table = t.symbol_table
         self.critical_path_nodes: List[int] = []
@@ -326,6 +327,71 @@ class CPGraph(nx.DiGraph):
 
         return cuda_record_calls
 
+    def _get_cuda_stream_wait_event_df(self) -> Optional[pd.DataFrame]:
+        """For Event based synchronization we need to track the next
+        kernel/memcpy launched on a CPU thread just juast after cudaStreamWaitEvent
+
+        This function returns a dataframe of cudaStreamWaitEvent events,
+        and includes an additional column 'index_next_launch'
+        that specifies the closest CUDA kernel launch on the same CPU thread
+        and associated CUDA stream.
+        """
+        sym_index = self.symbol_table.get_sym_id_map()
+        if (
+            "cudaStreamWaitEvent" not in sym_index
+            or "Stream Wait Event" not in sym_index
+        ):
+            return None
+
+        gpu_kernels = self.trace_df.query("stream != -1 and index_correlation > 0")
+
+        # CUDA launch runtime calls and associated CUDA stream
+        runtime_calls = (
+            (
+                self.trace_df.query(
+                    self.symbol_table.get_runtime_launch_events_query()
+                )[["index", "ts", "pid", "tid", "index_correlation"]]
+                .copy()
+                .sort_values(by="ts", axis=0)
+            )
+            .merge(
+                gpu_kernels[["stream", "index"]],
+                left_on="index_correlation",
+                right_on="index",
+                suffixes=["", "_kernel"],
+            )
+            .set_index("index")
+        )
+
+        # CUDA stream wait event runtime calls and associated CUDA stream
+        cudaStreamWaitEvent_id = sym_index.get("cudaStreamWaitEvent")
+        cuda_stream_wait_events = (
+            self.trace_df.query(
+                f"name == {cudaStreamWaitEvent_id} and index_correlation > 0"
+            )[["index", "ts", "pid", "tid", "correlation", "index_correlation"]]
+            .copy()
+            .sort_values(by="ts", axis=0)
+        ).merge(
+            gpu_kernels[["stream", "index"]],
+            left_on="index_correlation",
+            right_on="index",
+            suffixes=["", "_kernel"],
+        )
+
+        def _next_launch(ts: int, pid: int, tid: int, stream: int) -> int:
+            """Find the next CUDA launch on same pid, tid and stream"""
+            df = runtime_calls.query(
+                f"pid == {pid} and tid == {tid} and stream == {stream}"
+            )
+            upper_neighbors = df[df["ts"] > ts]["ts"]
+            return upper_neighbors.idxmin() if len(upper_neighbors) else -1
+
+        cuda_stream_wait_events["index_next_launch"] = cuda_stream_wait_events.apply(
+            lambda x: _next_launch(x["ts"], x["pid"], x["tid"], x["stream"]), axis=1
+        )
+
+        return cuda_stream_wait_events.set_index("index")
+
     def _check_stream_wait_event_helper(self, row) -> bool:
         eid = row["index"]
         if "wait_on_cuda_event_record_corr_id" not in row:
@@ -353,7 +419,10 @@ class CPGraph(nx.DiGraph):
 
     def _construct_graph_from_kernels(self) -> None:
         """Create nodes and edges for GPU kernels"""
-        q = TraceCounters._get_queue_length_time_series_for_rank(self.t, self.rank)
+        # Note getting queue length on the clipped dataframe was showing errors,
+        # it is worthwhile to consider the entire trace instead, hence use t_full
+        q = TraceCounters._get_queue_length_time_series_for_rank(self.t_full, self.rank)
+
         gpu_kernels = (
             self.trace_df.query("stream != -1 and index_correlation >= 0")
             .join(q[["queue_length"]], on="index_correlation")
@@ -365,6 +434,7 @@ class CPGraph(nx.DiGraph):
         # and find the previous GPU kernel/memcpy launch, this is recorded
         # in the index_previous_launch column
         cuda_record_calls = self._get_cuda_event_record_df()
+        cuda_stream_wait_events = self._get_cuda_stream_wait_event_df()
 
         if (
             "wait_on_cuda_event_record_corr_id" in self.trace_df
@@ -386,28 +456,34 @@ class CPGraph(nx.DiGraph):
             )
             # Note convert NAN to -1 and then turn all records to int
 
-        # Sort kernels by end timestamp, this handles the case where a stream
-        # sync event overlaps with an actual kernel or memcpy
-        #    stream 7 ...   |---Stream Sync --------|
-        #                       |--Memcpy HtoD--|
-        gpu_kernels["end_ts"] = gpu_kernels["ts"] + gpu_kernels["dur"]
-        gpu_kernels.sort_values(by="end_ts", axis=0, inplace=True)
-
         sym_id_map = self.symbol_table.get_sym_id_map()
         sync_cat = sym_id_map.get("cuda_sync", -1)
         context_sync = sym_id_map.get("Context Sync", -1)
         stream_sync = sym_id_map.get("Stream Sync", -1)
         stream_wait_event = sym_id_map.get("Stream Wait Event", -1)
 
+        # Sort kernels by start timestamp but use end time_stamp for sync events.
+        # This handles the case where a stream sync event overlaps with an
+        # actual kernel or memcpy -
+        #    stream 7 ...   |---Stream Sync --------|
+        #                       |--Memcpy HtoD--|
+        gpu_kernels["end_ts"] = gpu_kernels["ts"] + gpu_kernels["dur"]
+        gpu_kernels["sort_by"] = gpu_kernels["ts"]
+        gpu_kernels.loc[gpu_kernels.cat == sync_cat, "sort_by"] = gpu_kernels[
+            gpu_kernels.cat == sync_cat
+        ]["end_ts"]
+        gpu_kernels.sort_values(by="sort_by", axis=0, inplace=True)
+
         # Last node on a stream
         last_node: Dict[int, CPNode] = {}
 
         # Scheduled a GPU-GPU sync on a stream
-        #  map from stream -> event ID of kernel to sync on
+        #  map from dest kernel event ID -> event ID of kernel to sync on
         kernel_sync: Dict[int, int] = {}
 
         def handle_cuda_sync(row):
             nonlocal last_node
+            nonlocal kernel_sync
             eid = row["index"]
             logger.debug(
                 f"CUDA Sync event eid = {eid}, name = {self._get_node_name(eid)}"
@@ -421,17 +497,34 @@ class CPGraph(nx.DiGraph):
                 if not self._check_stream_wait_event_helper(row):
                     return
 
-                kernel_index = self.trace_df.index_correlation[
+                src_kernel_index = self.trace_df.index_correlation[
                     row["index_previous_launch"]
                 ]
-                # Schedule a sync on this stream with above kernel
+
+                # Get the corresponding CPU event for this StreamWaitEvent
+                dest_kernel_launch_index = cuda_stream_wait_events.loc[
+                    row["index_correlation"]
+                ]["index_next_launch"]
+
+                if dest_kernel_launch_index < 0:
+                    # TODO make a warning?
+                    return
+
+                # Use the next lanuch to find dest_kernel
+                dest_kernel_index = self.trace_df.index_correlation[
+                    dest_kernel_launch_index
+                ]
+
                 logger.debug(
                     f"Scheduling a Stream Sync on stream {row['stream']} "
-                    f"on kernel with index = {kernel_index}, corr id = "
-                    f"{self.trace_df.correlation.loc[kernel_index]}"
+                    f" dest kernel index {dest_kernel_index}, corr id = "
+                    f"{self.trace_df.correlation.loc[dest_kernel_index]}\n "
+                    f"on src kernel with index = {src_kernel_index}, corr id = "
+                    f"{self.trace_df.correlation.loc[src_kernel_index]}"
                 )
-                kernel_sync[row["stream"]] = kernel_index
+                kernel_sync[dest_kernel_index] = src_kernel_index
                 return
+
             assert name == stream_sync or name == context_sync
 
             # For Context Sync add a sync edge on the last event on all streams,
@@ -467,13 +560,24 @@ class CPGraph(nx.DiGraph):
             start_node, end_node = self._add_event(eid)
             self._add_edge_helper(start_node, end_node)
 
-            kernel_sync_index = kernel_sync.get(stream)
+            kernel_sync_index = kernel_sync.get(eid)
             kernel_sync_end: Optional[CPNode] = None
+
+            edge_added = False
 
             # We need to sync between two kernels
             if kernel_sync_index is not None:
                 _, kernel_sync_end = self.get_nodes_for_event(kernel_sync_index)
-                assert kernel_sync_end is not None
+                if kernel_sync_end is None:
+                    logger.warning(
+                        f"Could not find source kernel sync index = {kernel_sync_index}, current kernel "
+                        f" eid = {eid}, stream = {stream}, "
+                        f"name = {self._get_node_name(eid)}, correlation = {row['correlation']}"
+                    )
+                    kernel_sync[eid] = None
+                    continue
+
+                # assert kernel_sync_end is not None
                 # note that the sync dependency has 0 weight
                 self._add_edge_helper(
                     kernel_sync_end, start_node, type=CPEdgeType.SYNC_DEPENDENCY
@@ -483,7 +587,8 @@ class CPGraph(nx.DiGraph):
                     f"{kernel_sync_end} -> {start_node}"
                 )
                 # reset the kernel-kernel sync
-                kernel_sync[stream] = None
+                kernel_sync[eid] = None
+                edge_added = True
 
             if (
                 # There were no outstanding kernels on this stream during the launch
@@ -503,19 +608,33 @@ class CPGraph(nx.DiGraph):
                 # Add launch delay edge if there were no outstanding kernels
                 # when the CUDA runtime was launching it.
                 runtime_start, _ = self.get_nodes_for_event(runtime_index)
-                assert runtime_start is not None
+                assert runtime_start is not None, (
+                    f"Could not find runtime index = {runtime_index}, current kernel "
+                    f"stream = {stream}, "
+                    f"name = {self._get_node_name(eid)}, correlation = {row['correlation']}"
+                )
                 self._add_edge_helper(
                     runtime_start, start_node, type=CPEdgeType.KERNEL_LAUNCH_DELAY
                 )
-            elif last_node.get(stream) is not None and kernel_sync_index is None:
+                edge_added = True
+            elif (
+                last_node.get(stream) is not None
+                # and the kernel sync dependency if any finished earlier than last node
+                and (
+                    kernel_sync_index is None
+                    or kernel_sync_end.ts < last_node[stream].ts
+                )
+            ):
                 # If neither launch nor CUDA event sync occurs it is a kernel-kernel
                 # delay
                 self._add_edge_helper(
                     last_node[stream], start_node, type=CPEdgeType.KERNEL_KERNEL_DELAY
                 )
-            elif kernel_sync_index is None:
-                logger.error(
-                    f"Queue length is {queue_length_runtime}!= 1 but no "
+                edge_added = True
+            elif not edge_added:
+                # Neither of Sync, kernel-kernel or kernel launch edges were added
+                logger.warning(
+                    f"No edge was added - queue length is {queue_length_runtime}!= 1 but no "
                     f"last kernel on stream {stream}, current kernel = {row}"
                 )
 
@@ -574,7 +693,7 @@ class CriticalPathAnalysis:
         t: "Trace",
         rank: int,
         annotation: str,
-        instance_id: Optional[int],
+        instance_id: Union[Optional[int], Tuple[int, int]],
     ) -> Tuple[CPGraph, bool]:
         r"""
         Perform critical path analysis for trace events within a rank.
@@ -582,15 +701,19 @@ class CriticalPathAnalysis:
         a trace annotation and instance id. This will
         limit the analysis to events within the time range of that annoation.
         For example, you can use this to limit the analysis to one iteration
-        by passing annotation='ProfilerStep500'.
+        by passing annotation='ProfilerStep'.
 
         Args:
             t (Trace): Input trace data structure.
             rank (int): rank to analyze for the critical path.
             annotation (str): a trace annotation to limit the analysis to,
-                such as "ProfilerStep1200"
-            intance (int): optionally specify which instance of the annotation
-                to consider. Defaults to the first instance.
+                for example "ProfilerStep" would match all annotations that
+                match this string (ProfilerStep#100, ProfilerStep#101 etc)
+            instance_id: can be either of the following
+                (int) - specify which instance of the annotation to consider.
+                        Defaults to the first instance.
+                (Tuple(int, int)) - considers a range of annotation instances start to end,
+                        inclusive of both start and end instance.
 
         Returns: Tuple[CPGraph, bool] a pair of CPGraph object and a success or
             fail boolean value. True indicates that the critical path analysis
@@ -616,39 +739,53 @@ class CriticalPathAnalysis:
             )
 
         annotation_id = sym_index.get(annotation, None)
-        if annotation_id is None:
+        annotation_ids = [val for key, val in sym_index.items() if annotation in key]
+
+        if len(annotation_ids) == 0:
             logger.error(f"Could not find annotation {annotation} in the trace.")
             return None
+
         if instance_id is None:
-            instance_id = 0
+            instance_start, instance_end = 0, 0
+        elif isinstance(instance_id, tuple):
+            instance_start, instance_end = instance_id
+        elif isinstance(instance_id, int):
+            instance_start, instance_end = instance_id, instance_id
+        else:
+            logger.error("Unexpected input type instance_id")
+            return
 
         logger.info(
-            f"Looking up events under {instance_id} instance of '{annotation}' annotation"
+            f"Looking up events under [{instance_start}, {instance_end}) "
+            f"instance(s) of '{annotation}' annotation."
         )
 
-        annotation_span = (
-            trace_df[trace_df.name == annotation_id].iloc[instance_id].to_dict()
-        )
+        annotations = trace_df[trace_df.name.isin(annotation_ids)].copy()
+        annotations["end_ts"] = annotations["ts"] + annotations["dur"]
 
-        start_ts = annotation_span["ts"]
-        end_ts = annotation_span["ts"] + annotation_span["dur"]
+        start_ts = annotations.ts[instance_start : instance_end + 1].min()
+        end_ts = annotations.end_ts[instance_start : instance_end + 1].max()
+
+        logger.info(f"Looking up events within the window ({start_ts}, {end_ts})")
 
         # Consider all events that start within the annotatated window.
         # and also fiter out 0 duration events as they mess up the
         # event stack generation
-        a = trace_df.query(f"(ts >= {start_ts} and ts <= {end_ts}) and dur > 0")
+        cpu_kernels = trace_df[trace_df["stream"].eq(-1)]
+        a = cpu_kernels.query(f"(ts >= {start_ts} and ts <= {end_ts}) and dur > 0")
 
-        # Also consider GPU kernels whose runtime events are in the correct
+        # Only consider GPU kernels whose runtime events are in the correct
         # time window
         gpu_kernels = trace_df[trace_df["stream"].ne(-1)]
-        cpu_events = trace_df[trace_df["stream"].eq(-1)].set_index("index_correlation")
+        cpu_kernels = cpu_kernels.copy().set_index("index_correlation")
         b = (
             gpu_kernels[["ts", "dur", "correlation"]]
-            .join(cpu_events["ts"], rsuffix="_runtime")
+            .join(cpu_kernels["ts"], rsuffix="_runtime")
             .query(f"(ts_runtime >= {start_ts} and ts_runtime <= {end_ts}) and dur > 0")
         )
 
         clipped_df = trace_df.loc[a.index.union(b.index)].copy()
+
         logger.info(f"Clipped dataframe has {len(clipped_df)} events")
 
         # XXX This is a bit hacky but CallGraph does not really support a way
@@ -656,7 +793,7 @@ class CriticalPathAnalysis:
         t_copy = deepcopy(t)
         t_copy.traces[rank] = clipped_df
 
-        cp_graph = CPGraph(t_copy, rank)
+        cp_graph = CPGraph(t_copy, t, rank)
 
         return cp_graph, cp_graph.critical_path()
 
@@ -775,7 +912,7 @@ class CriticalPathAnalysis:
                 for event in raw_events
                 if (
                     event["ph"] != "X"
-                    or event.get("cat", "") in ["user_annotation"]
+                    or event.get("cat", "") in ["user_annotation", "python_function"]
                     or ("args" in event and event["args"].get("critical", 0) == 1)
                 )
             ]
