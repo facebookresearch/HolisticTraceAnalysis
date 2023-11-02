@@ -64,6 +64,12 @@ To aid in performance debugging HTA provides the following features
    performance measurements from kernels to PyTorch operators, and can help
    with kernel optimization and roofline analysis.
 
+#. `Lightweight Critical Path Analysis <source/features/lightweight_critical_path_analysis.html>`_: An
+   experimental API to compute the critical path in the trace. Critical path
+   can help one undertand if an application is CPU bound, GPU compute bound or
+   communication bound. The path can be visualized on the original trace
+   as well as manipulated as a directed acyclic graph object.
+
 
 .. toctree::
    :hidden:
@@ -90,6 +96,7 @@ To aid in performance debugging HTA provides the following features
    source/features/frequent_cuda_kernels
    source/features/trace_diff
    source/features/cupti_counter_analysis
+   source/features/lightweight_critical_path_analysis
 
 .. toctree::
    :hidden:

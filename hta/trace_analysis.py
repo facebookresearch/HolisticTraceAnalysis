@@ -228,11 +228,12 @@ class TraceAnalysis:
         These events are linked by a common correlation id. This feature calculates the duration
         of the CPU op, GPU kernel and the launch delay (difference between gpu kernel starting
         and cpu op ending for each correlation id on the specified rank(s). This function finds:
-            1. GPU events with a shorter duration than the corresponding CPU events.
-            2. CPU runtime events with a large duration i.e. outliers. The outliers are defined using
-               the ``runtime_cutoff`` value.
-            3. CPU events which have a large launch delay i.e. launch delay outliers. The launch delay
-               outliers are defined using the ``launch_delay_cutoff`` value.
+
+        1. GPU events with a shorter duration than the corresponding CPU events.
+        2. CPU runtime events with a large duration i.e. outliers. The outliers are defined using
+           the ``runtime_cutoff`` value.
+        3. CPU events which have a large launch delay i.e. launch delay outliers. The launch delay
+           outliers are defined using the ``launch_delay_cutoff`` value.
 
         Args:
             ranks (List[int]): List of ranks on which to run the analysis. Default = [0].
@@ -487,8 +488,8 @@ class TraceAnalysis:
 
         When the CUPTI Profiler mode is enabled then PyTorch will emit the
         performance counters and annotates them in the trace.
-            * The events are logged under the `cuda_profiler_range` category.
-            * Counter values are logged in the `args` section of the trace.
+        * The events are logged under the `cuda_profiler_range` category.
+        * Counter values are logged in the `args` section of the trace.
 
         This API can investigate performance measurements per kernel and
         associate them to operators that the kernel belongs to. A single kernel
@@ -534,25 +535,22 @@ class TraceAnalysis:
                         Defaults to the first instance.
                 (Tuple(int, int)) - considers a range of annotation instances start to end,
                         inclusive of both start and end instance.
+        Returns:
+            Tuple[CPGraph, bool]
+                A tuple of CPGraph object and a success or fail boolean value.
+                True indicates that the critical path analysis algorithm succeeded.
 
-
-        Returns: Tuple[CPGraph, bool] a pair of CPGraph object and a success or
-            fail boolean value. True indicates that the critical path analysis
-            algorithm succeeded.
-
-            CPGraph object that can be used to obtain statistics and further
-            visualize the critical path.
-
-            CPGraph is also a subinstance of a networkx.DiGraph.
-            Run 'CPGraph?' for more info and APIs.
+        CPGraph object that can be used to obtain statistics and further
+        visualize the critical path. CPGraph is also a subinstance of a networkx.DiGraph.
+        Run 'CPGraph?' for more info and APIs.
 
         Notes:
-            1. Avoid using the first step / iteration in a trace as it usually
-               has some missing events.
-            2. The analysis requires CUDA synchronization events in the GPU trace,
-               that were added in https://github.com/pytorch/pytorch/pull/105187
-               Please see the documentation of this PR on how to enable CUDA sync
-               events in the trace.
+
+        1. Avoid using the first step / iteration in a trace as it usually
+           has some missing events.
+        2. The analysis requires CUDA synchronization events in the GPU trace,
+           that were added in https://github.com/pytorch/pytorch/pull/105187
+           Please see the documentation of this PR on how to enable CUDA sync events in the trace.
         """
         return CriticalPathAnalysis.critical_path_analysis(
             self.t, rank, annotation, instance_id
@@ -582,7 +580,7 @@ class TraceAnalysis:
                 for debugging the algorithm.
 
         Returns: the overlaid trace file path. The generated trace file will
-        have a prefix of "overlaid_critical_path_" in its name compared
+        have a prefix of "overlaid_critical_path\_" in its name compared
         to the original trace file.
         """
         return CriticalPathAnalysis.overlay_critical_path_analysis(

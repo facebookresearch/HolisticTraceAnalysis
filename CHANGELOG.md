@@ -8,6 +8,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 - Added support for trace parser customization.
 - Added support for H100 traces.
 - (Experimental) Support to read PyTorch Execution Trace and correlate it with PyTorch Profiler Trace.
+- (Experimental) Added lightweight critical path analysis feature.
 
 #### Changed
 
