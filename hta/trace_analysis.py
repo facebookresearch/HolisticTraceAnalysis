@@ -537,7 +537,7 @@ class TraceAnalysis:
                         inclusive of both start and end instance.
         Returns: 
             Tuple[CPGraph, bool] 
-                A pair of CPGraph object and a success or fail boolean value. 
+                A tuple of CPGraph object and a success or fail boolean value. 
                 True indicates that the critical path analysis algorithm succeeded.
 
         CPGraph object that can be used to obtain statistics and further
