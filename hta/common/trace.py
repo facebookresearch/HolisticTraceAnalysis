@@ -461,7 +461,7 @@ class Trace:
             return
         self.parse_traces()
         self.align_and_filter_trace(include_last_profiler_step)
-        for rank, trace_df in self.traces.items():
+        for rank, df in self.traces.items():
             df = self.traces[rank].set_index("index", drop=False)
             df.index.names = [None]
             self.traces[rank] = df
