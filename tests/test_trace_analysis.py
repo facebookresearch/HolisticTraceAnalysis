@@ -28,19 +28,32 @@ class TraceAnalysisTestCase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         super(TraceAnalysisTestCase, cls).setUpClass()
-        vision_transformer_trace_dir: str = "tests/data/vision_transformer"
-        inference_trace_dir: str = "tests/data/inference_single_rank"
-        df_index_resolver_trace_dir: str = "tests/data/df_index_resolver"
-        rank_non_gpu_trace_dir: str = "tests/data/rank_non_gpu/"
-        h100_trace_dir: str = "tests/data/h100"
-        cls.vision_transformer_t = TraceAnalysis(trace_dir=vision_transformer_trace_dir)
-        cls.inference_t = TraceAnalysis(trace_dir=inference_trace_dir)
-        cls.df_index_resolver_t = TraceAnalysis(trace_dir=df_index_resolver_trace_dir)
-        cls.rank_non_gpu_t = TraceAnalysis(trace_dir=rank_non_gpu_trace_dir)
-        cls.h100_trace_t = TraceAnalysis(trace_dir=h100_trace_dir)
+        cls.base_data_dir = str(Path(__file__).parent.parent.joinpath("tests/data"))
+        cls.vision_transformer_trace_dir: str = os.path.join(
+            cls.base_data_dir, "vision_transformer"
+        )
+        cls.inference_trace_dir: str = os.path.join(
+            cls.base_data_dir, "inference_single_rank"
+        )
+        cls.df_index_resolver_trace_dir: str = os.path.join(
+            cls.base_data_dir, "df_index_resolver"
+        )
+        cls.rank_non_gpu_trace_dir: str = os.path.join(
+            cls.base_data_dir, "rank_non_gpu/"
+        )
+        cls.h100_trace_dir: str = os.path.join(cls.base_data_dir, "h100")
+        cls.vision_transformer_t = TraceAnalysis(
+            trace_dir=cls.vision_transformer_trace_dir
+        )
+        cls.inference_t = TraceAnalysis(trace_dir=cls.inference_trace_dir)
+        cls.df_index_resolver_t = TraceAnalysis(
+            trace_dir=cls.df_index_resolver_trace_dir
+        )
+        cls.rank_non_gpu_t = TraceAnalysis(trace_dir=cls.rank_non_gpu_trace_dir)
+        cls.h100_trace_t = TraceAnalysis(trace_dir=cls.h100_trace_dir)
 
     def setUp(self):
-        self.overlaid_trace_dir = "tests/data"
+        self.overlaid_trace_dir = self.base_data_dir
         self.overlaid_trace_file = os.path.join(
             str(Path(self.overlaid_trace_dir)), "overlaid_rank-0.json.gz"
         )
@@ -129,15 +142,17 @@ class TraceAnalysisTestCase(unittest.TestCase):
         self.assertListEqual(results, expected)
 
     def test_include_last_profiler_step(self):
-        vision_transformer_trace_dir = self.vision_transformer_t.t.trace_path
-        vision_transformer_include_last_profiler_step_t = TraceAnalysis(
-            trace_dir=vision_transformer_trace_dir, include_last_profiler_step=True
-        )
-        results_include_last_profiler_step = (
-            vision_transformer_include_last_profiler_step_t.get_profiler_steps()
+        t = TraceAnalysis(
+            trace_files={
+                0: os.path.join(
+                    self.base_data_dir, "vision_transformer", "rank-0.json.gz"
+                )
+            },
+            trace_dir="",
+            include_last_profiler_step=True,
         )
         expected_results = [15, 16, 17, 18, 19]
-        self.assertListEqual(results_include_last_profiler_step, expected_results)
+        self.assertListEqual(t.get_profiler_steps(), expected_results)
 
     def test_get_potential_stragglers(self):
         TCase = namedtuple(
@@ -249,7 +264,9 @@ class TraceAnalysisTestCase(unittest.TestCase):
     def test_generate_trace_with_counters(self, mock_write_trace):
         # Use a trace with some kernels missing attribution to operators
         # to check if our logic is robust and does not lead to negative values.
-        queue_length_trace: str = "tests/data/negative_queue_length_values_check/"
+        queue_length_trace: str = os.path.join(
+            self.base_data_dir, "negative_queue_length_values_check"
+        )
         analyzer_t = TraceAnalysis(trace_dir=queue_length_trace)
         analyzer_t.generate_trace_with_counters(
             time_series=TimeSeriesTypes.QUEUE_LENGTH | TimeSeriesTypes.MEMCPY_BANDWIDTH
@@ -334,7 +351,9 @@ class TraceAnalysisTestCase(unittest.TestCase):
         # regular trace should return empty list since it will not have cuda_profiler_range events
         self.assertEqual(self.inference_t.get_cupti_counter_data_with_operators(), [])
 
-        cupti_profiler_trace_dir: str = "tests/data/cupti_profiler/"
+        cupti_profiler_trace_dir: str = os.path.join(
+            self.base_data_dir, "cupti_profiler"
+        )
         cupti_profiler_t = TraceAnalysis(trace_dir=cupti_profiler_trace_dir)
         counters_df = cupti_profiler_t.get_cupti_counter_data_with_operators()[0]
 
@@ -359,7 +378,9 @@ class TraceAnalysisTestCase(unittest.TestCase):
         self.assertEqual(test_row["bottom_level_op"], "aten::_convolution")
 
     def test_critical_path_analysis(self):
-        critical_path_trace_dir: str = "tests/data/critical_path/simple_add"
+        critical_path_trace_dir: str = os.path.join(
+            self.base_data_dir, "critical_path/simple_add"
+        )
         critical_path_t = TraceAnalysis(trace_dir=critical_path_trace_dir)
 
         annotation = "[param|pytorch.model.alex_net|0|0|0|measure|forward]"
@@ -557,7 +578,9 @@ class TraceAnalysisTestCase(unittest.TestCase):
                 )
 
         # AlexNet has inter stream synchronization using CUDA Events
-        critical_path_trace_dir2: str = "tests/data/critical_path/alexnet"
+        critical_path_trace_dir2: str = os.path.join(
+            self.base_data_dir, "critical_path/alexnet"
+        )
         critical_path_t = TraceAnalysis(trace_dir=critical_path_trace_dir2)
 
         trace_df = critical_path_t.t.get_trace(0)
