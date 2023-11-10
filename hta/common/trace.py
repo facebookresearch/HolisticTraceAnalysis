@@ -21,7 +21,7 @@ from hta.common.trace_file import get_trace_files
 from hta.configs.config import logger
 from hta.configs.default_values import DEFAULT_TRACE_DIR
 from hta.configs.parser_config import AttributeSpec, ParserConfig, ValueType
-from hta.utils.utils import get_mp_pool_size, normalize_path
+from hta.utils.utils import get_mp_pool_size, normalize_path, shorten_name
 
 MetaData = Dict[str, Any]
 PHASE_COUNTER: str = "C"
@@ -94,7 +94,7 @@ class TraceSymbolTable:
     def get_sym_table(self) -> List[str]:
         return self.sym_table
 
-    def add_symbols_to_trace_df(self, trace_df: pd.dataframe, col: str) -> None:
+    def add_symbols_to_trace_df(self, trace_df: pd.DataFrame, col: str) -> None:
         """
         Take a trace dataframe and expand symbols in one of its columns.
         Args:
@@ -105,17 +105,46 @@ class TraceSymbolTable:
             None
         """
         trace_df[col] = trace_df[col].apply(
-            lambda i: self.sym_table[i] if (i >= 0 and i < len(self.sym_table)) else ""
+            lambda i: self.sym_table[i] if (0 <= i < len(self.sym_table)) else ""
         )
 
-    def is_cuda_runtime(self, trace_df: pd.dataframe, idx: int) -> bool:
+    @staticmethod
+    def create_symbol_table_from_df(df: pd.DataFrame) -> TraceSymbolTable:
+        """Create a symbol table from a DataFrame's cat and name columns.
+
+        Args:
+            df (pd.DataFrame): an input DataFrame.
+
+        Returns:
+            TraceSymbolTable: a symbol table containing all unique `name` and `cat` symbols in df.
+
+        Raise:
+            ValueError: when one of the follow two conditions happens:
+                (1) `df` doesn't have the `name` and `cat` columns; or
+                (2) they are not string type.
+        """
+        if (
+            ("name" in df.columns)
+            and (df.dtypes["name"] == "object")
+            and ("cat" in df.columns)
+            and (df.dtypes["cat"] == "object")
+        ):
+            symbols = set(df["cat"].unique()).union(set(df["name"].unique()))
+            symbol_table = TraceSymbolTable()
+            symbol_table.add_symbols(symbols)
+            return symbol_table
+        raise ValueError(
+            "Expect both name and cat columns of string types to be present in the dataframe"
+        )
+
+    def is_cuda_runtime(self, trace_df: pd.DataFrame, idx: int) -> bool:
         """Check if an event is a CUDA runtime event"""
         return trace_df["cat"].loc[idx] == self.sym_index["cuda_runtime"] or (
             "cuda_driver" in self.sym_index.keys()
             and (trace_df["cat"].loc[idx] == self.sym_index["cuda_driver"])
         )
 
-    def is_operator(self, trace_df: pd.dataframe, idx: int) -> bool:
+    def is_operator(self, trace_df: pd.DataFrame, idx: int) -> bool:
         """Check if an event is a CPU operator"""
         return trace_df["cat"].loc[idx] == self.sym_index["cpu_op"]
 
@@ -303,6 +332,28 @@ def transform_correlation_to_index(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def get_cpu_gpu_correlation(df: pd.DataFrame) -> pd.DataFrame:
+    """Get the correlation between CPU cuda_launch ops and GPU kernels in a trace DataFrame.
+    Args:
+        df (pd.DataFrame): a DataFrame representation of the trace
+
+    Returns:
+        A DataFrame with two columns:
+            gpu_index	cpu_index
+        ===========================
+        0	121898	    121900
+        1	121906	    121908
+    """
+    kernel_indices = df[df["stream"].gt(0) & df["index_correlation"].gt(0)]["index"]
+    cpu_gpu_correlation = (
+        df.loc[kernel_indices][["index", "index_correlation"]]
+        .copy()
+        .rename(columns={"index": "gpu_index", "index_correlation": "cpu_index"})
+        .reset_index(drop=True)
+    )
+    return cpu_gpu_correlation
+
+
 def add_iteration(df: pd.DataFrame, symbol_table: TraceSymbolTable) -> pd.DataFrame:
     """
     Add an iteration column to the DataFrame <df>.
@@ -319,7 +370,7 @@ def add_iteration(df: pd.DataFrame, symbol_table: TraceSymbolTable) -> pd.DataFr
 
     Args:
         df: a DataFrame representation of a trace.
-        sym_tab: the TraceSymbolTable for the trace
+        symbol_table: the TraceSymbolTable for the trace
 
     Returns:
         A DataFrame with the profiler steps information.
@@ -332,9 +383,11 @@ def add_iteration(df: pd.DataFrame, symbol_table: TraceSymbolTable) -> pd.DataFr
     profiler_step_ids = s_map[s_map.index.str.startswith("ProfilerStep")]
     profiler_step_ids.sort_index()
 
-    def _extract_iter(profiler_step_name: int) -> int:
-        """Convert a profiler_step_name to an iteration number. For example, 168 (string name: ProfilerStep#15) ==> 15"""
-        s = s_tab[profiler_step_name]
+    def _extract_iter(profiler_step_name_id: int) -> int:
+        """Convert a profiler_step_name_id to an iteration number.
+        For example, 168 (string name: ProfilerStep#15) ==> 15
+        """
+        s = s_tab[profiler_step_name_id]
         m = re.match(r"ProfilerStep\s*#\s*(\d+)", s)
         return int(m.group(1))
 
@@ -371,6 +424,7 @@ def parse_trace_dataframe(
     Args:
         trace_file_path (str): The path to a trace file. When the trace_file is a relative path.
             This method combines the object's trace_path with trace_file to get the full path of the trace file.
+        cfg (ParserConfig, Optional): A ParserConfig object controls how to parse the trace file.
     Returns:
         Tuple[MetaData, pd.DataFrame, TraceSymbolTable]
             The first item is the trace's metadata;
@@ -399,6 +453,19 @@ def parse_trace_dataframe(
         f"Parsed {trace_file_path} in {(t_end - t_start):.2f} seconds; current PID:{os. getpid()}"
     )
     return meta, df, local_symbol_table
+
+
+def decode_symbol_id_to_symbol_name(
+    df: pd.DataFrame, symbol_table: TraceSymbolTable, use_shorten_name: bool
+) -> None:
+    """Decode symbol ids into symbol names and write the decoded data into s_name and s_cat columns."""
+    s_tab: List[str] = symbol_table.sym_table
+    if use_shorten_name:
+        s_tab = [shorten_name(s) for s in s_tab]
+    if "name" in df.columns and df["name"].dtype.kind == "i":
+        df["s_name"] = df["name"].apply(lambda idx: s_tab[idx])
+    if "cat" in df.columns and df["cat"].dtype.kind == "i":
+        df["s_cat"] = df["cat"].apply(lambda idx: s_tab[idx])
 
 
 class Trace:
@@ -603,6 +670,31 @@ class Trace:
         self._align_all_ranks()
         self._filter_irrelevant_gpu_kernels(include_last_profiler_step)
 
+    def get_ranks(self) -> List[int]:
+        """Get the list of (sorted) ranks included in this trace."""
+        return sorted(self.traces.keys())
+
+    def get_iterations(self, rank: Optional[int] = None) -> List[int]:
+        """Get the list of iterations for a given rank.
+
+        Args:
+            rank (Optional[int]): a rank
+                when rank is None, use the first item of the list returned by self.get_ranks().
+
+        Returns:
+            A list of iteration IDs for the given rank.
+            Return an empty list when the rank is invalid or column "iteration" does not exists.
+        """
+        if rank is None:
+            _ranks = self.get_ranks()
+            rank = _ranks[0] if len(_ranks) > 0 else -1
+
+        if rank in self.get_ranks():
+            df = self.traces[rank]
+            if "iteration" in df.columns:
+                return sorted([i for i in df["iteration"].unique() if i >= 0])
+        return []
+
     def get_trace(self, rank: int) -> pd.DataFrame:
         """
         Get the trace for a given rank.
@@ -734,6 +826,19 @@ class Trace:
         else:
             for rank, trace_df in self.traces.items():
                 self.traces[rank] = filter_gpu_kernels_for_one_rank(trace_df)
+
+    def decode_symbol_ids(self, use_shorten_name: bool = True) -> None:
+        """Decode the name and cat column to show the original string names.
+
+        Args:
+            use_shorten_name (bool): shorten the long strings to make it easy to read.
+                Default: True.
+        """
+
+        for rank in self.traces:
+            decode_symbol_id_to_symbol_name(
+                self.get_trace(rank), self.symbol_table, use_shorten_name
+            )
 
     def convert_time_series_to_events(
         self, series: pd.DataFrame, counter_name: str, counter_col: str

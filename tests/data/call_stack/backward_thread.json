@@ -1,0 +1,155 @@
+{
+    "traceEvents": [
+        {
+            "ph": "X",
+            "cat": "user_annotation",
+            "name": "ProfilerStep#552",
+            "pid": 3914,
+            "tid": 3914,
+            "ts": 1666149715033200,
+            "dur": 413451,
+            "args": {
+                "Trace name": "PyTorch Profiler",
+                "Trace iteration": 0,
+                "External id": 49220,
+                "Profiler Event Index": 24131
+            }
+        },
+        {
+            "ph": "X",
+            "cat": "user_annotation",
+            "name": "## backward ##",
+            "pid": 3914,
+            "tid": 3914,
+            "ts": 1666149715287655,
+            "dur": 107988,
+            "args": {
+                "Trace name": "PyTorch Profiler",
+                "Trace iteration": 0,
+                "External id": 56949,
+                "Profiler Event Index": 31860
+            }
+        },
+        {
+            "ph": "X",
+            "cat": "cpu_op",
+            "name": "autograd::engine::evaluate_function: AddmmBackward0",
+            "pid": 3914,
+            "tid": 24922,
+            "ts": 1666149715364322,
+            "dur": 145,
+            "args": {
+                "Trace name": "PyTorch Profiler",
+                "Trace iteration": 0,
+                "External id": 67242,
+                "Profiler Event Index": 95305,
+                "Fwd thread id": 1,
+                "Sequence number": 714649
+            }
+        },
+        {
+            "ph": "X",
+            "cat": "cpu_op",
+            "name": "AddmmBackward0",
+            "pid": 3914,
+            "tid": 24922,
+            "ts": 1666149715364324,
+            "dur": 102,
+            "args": {
+                "Trace name": "PyTorch Profiler",
+                "Trace iteration": 0,
+                "External id": 67243,
+                "Profiler Event Index": 95306,
+                "Input Dims": [
+                    [
+                        2048,
+                        2048
+                    ]
+                ],
+                "Input type": [
+                    "float"
+                ],
+                "Fwd thread id": 1,
+                "Sequence number": 714649
+            }
+        },
+        {
+            "ph": "X",
+            "cat": "cpu_op",
+            "name": "aten::mm",
+            "pid": 3914,
+            "tid": 24922,
+            "ts": 1666149715364330,
+            "dur": 58,
+            "args": {
+                "Trace name": "PyTorch Profiler",
+                "Trace iteration": 0,
+                "External id": 67247,
+                "Profiler Event Index": 95310,
+                "Input Dims": [
+                    [
+                        2048,
+                        2048
+                    ],
+                    [
+                        2048,
+                        256
+                    ]
+                ],
+                "Input type": [
+                    "float",
+                    "float"
+                ]
+            }
+        },
+        {
+            "ph": "X",
+            "cat": "kernel",
+            "name": "void cutlass::Kernel<cutlass_80_tensorop_s1688gemm_128x128_32x3_nn_align4>",
+            "pid": 0,
+            "tid": 7,
+            "ts": 1666149715428509,
+            "dur": 45,
+            "args": {
+                "External id": 2131433,
+                "queued": 0,
+                "device": 0,
+                "context": 1,
+                "stream": 7,
+                "correlation": 2131433,
+                "registers per thread": 240,
+                "shared memory": 98304,
+                "blocks per SM": 0.5925926,
+                "warps per SM": 2.3703704,
+                "grid": [
+                    32,
+                    1,
+                    2
+                ],
+                "block": [
+                    128,
+                    1,
+                    1
+                ],
+                "est. achieved occupancy %": 0
+            }
+        },
+        {
+            "ph": "X",
+            "cat": "cuda_runtime",
+            "name": "cudaLaunchKernel",
+            "pid": 3914,
+            "tid": 24922,
+            "ts": 1666149715364374,
+            "dur": 10,
+            "args": {
+                "External id": 2131433,
+                "cbid": 211,
+                "correlation": 2131433
+            }
+        }
+    ],
+    "distributedInfo": {
+        "rank": 0
+    }
+}
