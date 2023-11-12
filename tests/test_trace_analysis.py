@@ -431,7 +431,7 @@ class TraceAnalysisTestCase(unittest.TestCase):
             self.assertEqual(e.end, end_nid)
             self.assertEqual(e.weight, weight, msg=f"edge = {e}")
 
-        # expected_node_ids[..][0] is the start node, and ...[1] is the end node.
+        # expected_node_ids[...][0] is the start node, and [...][1] is the end node.
         check_edge(expected_node_ids[0][0], expected_node_ids[1][0], 15)
         check_edge(expected_node_ids[1][0], expected_node_ids[2][0], 14)
         check_edge(expected_node_ids[2][0], expected_node_ids[2][1], 17)
@@ -444,7 +444,8 @@ class TraceAnalysisTestCase(unittest.TestCase):
         fft_runtime_idx = trace_df.index_correlation.loc[fft_kernel_idx]
         self.assertEqual(
             get_node_name(fft_kernel_idx),
-            "void fft2d_r2c_32x32<float, false, 0u, false>(float2*, float const*, int, int, int, int, int, int, int, int, int, cudnn::reduced_divisor, bool, int2, int, int)",
+            "void fft2d_r2c_32x32<float, false, 0u, false>(float2*, float const*, int, int, int, int, int, int,"
+            " int, int, int, cudnn::reduced_divisor, bool, int2, int, int)",
         )
         kstart, kend = cp_graph.get_nodes_for_event(fft_kernel_idx)
         rstart, _ = cp_graph.get_nodes_for_event(fft_runtime_idx)
@@ -577,7 +578,7 @@ class TraceAnalysisTestCase(unittest.TestCase):
                     trace_edge_counts["critical"], sum(trace_edge_counts.values())
                 )
 
-        # AlexNet has inter stream synchronization using CUDA Events
+        # AlexNet has inter-stream synchronization using CUDA Events
         critical_path_trace_dir2: str = os.path.join(
             self.base_data_dir, "critical_path/alexnet"
         )
@@ -600,7 +601,8 @@ class TraceAnalysisTestCase(unittest.TestCase):
         fft_src_kernel_idx = 1109
         self.assertEqual(
             get_node_name(fft_src_kernel_idx),
-            "void fft2d_c2r_32x32<float, false, false, 0u, false, false>(float*, float2 const*, int, int, int, int, int, int, int, int, int, float, float, cudnn::reduced_divisor, bool, float*, float*, int2, int, int)",
+            "void fft2d_c2r_32x32<float, false, false, 0u, false, false>(float*, float2 const*, int, int, int, "
+            "int, int, int, int, int, int, float, float, cudnn::reduced_divisor, bool, float*, float*, int2, int, int)",
         )
         _, fft_kernel_end = cp_graph.get_nodes_for_event(fft_src_kernel_idx)
 

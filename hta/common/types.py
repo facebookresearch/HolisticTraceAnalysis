@@ -1,7 +1,14 @@
+from dataclasses import dataclass
 from enum import Enum
 
 import numpy as np
 import pandas as pd
+
+
+@dataclass
+class OperationOutcome:
+    success: bool
+    reason: str
 
 
 class DeviceType(Enum):
