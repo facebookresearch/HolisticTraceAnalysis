@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
 
-import numpy as np
 import pandas as pd
 
 
@@ -27,12 +26,16 @@ def infer_device_type(df: pd.DataFrame) -> DeviceType:
     Returns:
         DeviceType: the type of the device on which the trace events are collect.
     """
-    device_type: DeviceType = DeviceType.UNKNOWN
-    if "stream" in df.columns:
-        streams = df["stream"].unique()
-        if len(streams) > 0:
-            if np.all(np.greater(streams, 0)):
-                device_type = DeviceType.GPU
-            elif np.all(np.less(streams, 0)):
-                device_type = DeviceType.CPU
-    return device_type
+    if "stream" in df.columns and ("pid" not in df.columns or "tid" not in df.columns):
+        if (df.stream.unique() > 0).all():
+            return DeviceType.GPU
+        elif (df.stream.unique() == -1).all():
+            return DeviceType.CPU
+    elif {"stream", "pid", "tid"}.issubset(set(df.columns)):
+        if (df.stream.unique() > 0).all() or (
+            (df.pid.unique() == 0).all() or (df.tid.unique() == 0).all()
+        ):
+            return DeviceType.GPU
+        elif (df.stream.unique() == -1).all():
+            return DeviceType.CPU
+    return DeviceType.UNKNOWN

@@ -17,52 +17,36 @@ CUDA_SASS_INSTRUCTION_COUNTER_FLOPS: Dict[str, float] = {
 
 
 class CuptiCounterAnalysis:
+    cuda_profiler_cat = "cuda_profiler_range"
+
     def __init__(self):
         pass
 
     @classmethod
     def _get_counter_data_with_operators_for_rank(
         cls,
-        t: "Trace",
+        t: Trace,
         rank: int,
         cg: CallGraph,
     ) -> Optional[pd.DataFrame]:
         sym_table = t.symbol_table.get_sym_table()
-        sym_index = t.symbol_table.get_sym_id_map()
+        t.decode_symbol_ids(use_shorten_name=False)
+        df = t.get_trace(rank)
 
-        cuda_profiler_cat = sym_index.get("cuda_profiler_range")
-        cuda_runtime_cat = sym_index.get("cuda_runtime")
-        cpu_op_cat = sym_index.get("cpu_op")
-        # TODO:bcoutinho handle missing symbols?
-        kernel_launch_sym = sym_index.get("cudaLaunchKernel")
-
-        # Get trace for a rank
-        trace_df: pd.DataFrame = t.get_trace(rank)
-
-        # Get cuda profiler events
-        gpu_kernels = trace_df[trace_df["cat"].eq(cuda_profiler_cat)].reset_index(
-            drop=True
+        # Get valid cuda kernels
+        gpu_kernels = (
+            df.loc[df.s_cat.eq(cls.cuda_profiler_cat)]
+            .copy()
+            .sort_values("ts")
+            .reset_index(drop=True)
         )
-
-        # call stacks of interest are all on CPU
-        call_stacks_indices = cg.mapping.query(
-            f"rank == {rank} and pid != 0 and tid != 0"
-        ).stack_index.values
-
-        # merge with runtime events from call stacks
-        leaf_nodes: List[int] = []
-        for i in call_stacks_indices:
-            leaf_nodes.extend(cg.call_stacks[i].get_leaf_nodes(-1))
-        leaf_df = trace_df.loc[leaf_nodes]
-
-        kernel_launches = leaf_df[leaf_df["cat"].eq(cuda_runtime_cat)]
-        kernel_launches = kernel_launches[
-            kernel_launches["name"].eq(kernel_launch_sym)
-        ].reset_index(drop=True)
-
-        # We map 1:1 each kernel launch with gpu kernel
-        # so the number of each should be equal
-
+        # Get cuda kernel launches
+        kernel_launches = (
+            df.loc[
+                df.s_cat.str.match("cuda_runtime")
+                & df.s_name.str.match("cudaLaunchKernel")
+            ].sort_values("ts")
+        ).reset_index(drop=True)
         if len(kernel_launches) != len(gpu_kernels):
             logger.error(
                 "Number of kernels launches and kernels do not match for"
@@ -72,60 +56,41 @@ class CuptiCounterAnalysis:
             )
             return None
 
-        # Now, we do the merge using index only
-        gpu_kernels = gpu_kernels.merge(
-            kernel_launches[["index"]],
-            left_index=True,
-            right_index=True,
-            how="inner",
-            suffixes=[None, "_runtime"],  # adds a column index_runtime
-        )
+        gpu_kernels["index_runtime"] = kernel_launches["index"]
+        # Add stack columns
+        op_stacks = {}
+        top_level_ops = {}
+        bottom_level_ops = {}
+        for idx, kernel_idx, launch_idx in gpu_kernels[
+            ["index", "index_runtime"]
+        ].itertuples(index=True):
+            stack = cg.get_stack_of_node(launch_idx).sort_values("ts")
+            ops = stack.loc[stack.s_cat.eq("cpu_op"), "index"].to_list()
+            op_stacks[idx] = ops
+            top_level_ops[idx] = ops[0]
+            bottom_level_ops[idx] = ops[-1]
 
-        # Add the op_stack as an array
-        def get_opstack(row: pd.Series) -> List[int]:
-            for i in call_stacks_indices:
-                op_stack = cg.call_stacks[i].get_path_to_root(row.index_runtime)[:-2]
-                if len(op_stack) > 0:
-                    return op_stack
-            return []
-
-        gpu_kernels["op_stack"] = gpu_kernels.apply(get_opstack, axis=1)
-
-        def get_top_or_bottom_op(ops: List[int], top: bool) -> int:
-            # only get ops that are cpu_op
-            filterd_ops = [op for op in ops if trace_df["cat"].loc[op] == cpu_op_cat]
-            if len(filterd_ops) < 1:
-                return -1
-            return filterd_ops[-1 if top else 0]
-
-        gpu_kernels["top_level_op"] = gpu_kernels["op_stack"].apply(
-            lambda ops: get_top_or_bottom_op(ops, top=True)
-        )
-        gpu_kernels["bottom_level_op"] = gpu_kernels["op_stack"].apply(
-            lambda ops: get_top_or_bottom_op(ops, top=False)
-        )
-
-        # add back strings for readability
-        for col in ["cat", "name"]:
-            gpu_kernels[col] = gpu_kernels[col].apply(
-                lambda i: sym_table[i] if (i >= 0 and i < len(sym_table)) else ""
-            )
-        for col in ["top_level_op", "bottom_level_op"]:
-            gpu_kernels[col] = gpu_kernels[col].apply(
-                lambda op: sym_table[trace_df["name"].loc[op]] if op >= 0 else ""
-            )
+        gpu_kernels["op_stack"] = pd.Series(op_stacks)
+        gpu_kernels["top_level_op"] = pd.Series(top_level_ops)
+        gpu_kernels["bottom_level_op"] = pd.Series(bottom_level_ops)
+        gpu_kernels["name"] = gpu_kernels["s_name"]
+        gpu_kernels["cat"] = gpu_kernels["s_cat"]
+        gpu_kernels.drop(columns=["s_cat", "s_name"], inplace=True)
 
         def stringify_op_stack(ops: List[int]) -> List[str]:
-            return [sym_table[trace_df["name"].loc[op]] for op in ops]
+            return [sym_table[df["name"].loc[op]] for op in ops]
 
         gpu_kernels["op_stack"] = gpu_kernels["op_stack"].apply(stringify_op_stack)
-
+        for col in ["top_level_op", "bottom_level_op"]:
+            gpu_kernels[col] = gpu_kernels[col].apply(
+                lambda op: sym_table[df["name"].loc[op]] if op >= 0 else ""
+            )
         return gpu_kernels
 
     @classmethod
     def get_counter_data_with_operators(
         cls,
-        t: "Trace",
+        t: Trace,
         ranks: Optional[List[int]] = None,
     ) -> List[pd.DataFrame]:
         """Correlates the Kernel counter events with pytorch operators using
@@ -153,7 +118,7 @@ class CuptiCounterAnalysis:
             )
             return []
 
-        cg = CallGraph(t)
+        cg = CallGraph(t, ranks=ranks)
 
         result_list = [
             cls._get_counter_data_with_operators_for_rank(t=t, rank=rank, cg=cg)
