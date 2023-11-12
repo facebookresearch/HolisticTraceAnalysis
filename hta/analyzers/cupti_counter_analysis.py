@@ -5,9 +5,9 @@
 from typing import Dict, List, Optional
 
 import pandas as pd
-
-from hta.common.call_stack import CallGraph
 from hta.common.trace import Trace
+
+from hta.common.trace_call_graph import CallGraph
 from hta.configs.config import logger
 
 CUDA_SASS_INSTRUCTION_COUNTER_FLOPS: Dict[str, float] = {
@@ -45,13 +45,13 @@ class CuptiCounterAnalysis:
         )
 
         # call stacks of interest are all on CPU
-        call_stacks_idxs = cg.mapping.query(
+        call_stacks_indices = cg.mapping.query(
             f"rank == {rank} and pid != 0 and tid != 0"
-        ).csg_index.values
+        ).stack_index.values
 
         # merge with runtime events from call stacks
         leaf_nodes: List[int] = []
-        for i in call_stacks_idxs:
+        for i in call_stacks_indices:
             leaf_nodes.extend(cg.call_stacks[i].get_leaf_nodes(-1))
         leaf_df = trace_df.loc[leaf_nodes]
 
@@ -83,7 +83,7 @@ class CuptiCounterAnalysis:
 
         # Add the op_stack as an array
         def get_opstack(row: pd.Series) -> List[int]:
-            for i in call_stacks_idxs:
+            for i in call_stacks_indices:
                 op_stack = cg.call_stacks[i].get_path_to_root(row.index_runtime)[:-2]
                 if len(op_stack) > 0:
                     return op_stack
