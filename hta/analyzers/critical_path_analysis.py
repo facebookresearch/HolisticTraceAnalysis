@@ -85,6 +85,8 @@ class CPGraph(nx.DiGraph):
         critical_path_edges_set (Set[CPEdge]): set of edge objects that are on the critical path.
     """
 
+    BLOCKING_SYNC_CALLS = ["cudaDeviceSynchronize", "cudaStreamSynchronize"]
+
     def __init__(self, t: "Trace", t_full: "Trace", rank: int) -> None:
         self.cg = CallGraph(t, ranks=[rank])
         self.trace_df: pd.DataFrame = t.get_trace(rank)
@@ -124,7 +126,11 @@ class CPGraph(nx.DiGraph):
         self.add_edge(edge.begin, edge.end, weight=edge.weight, object=edge)
 
     def _add_edge_helper(
-        self, src: CPNode, dest: CPNode, type: CPEdgeType = CPEdgeType.OPERATOR_KERNEL
+        self,
+        src: CPNode,
+        dest: CPNode,
+        type: CPEdgeType = CPEdgeType.OPERATOR_KERNEL,
+        zero_weight: bool = False,
     ) -> None:
         """Adds a edge between two nodes
         Args: src, dest (CPNode): node objects for source and dest."""
@@ -133,9 +139,12 @@ class CPGraph(nx.DiGraph):
         )
         assert src.idx != dest.idx, f"Src node {src} == Dest node {dest}"
         weight = (
-            (dest.ts - src.ts)
-            if type not in [CPEdgeType.DEPENDENCY, CPEdgeType.SYNC_DEPENDENCY]
-            else 0
+            0
+            if (
+                type in [CPEdgeType.DEPENDENCY, CPEdgeType.SYNC_DEPENDENCY]
+                or zero_weight
+            )
+            else (dest.ts - src.ts)
         )
         self._add_edge(CPEdge(begin=src.idx, end=dest.idx, weight=weight, type=type))
 
@@ -272,7 +281,13 @@ class CPGraph(nx.DiGraph):
             _, end_node = self.get_nodes_for_event(ev_id)
 
             if last_node is not None:
-                self._add_edge_helper(last_node, end_node)
+                zero_weight = self._get_node_name(ev_id) in self.BLOCKING_SYNC_CALLS
+                if zero_weight:
+                    logger.debug(
+                        "Zeroing weight for synchronization runtime call "
+                        f"id = {ev_id}"
+                    )
+                self._add_edge_helper(last_node, end_node, zero_weight=zero_weight)
 
             if op_depth == 0:
                 last_node = None
