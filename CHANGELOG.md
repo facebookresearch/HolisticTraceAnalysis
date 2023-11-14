@@ -6,6 +6,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 ## Unreleased
 #### Added
 - Add enhanced trace call stack graph implementation.
+- Added memory timeline view.
 - Added support for trace parser customization.
 - Added support for H100 traces.
 - (Experimental) Support to read PyTorch Execution Trace and correlate it with PyTorch Profiler Trace.
