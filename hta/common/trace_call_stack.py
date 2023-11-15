@@ -1,7 +1,7 @@
 from collections import defaultdict, namedtuple
 from dataclasses import dataclass, field
 from time import perf_counter
-from typing import Dict, List, NamedTuple, Optional
+from typing import Callable, Dict, List, NamedTuple, Optional
 
 import numpy as np
 import pandas as pd
@@ -170,6 +170,9 @@ class CallStackNode:
     height: int = -1
     device: DeviceType = DeviceType.CPU
     children: List[int] = field(default_factory=lambda: [])
+
+
+DFSCallback = Callable[[int, CallStackNode], None]
 
 
 class CallStackGraph:
@@ -406,14 +409,14 @@ class CallStackGraph:
         """
         if child_index in self.nodes:
             # Based on the single thread sequential execution assumption,
-            # a child node should always come after the parent node.
+            # a child node should always be added come after its parent node.
             self._num_errors = self._num_errors + 1
             if self._num_errors <= 2:
                 logger.error(
-                    f"adding edge {parent_index}-{child_index} error: {child_index} was already added."
+                    f"Error: edge={int(parent_index)}-{int(child_index)}; reason=node {int(child_index)} exists."
                 )
-                logger.error(f"{parent_index}: {self.nodes[parent_index]}")
-                logger.error(f"{child_index}: {self.nodes[child_index]}")
+                logger.error(f"Parent {int(parent_index)}: {self.nodes[parent_index]}")
+                logger.error(f"Children {int(child_index)}: {self.nodes[child_index]}")
             return
 
         if parent_index not in self.nodes:
@@ -871,3 +874,22 @@ class CallStackGraph:
         logger.debug(
             f"Add kernel info: prepare {t1 - t0:.2}s; traverse in {t2 - t1:.2f}s; update df {t3 - t2:.2f}s"
         )
+
+    def dfs_traverse(self, enter_func: DFSCallback, exit_func: DFSCallback) -> None:
+        """Depth first traversal on a specific call stack.
+        Call enter_func() and exit_func() on each callstack node.
+        """
+        self._dfs_traverse_node(self.root_index, enter_func, exit_func)
+
+    def _dfs_traverse_node(
+        self, node_id: int, enter_func: DFSCallback, exit_func: DFSCallback
+    ) -> None:
+        node = self.nodes[node_id]
+        enter_func(node_id, node)
+
+        all_nodes = self.nodes.keys()
+        for child_nid in node.children:
+            if child_nid in all_nodes:
+                self._dfs_traverse_node(child_nid, enter_func, exit_func)
+
+        exit_func(node_id, node)

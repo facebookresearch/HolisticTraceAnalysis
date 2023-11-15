@@ -193,8 +193,8 @@ class CallGraph:
         nodes: Dict[int, CallStackNode] = self.rank_to_nodes[rank]
         nodes.clear()
 
-        for thread, df_thread in df.groupby(["pid", "tid"]):
-            csi = CallStackIdentity(rank, thread[0], thread[1])
+        for (pid, tid), df_thread in df.groupby(["pid", "tid"]):
+            csi = CallStackIdentity(rank, pid, tid)
             device = infer_device_type(df_thread)
 
             if device == DeviceType.GPU:  # GPU stream - skip
@@ -230,7 +230,8 @@ class CallGraph:
             )
             t1 = perf_counter()
             logger.debug(
-                f"CallStack Graph of {csg.identity}: num_events={csg.df.shape[0]}, num_nodes={len(csg.nodes)} created in {t1-t0:.2f} seconds"
+                f"Created CallStackGraph of {csg.identity}: num_events={csg.df.shape[0]}, num_nodes={len(csg.nodes)}"
+                f"in {t1-t0:.2f} seconds"
             )
 
         logger.debug("connecting stacks of forward and backward threads")
@@ -295,24 +296,26 @@ class CallGraph:
             bwd_stack (CallStackGraph): the backward stack
             bwd_annotation_str (str): the backward annotations string
         """
-        s_map: pd.Series = pd.Series(self.trace_data.symbol_table.get_sym_id_map())
 
-        bwd_annotation_indices: List[int] = []
-        # Not all traces have a <bwd_annotation_str> but it is still possible to
-        # attach the bwd stack to the main stack for each Profiler Step.
-        for bwd_top_layer_annotation in [bwd_annotation_str, "ProfilerStep#"]:
-            bwd_annotation_ids: pd.Series = s_map[
-                s_map.index.str.startswith(bwd_top_layer_annotation)
-            ]
-            bwd_annotation_indices = main_stack.df[
-                main_stack.df["name"].isin(bwd_annotation_ids.values)
-            ]["index"].values.tolist()
+        def _get_backward_parents() -> List[int]:
+            s_map: pd.Series = pd.Series(self.trace_data.symbol_table.get_sym_id_map())
 
-            if len(bwd_annotation_indices) > 0:
-                break
+            # Not all traces have a <bwd_annotation_str>. However, it is still possible to
+            # attach the bwd stack to the main stack for each Profiler Step.
+            for bwd_top_layer_annotation in [bwd_annotation_str, "ProfilerStep#"]:
+                bwd_annotation_ids: pd.Series = s_map[
+                    s_map.index.str.startswith(bwd_top_layer_annotation)
+                ]
+                bwd_annotation_indices = main_stack.df[
+                    main_stack.df["name"].isin(bwd_annotation_ids.values)
+                ]["index"].values.tolist()
 
-        # Link backward operators to the user annotation in the same iteration
-        for idx in bwd_annotation_indices:
+                if len(bwd_annotation_indices) > 0:
+                    return bwd_annotation_indices
+            return []
+
+        # Link backward operators to the backward annotation events in the same iteration
+        for idx in _get_backward_parents():
             bwd_stack.update_parent_of_first_layer_nodes(idx)
 
     def get_call_stacks(

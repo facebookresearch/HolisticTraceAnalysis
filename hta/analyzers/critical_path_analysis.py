@@ -14,9 +14,9 @@ import networkx as nx
 import pandas as pd
 
 from hta.analyzers.trace_counters import TraceCounters
-from hta.common.call_stack import CallGraph, CallStackGraph, DeviceType
 
 from hta.common.trace import Trace
+from hta.common.trace_call_graph import CallGraph, CallStackGraph, DeviceType
 from hta.configs.config import logger
 
 
