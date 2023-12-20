@@ -36,8 +36,10 @@ def load_execution_trace(et_file: str) -> ExecutionTrace:
     et_file_path = normalize_path(et_file)
 
     t_start = time.perf_counter()
-    with gzip.open(et_file_path, "rb") if et_file.endswith("gz") else open(
-        et_file_path, "r"
+    with (
+        gzip.open(et_file_path, "rb")
+        if et_file.endswith("gz")
+        else open(et_file_path, "r")
     ) as f:
         et = ExecutionTrace(json.load(f))
     t_end = time.perf_counter()
