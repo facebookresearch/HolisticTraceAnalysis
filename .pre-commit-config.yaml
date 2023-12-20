@@ -13,22 +13,20 @@ repos:
         args: ['--maxkb=2048']
     -   id: end-of-file-fixer
 
--   repo: https://github.com/ambv/black
-    rev: 22.8.0
+-   repo: https://github.com/omnilib/ufmt
+    rev: v1.3.2
     hooks:
-    - id: black
+      - id: ufmt
+        additional_dependencies:
+          - toml
+          - black == 22.8.0
+          - usort == 1.0.4
 
 -   repo: https://github.com/pycqa/flake8
     rev: 5.0.3
     hooks:
     -   id: flake8
         args: [--show-source, --statistics]
-
--   repo: https://github.com/omnilib/ufmt
-    rev: v1.3.2
-    hooks:
-      - id: ufmt
-        additional_dependencies: [toml]
 
 -   repo: https://github.com/pre-commit/mirrors-mypy
     rev: 'v0.971'
