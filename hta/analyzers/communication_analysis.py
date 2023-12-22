@@ -93,7 +93,9 @@ class CommunicationAnalysis:
                 title="Computation-Communication Overlap",
                 labels={
                     "rank": "Rank",
-                    "comp_comm_overlap_ratio": "Computation-Communication Overlap Percentage",
+                    "comp_comm_overlap_ratio": (
+                        "Computation-Communication Overlap Percentage"
+                    ),
                 },
             )
 

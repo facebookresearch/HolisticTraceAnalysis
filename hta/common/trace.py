@@ -235,9 +235,11 @@ def compress_df(
     args_to_keep = cfg.get_args()
     for arg in args_to_keep:
         df[arg.name] = df["args"].apply(
-            lambda row: row.get(arg.raw_name, arg.default_value)
-            if isinstance(row, dict)
-            else arg.default_value
+            lambda row: (
+                row.get(arg.raw_name, arg.default_value)
+                if isinstance(row, dict)
+                else arg.default_value
+            )
         )
     df.drop(["args"], axis=1, inplace=True)
 

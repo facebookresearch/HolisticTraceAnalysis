@@ -40,8 +40,8 @@ def create_rank_to_trace_dict(trace_dir: str) -> Tuple[bool, Dict]:
     for file in file_list:
         file_path = os.path.join(trace_dir, file)
 
-        with gzip.open(file_path, "rb") if file.endswith("gz") else open(
-            file_path, "r"
+        with (
+            gzip.open(file_path, "rb") if file.endswith("gz") else open(file_path, "r")
         ) as f:
             for line in f:
                 data = line.decode() if isinstance(line, bytes) else line

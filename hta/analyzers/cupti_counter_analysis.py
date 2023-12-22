@@ -11,7 +11,7 @@ from hta.common.trace_call_graph import CallGraph
 from hta.configs.config import logger
 
 CUDA_SASS_INSTRUCTION_COUNTER_FLOPS: Dict[str, float] = {
-    f"smsp__sass_thread_inst_executed_op_{op}_pred_on.sum": (2 if "fma" in op else 1)
+    f"smsp__sass_thread_inst_executed_op_{op}_pred_on.sum": 2 if "fma" in op else 1
     for op in ["ffma", "fmul", "fadd", "hfma", "hmul", "hadd", "dfma", "dmul", "dadd"]
 }
 
