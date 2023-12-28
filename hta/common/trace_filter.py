@@ -295,7 +295,7 @@ class NameFilter(Filter):
                 if self.symbol_table
                 else TraceSymbolTable()
             )
-            return NameIdColumnFilter(self.name_pattern)(df, symbol_table)
+            return NameIdColumnFilter(self.name_pattern)(df, _symbol_table)
 
 
 class GPUKernelFilter(Filter):
