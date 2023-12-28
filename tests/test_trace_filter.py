@@ -23,15 +23,18 @@ from hta.common.trace_filter import (
 
 
 class TestTraceFilters(unittest.TestCase):
+    base_data_dir = str(Path(hta.__file__).parent.parent.joinpath("tests/data"))
+    trace_dir: str = os.path.join(base_data_dir, "trace_filter")
+    htaTrace: Trace = Trace(trace_dir=trace_dir)
+    htaTrace.parse_traces()
+
     def setUp(self):
-        base_data_dir = str(Path(hta.__file__).parent.parent.joinpath("tests/data"))
-        trace_dir: str = os.path.join(base_data_dir, "trace_filter")
-        self.htaTrace = Trace(trace_dir=trace_dir)
-        self.htaTrace.parse_traces()
+        self.htaTrace = TestTraceFilters.htaTrace
+        self.df = self.htaTrace.get_trace(0)
 
     def testIterationFilter(self) -> None:
         f = IterationFilter([551])
-        filtered_df = f(self.htaTrace.traces[0])
+        filtered_df = f(self.df)
 
         # 551 is present
         self.assertTrue(filtered_df[(filtered_df["iteration"] == 551)].size > 0)
@@ -55,13 +58,13 @@ class TestTraceFilters(unittest.TestCase):
         self.assertEqual(filtered_df["rank"].unique().tolist(), [0])
 
     def testTimeRangeFilter(self) -> None:
-        start_time = 1682725898079588
-        end_time = 1682725898081175
+        start_time = 1682725898237042
+        end_time = 1682725898240570
         f = TimeRangeFilter((start_time, end_time))
         filtered_df = f(self.htaTrace.traces[0])
 
         # rows are present in time range
-        self.assertEqual(filtered_df.shape[0], 45)
+        self.assertEqual(filtered_df.shape[0], 93)
 
     def testNameFilter(self) -> None:
         f = NameFilter("^nccl", symbol_table=self.htaTrace.symbol_table)
@@ -103,8 +106,8 @@ class TestTraceFilters(unittest.TestCase):
     def testCompositeFilter(self) -> None:
         f1 = IterationFilter([551])
 
-        start_time = 1682725898079588
-        end_time = 1682725898081175
+        start_time = 1682725898237042
+        end_time = 1682725898240570
         f2 = TimeRangeFilter((start_time, end_time))
 
         cf = CompositeFilter([f1, f2])
