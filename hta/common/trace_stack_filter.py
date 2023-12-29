@@ -1,37 +1,13 @@
 from enum import Enum
-from typing import List, Optional, Tuple
+from typing import List, Optional
 
 import pandas as pd
 
 from hta.common.trace import TraceSymbolTable
+from hta.common.trace_df import find_op_occurrence
 from hta.common.trace_filter import Filter, FirstIterationFilter
 from hta.configs.config import logger
 from hta.utils.utils import get_symbol_column_names
-
-
-def find_op_occurrence(
-    df: pd.DataFrame, op_name: str, position: int, name_column: str = "s_name"
-) -> Tuple[bool, pd.Series]:
-    """Locate the event in the trace that has the specified op name and position.
-    Args:
-        df: a DataFrame with trace data.
-        op_name: name of the operator. e.g., "split_embedding_codegen_forward_unweighted_kernel".
-        position: the occurrence position of the operator. Use zero or positive values for forward
-            counting and negative values for backward counting. For example, position=0 means
-            the first occurrence of the operator and position=-1 means the last (latest) occurrence.
-        name_column: Optional; name of the data frame column containing the operator name.
-            Default: "s_name".
-    Returns:
-        A boolean value and a Series.
-        The boolean value is True if there is a match, otherwise False.
-        When there is a match, the Series is the matching event.
-    """
-    ops = df.loc[df[name_column].eq(op_name)].sort_values("ts")
-    pos = position if position >= 0 else len(ops) + position
-    if len(ops) > 0 and 0 <= pos < len(ops):
-        return True, ops.iloc[pos]
-    else:
-        return False, pd.Series(dtype=pd.Int64Dtype)
 
 
 def get_matching_kernels(
@@ -55,18 +31,24 @@ def get_matching_kernels(
 
 class OperatorFilterMethod(Enum):
     """Types of Operator Filtering Methods
-
-    Under: Select events which occur between the start and end of an operator occurrence,
-        i.e.: {e | e in events and e.ts >= op.ts and e.end <= op.end}
-    After: Select events which occur after or at the end of the operator occurrence,
-        i.e.: { e | e in events and e.ts >= op.end}
-    Before: Select events that occur before or at the start of the operator occurrence,
-        i.e.: { e | e in events and e.end <= op.ts}
+    Under: events that occur between the start and end of an operator occurrence. i.e.:
+        {e | e in events and e.ts >= op.ts and e.end <= op.end}
+    After: events that occur after or at the end of the operator occurrence. i.e.:
+        { e | e in events and e.ts >= op.end}
+    Before: events that occur before or at the start of the operator occurrence. i.e.:
+        { e | e in events and e.end <= op.ts}
+    Parent: parent events of op. i.e.:
+        { e | e in events and e.ts <= op.ts and e.end >= op.end}
+    Stack: stack events of op. i.e.:
+        { e | e in events and (e.end >= op.start and e.start <= op.end)
+            or (e.end <= op.start and e.start >= op.end)}
     """
 
     Under = 0
     After = 1
     Before = 2
+    Ancestors = 3
+    Stack = 4
 
 
 class OperatorFilter(Filter):
