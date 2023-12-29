@@ -449,6 +449,7 @@ def parse_trace_dataframe(
         df, local_symbol_table = compress_df(df, cfg)
         transform_correlation_to_index(df)
         add_iteration(df, local_symbol_table)
+        df["end"] = df["ts"] + df["dur"]
 
     t_end = time.perf_counter()
     logger.debug(

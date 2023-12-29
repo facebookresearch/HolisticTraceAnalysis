@@ -1,5 +1,6 @@
 import os
 import unittest
+from dataclasses import dataclass
 from pathlib import Path
 from typing import List, NamedTuple, Union
 
@@ -20,6 +21,7 @@ from hta.common.trace_filter import (
     RankFilter,
     TimeRangeFilter,
 )
+from hta.common.trace_stack_filter import CombinedOperatorFilter, UnderOperatorFilter
 
 
 class TestTraceFilters(unittest.TestCase):
@@ -229,3 +231,69 @@ class TestTraceFilters(unittest.TestCase):
             got_df.equals(expected_df),
             f"testIterationIndexFilter failed: expect=\n{expected_df}\n\ngot=\n{got_df}",
         )
+
+    def testCombinedOperatorFilter(self) -> None:
+        @dataclass
+        class TC:
+            root_op_name: str
+            after_op_name: str
+            before_op_name: str
+            include_gpu_kernels: bool
+            expected_num_events: int
+            expected_num_kernels: int
+
+        test_cases = [
+            TC(
+                r"## forward ##",
+                r"All2All_Pooled_Wait",
+                r"forward",
+                False,
+                2,
+                0,
+            ),
+            TC(
+                r"## forward ##",
+                r"All2All_Pooled_Wait",
+                r"forward",
+                True,
+                3,
+                1,
+            ),
+            TC(
+                r"## forward ##",
+                r"All2All_Pooled_Wait",
+                r"## sdd_preprocess_tensors ##",
+                True,
+                411,
+                104,
+            ),
+        ]
+
+        self.htaTrace.decode_symbol_ids(use_shorten_name=False)
+        df = self.htaTrace.traces[0]
+        for i, tc in enumerate(test_cases):
+            f = CombinedOperatorFilter(
+                tc.root_op_name,
+                tc.after_op_name,
+                tc.before_op_name,
+                tc.include_gpu_kernels,
+            )
+            got_df = f(df)
+            self.assertEqual(
+                got_df.shape[0],
+                tc.expected_num_events,
+                f"test case #{i}: expect {tc.expected_num_events} events; got {got_df.shape[0]}",
+            )
+            cuda_kernels = got_df.loc[got_df["stream"].gt(0)]
+            self.assertEqual(
+                tc.expected_num_kernels,
+                cuda_kernels.shape[0],
+                f"test case #{i}: expect {tc.expected_num_kernels} cuda kernels, got {cuda_kernels.shape[0]}",
+            )
+
+    def testUnderOperatorFilter(self) -> None:
+        op_name = "forward"
+        self.htaTrace.decode_symbol_ids(use_shorten_name=False)
+        df = FirstIterationFilter()(self.htaTrace.traces[0])
+        f = UnderOperatorFilter(op_name=op_name, position=0, include_gpu_kernels=True)
+        self.assertEqual(f(df).shape[0], 146)
