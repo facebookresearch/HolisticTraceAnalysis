@@ -218,5 +218,5 @@ workflows:
       - cpu_tests_py39
       - cpu_tests_py310
       - cpu_tests_py311
-    parallelism: 2
+
 
