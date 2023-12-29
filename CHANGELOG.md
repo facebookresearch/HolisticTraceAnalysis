@@ -5,7 +5,8 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 #### Added
-- Add enhanced trace call stack graph implementation.
+- Added multiple trace filter classes and demos.
+- Added enhanced trace call stack graph implementation.
 - Added support for trace parser customization.
 - Added support for H100 traces.
 - (Experimental) Support to read PyTorch Execution Trace and correlate it with PyTorch Profiler Trace.
@@ -15,6 +16,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 - Change test data path in unittests from relative path to real path to support running test within IDEs.
 
 #### Deprecated
+- 
 
 #### Removed
 
