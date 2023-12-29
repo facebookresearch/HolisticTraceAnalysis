@@ -5,7 +5,8 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 #### Added
-- Add enhanced trace call stack graph implementation.
+- Added multiple trace filter classes and demos.
+- Added enhanced trace call stack graph implementation.
 - Added memory timeline view.
 - Added support for trace parser customization.
 - Added support for H100 traces.
@@ -16,6 +17,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 - Change test data path in unittests from relative path to real path to support running test within IDEs.
 
 #### Deprecated
+- Deprecated 'call_stack'; use 'trace_call_stack' and 'trace_call_graph' instead.
 
 #### Removed
 
