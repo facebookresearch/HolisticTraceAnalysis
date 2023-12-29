@@ -76,7 +76,7 @@ class IterationFilter(Filter):
         return df.loc[df["iteration"].isin(self.iterations)]
 
 
-class IterationIndexFilter:
+class IterationIndexFilter(Filter):
     """
     A filter class for extracting events in specific iterations from a DataFrame.
 

@@ -67,20 +67,42 @@ class TestTraceFilters(unittest.TestCase):
         self.assertEqual(filtered_df.shape[0], 93)
 
     def testNameFilter(self) -> None:
-        f = NameFilter("^nccl", symbol_table=self.htaTrace.symbol_table)
-        rank0 = f(self.htaTrace.traces[0])
-        symbol_named_rank0 = rank0["name"].apply(
+        name_filter = NameFilter("^nccl", symbol_table=self.htaTrace.symbol_table)
+        original_df = self.df
+        filtered_df = name_filter(original_df)
+        filtered_df_names = filtered_df["name"].apply(
             lambda idx: self.htaTrace.symbol_table.sym_table[idx]
         )
 
         # should match "^nccl"
         self.assertTrue(
-            symbol_named_rank0[symbol_named_rank0.str.match("^nccl")].size > 0
+            filtered_df_names[filtered_df_names.str.match("^nccl")].size > 0
         )
 
         # others should not match "^nccl"
         self.assertTrue(
-            symbol_named_rank0[~symbol_named_rank0.str.match("^nccl")].size == 0
+            filtered_df_names[~filtered_df_names.str.match("^nccl")].size == 0
+        )
+
+    def testNameFilterWithoutSymbolTable(self) -> None:
+        name_filter = NameFilter("^nccl", name_column="s_name")
+        original_df = self.df.copy()
+        original_df["s_name"] = original_df["name"].apply(
+            lambda idx: self.htaTrace.symbol_table.sym_table[idx]
+        )
+        filtered_df = name_filter(original_df)
+        filtered_df_names = filtered_df["name"].apply(
+            lambda idx: self.htaTrace.symbol_table.sym_table[idx]
+        )
+
+        # should match "^nccl"
+        self.assertTrue(
+            filtered_df_names[filtered_df_names.str.match("^nccl")].size > 0
+        )
+
+        # others should not match "^nccl"
+        self.assertTrue(
+            filtered_df_names[~filtered_df_names.str.match("^nccl")].size == 0
         )
 
     def testGPUKernelFilter(self) -> None:
