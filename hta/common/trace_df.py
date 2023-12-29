@@ -95,4 +95,4 @@ def find_events_by_name_patterns_using_decoded_names(
     indices = set()
     for module in list_name_patterns:
         indices.update(df.loc[df[name_column].str.match(module)]["index"])
-    return pd.Series(df.loc[indices]["index"])
+    return pd.Series(df.loc[list(indices)]["index"])

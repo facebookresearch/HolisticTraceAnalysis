@@ -1,5 +1,4 @@
 import re
-import subprocess as sp
 from dataclasses import dataclass
 from enum import Enum
 from typing import List, Optional, Set
@@ -44,6 +43,17 @@ DefaultCallStackHoverColumns: List[str] = [
     "tid",
     "index_correlation",
 ]
+
+REQUIRED_COLUMNS_FOR_CPU_GPU_ALIGNMENT = {
+    "index",
+    "stream",
+    "ts",
+    "dur",
+    "name",
+    "first_kernel_start",
+    "kernel_span",
+    "num_kernels",
+}
 
 
 class EventType(Enum):
@@ -264,22 +274,12 @@ def align_module_with_kernels(
         A dataframe of events with the modules aligned with the kernels.
     """
     # next_index = events_df["index"].max() + 1
-    required_columns = {
-        "index",
-        "stream",
-        "ts",
-        "dur",
-        "name",
-        "first_kernel_start",
-        "kernel_span",
-        "num_kernels",
-    }
+    required_columns = REQUIRED_COLUMNS_FOR_CPU_GPU_ALIGNMENT
 
     if not required_columns.issubset(set(events_df.columns)):
-        logger.warning(
-            f"The event Data Frame doesn't contain required columns: {required_columns-set(events_df.columns)}"
-        )
-        return events_df
+        error_msg = f"The input df doesn't contain required columns: {required_columns-set(events_df.columns)}"
+        logger.warning(error_msg)
+        raise ValueError(error_msg)
 
     # Select events which match any pattern described by module_list,
     #  on CPU device (stream = -1), and have at least one kernel.
@@ -296,11 +296,12 @@ def align_module_with_kernels(
         elif "s_name" in events_df.columns and events_df["s_name"].dtype == object:
             column = "s_name"
         else:
-            logger.warning(
+            error_msg = (
                 "The event data Frame doesn't contain a string column `name` or `s_name`"
-                "or an int `name` column with a symbol table."
+                " or an int `name` column with a symbol table."
             )
-            return events_df
+            logger.warning(error_msg)
+            raise ValueError(error_msg)
         indices_to_annotate = find_events_by_name_patterns_using_decoded_names(
             cpu_events, module_list, column
         )
@@ -324,49 +325,6 @@ def align_module_with_kernels(
     )
 
     return events_with_annotation
-
-
-def upload_to_manifold(
-    local_file_path: str,
-    manifold_file_path: str,
-    manifold_bucket: str = "hta",
-    file_type: Optional[str] = None,
-) -> str:
-    """Upload a local trace file or figure to Manifold.
-
-    Args:
-        local_file_path (str): The local file path.
-        manifold_file_path (str): The Manifold file path.
-        manifold_bucket (str, optional): The Manifold bucket. Defaults to "hta".
-        file_type (str, optional): The file type. Defaults to "trace".
-
-    Returns:
-        str: The Manifold file path.
-    """
-
-    sp.call(
-        [
-            "manifold",
-            "put",
-            "--ttl",
-            str(DefaultTTL),
-            "--overwrite",
-            local_file_path,
-            f"{manifold_bucket}/{manifold_file_path}",
-        ]
-    )
-
-    if not file_type:
-        file_type = "trace" if local_file_path.endswith(".json.gz") else "figure"
-
-    if file_type == "trace":
-        url = (
-            "https://www.internalfb.com/intern/perfdoctor/trace_view?filepath="
-            + f"{manifold_file_path}&bucket={manifold_bucket}"
-        )
-    else:
-        url = f"https://www.internalfb.com/manifold/explorer/{manifold_bucket}/{manifold_file_path}"
-    return url
 
 
 def prepare_timeline_events(
@@ -400,7 +358,7 @@ def prepare_timeline_events(
         )
         return pd.DataFrame()
 
-    selected_cols = (
+    selected_cols = list(
         set(hover_columns)
         .union(set(required_columns))
         .union(DefaultTaskLabelColumns)
@@ -515,7 +473,7 @@ def plot_events_timeline(
 
     fig.layout.xaxis.type = "linear"
     for d in fig.data:
-        d.x = events[events["name"].eq(d["name"])]["dur"].tolist()
+        d.x = events[events["name"].eq(d.name)]["dur"].tolist()
 
     fig.update_layout(
         xaxis_range=[
@@ -558,6 +516,7 @@ class Timeline:
         self,
         timeline_events: pd.DataFrame,
         symbol_table: TraceSymbolTable,
+        filter_func: Optional[Filter] = None,
         setting: TimelinePlotSetting = DefaultTimelinePlotSetting,
         hover_columns: Optional[List[str]] = None,
     ) -> None:
@@ -565,7 +524,7 @@ class Timeline:
         self.symbol_table: TraceSymbolTable = symbol_table
         self.setting: TimelinePlotSetting = setting
         self.hover_columns: List[str] = hover_columns or DefaultHoverColumns
-        self.prepare()
+        self.prepare(filter_func)
 
     @staticmethod
     def is_timeline_events(df: pd.DataFrame, setting: TimelinePlotSetting) -> bool:
@@ -576,7 +535,9 @@ class Timeline:
         if self.is_timeline_events(self.timeline_events, self.setting):
             return
         if filter_func:
-            self.timeline_events = filter_func(self.timeline_events).copy()
+            self.timeline_events = filter_func(
+                self.timeline_events, self.symbol_table
+            ).copy()
         self.timeline_events = prepare_timeline_events(
             self.timeline_events, symbol_table=self.symbol_table, setting=self.setting
         )
