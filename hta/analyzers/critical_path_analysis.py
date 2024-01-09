@@ -676,15 +676,23 @@ class CPGraph(nx.DiGraph):
             self.node_list[nid].ev_idx for nid in self.critical_path_nodes
         }
 
-        critical_path_nodes_set = set(self.critical_path_nodes)
-
         # Reset critical_path_edges_set across invocations
         self.critical_path_edges_set = set()
-        for u, v in self.edges:
-            e = self.edges[u, v]["object"]
-            if u in critical_path_nodes_set and v in critical_path_nodes_set:
-                self.critical_path_edges_set.add(e)
 
+        # Add edges connecting the nodes along the critical path
+        niter = iter(self.critical_path_nodes)
+        u = next(niter)
+
+        while 1:
+            try:
+                v = next(niter)
+                e = self.edges[u, v]["object"]
+                self.critical_path_edges_set.add(e)
+                u = v
+            except StopIteration:
+                break
+
+        assert len(self.critical_path_edges_set) == (len(self.critical_path_nodes) - 1)
         return True
 
     def show_critical_path(self) -> None:
