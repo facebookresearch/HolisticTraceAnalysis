@@ -71,11 +71,12 @@ install_dev_requirements: &install_dev_requirements
 
 # This is an alias to run all unit tests possible on a platform.
 run_unittests: &run_unittests
- - run:
+  - run:
       name: Run all unit tests
       # We run all and not stopping on failure on CPU since docker time is cheaper.
       command: |
-        python3 -m unittest -v
+        mkdir test-results
+        pytest --junitxml=test-results/junit.xml tests
 
 run_unittests_with_coverage: &run_unittests_with_coverage
   - run:
@@ -136,6 +137,8 @@ jobs:
           key: cache-key-cpu-py38-{{.Environment.CACHE_VERSION}}-{{checksum "setup.py"}}-{{checksum "requirements.txt"}}
 
       - <<: *run_unittests
+      - store_test_results:
+          path: test-results
 
 
   cpu_tests_py39:
@@ -160,6 +163,8 @@ jobs:
           key: cache-key-cpu-py39-{{.Environment.CACHE_VERSION}}-{{checksum "setup.py"}}-{{checksum "requirements.txt"}}
 
       - <<: *run_unittests
+      - store_test_results:
+          path: test-results
 
   cpu_tests_py310:
     <<: *cpu_py310
@@ -183,6 +188,8 @@ jobs:
           key: cache-key-cpu-py310-{{.Environment.CACHE_VERSION}}-{{checksum "setup.py"}}-{{checksum "requirements.txt"}}
 
       - <<: *run_unittests
+      - store_test_results:
+          path: test-results
 
   cpu_tests_py311:
     <<: *cpu_py311
@@ -206,6 +213,8 @@ jobs:
           key: cache-key-cpu-py311-{{.Environment.CACHE_VERSION}}-{{checksum "setup.py"}}-{{checksum "requirements.txt"}}
 
       - <<: *run_unittests
+      - store_test_results:
+          path: test-results
 
 # -------------------------------------------------------------------------------------
 # Workflows to run

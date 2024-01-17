@@ -71,6 +71,8 @@ __To run the entire test suite__
 
 ```
 python3 -m unittest -v
+# OR using pytest
+pytest tests
 ```
 
 __To run a specific test__
@@ -80,7 +82,14 @@ in the `CallStackTestCase` class in `test_call_stack.py`, use the following comm
 
 ```
 python3 -m unittest -v tests.test_call_stack.CallStackTestCase.test_sort_events
+# OR using pytest
+pytest tests -k test_sort_events
+# OR using pytest with the exact file
+pytest tests/test_call_stack.py -k test_sort_events
 ```
+
+Note, all our tests are written using `unittest` module, so use of pytest is primarily for a better
+test runner and support in the CI.
 
 ### CircleCI status
 The build status on the `main` branch is visible on the repository homepage. CircleCI status
