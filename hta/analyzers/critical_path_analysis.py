@@ -3,10 +3,12 @@
 # LICENSE file in the root directory of this source tree.
 
 import os
+from collections import defaultdict
 
 from copy import deepcopy
 from dataclasses import dataclass
 from enum import Enum
+from functools import cached_property
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
@@ -104,6 +106,10 @@ class CPGraph(nx.DiGraph):
         # map from event id in trace dataframe -> node_id pair
         self.event_to_node_map: Dict[int, Tuple[int, int]] = {}
 
+        # map from edge (u, v) -> event id in trace dataframe
+        # this is the attributed event for an edge
+        self.edge_to_event_map: Dict[Tuple[int, int], int] = {}
+
         # init networkx DiGraph
         super(CPGraph, self).__init__()
 
@@ -131,7 +137,7 @@ class CPGraph(nx.DiGraph):
         dest: CPNode,
         type: CPEdgeType = CPEdgeType.OPERATOR_KERNEL,
         zero_weight: bool = False,
-    ) -> None:
+    ) -> CPEdge:
         """Adds a edge between two nodes
         Args: src, dest (CPNode): node objects for source and dest."""
         logger.debug(
@@ -146,7 +152,9 @@ class CPGraph(nx.DiGraph):
             )
             else (dest.ts - src.ts)
         )
-        self._add_edge(CPEdge(begin=src.idx, end=dest.idx, weight=weight, type=type))
+        e = CPEdge(begin=src.idx, end=dest.idx, weight=weight, type=type)
+        self._add_edge(e)
+        return e
 
     def _add_event(self, ev_id: int) -> Tuple[CPNode, CPNode]:
         """Takes an event from the trace and generates two critical path nodes,
@@ -164,6 +172,73 @@ class CPGraph(nx.DiGraph):
         assert len(node_ids) == 2
         self.event_to_node_map[ev_id] = (node_ids[0], node_ids[1])
         return (nodes[0], nodes[1])
+
+    def _attribute_edge(self, e: CPEdge, src_parent: int) -> None:
+        """Attribute an edge to nearest matching event idx.
+        This function updates the edge_to_event_map.
+        Args:
+            e (CPEdge): Edge to attribute
+            src_parent (int): Parent event of the src node.
+
+        The src_parent is required when we consider nested operators,
+        see the explanation below for more details.
+        """
+        # Edge attribution is only applicable for edges representing
+        # operator or kernel spans
+        if e.type != CPEdgeType.OPERATOR_KERNEL:
+            return
+
+        """ For nested events consider the following cases
+        where the src and dest can each be either start or end nodes.
+
+        N |            Start or End?  | Edge Attributed to
+        - -------------------------------------------------
+        1  Src, Dest = (Start, Start) |      Src
+        2  Src, Dest = (Start, End)   |      Src = Dest
+        3  Src, Dest = (End, End)     |      Dest
+        4  Src, Dest = (End, Start)   |      Src.parent
+
+        In cases 1 and 2 it is understandable that both cases
+        the edge would actually reside in the start event. Case 2
+        is especially referring to an operator that is at the bottom
+        of the stack or is a GPU kernel.
+
+        Case 3 we are unwinding the stack and in this case the edge will
+        reside within Dest.
+        Case 4 is intersting where we are in an intermediate phase within
+        another operator like -
+
+        |-------------------- Op A ----------------------|
+            |--- Op B ---|  --------> |---- Op C ----|
+                        end   ^edge  start
+        The edge between Op B and Op C should be attributed to the parent
+        operator A. Hence the exception here.
+        """
+        src, dest = self.node_list[e.begin], self.node_list[e.end]
+
+        ev_idx = 0
+        if src.is_start:
+            ev_idx = src.ev_idx  # Case 1 & 2
+        elif not dest.is_start:
+            ev_idx = dest.ev_idx  # Case 3
+        else:
+            ev_idx = src_parent  # Case 4
+        self.edge_to_event_map[(src.idx, dest.idx)] = int(ev_idx)
+        logger.debug(
+            f"Attributing edge between nodes {src.idx} -> {dest.idx}"
+            f" to event id = {ev_idx}, event_name = {self._get_node_name(ev_idx)}"
+        )
+
+    @cached_property
+    def _event_to_attributed_edges_map(self) -> Dict[int, List[CPEdge]]:
+        """Caches a map from an event ID -> list of CPEdge objects
+        attributed to an event"""
+        d: Dict[int, List[CPEdge]] = defaultdict(list)
+        for uv, ev_idx in self.edge_to_event_map.items():
+            u, v = uv
+            e = self.edges[u, v]["object"]
+            d[ev_idx].append(e)
+        return d
 
     def _get_node_name(self, ev_id: int) -> str:
         if ev_id < 0:
@@ -200,6 +275,26 @@ class CPGraph(nx.DiGraph):
             self.node_list[end_node].ev_idx
         )
 
+    def get_event_attribution_for_edge(self, edge: CPEdge) -> Optional[int]:
+        """Helper to look up event attributed to an edge
+        Args:
+            edge (CPEdge): edge object that is part of the di-graph
+        Returns:
+            Optional[int]: Event id attributed to this edge.
+                Note only operator/kernel events have attribution.
+                Returns None in other cases.
+        """
+        return self.edge_to_event_map.get((edge.begin, edge.end), None)
+
+    def get_edges_attributed_to_event(self, ev_idx: int) -> List[CPEdge]:
+        """Helper to look up edges attributed to a specific event
+        Args:
+            ev_idx (int): Index of event to lookup attributed edges for.
+        Returns:
+            List[CPEdge]: List of edges attributed to this event in the graph
+        """
+        return self._event_to_attributed_edges_map.get(ev_idx, [])
+
     def _construct_graph(self) -> None:
         cpu_call_stacks = (
             csg for csg in self.cg.call_stacks if csg.device_type == DeviceType.CPU
@@ -230,6 +325,7 @@ class CPGraph(nx.DiGraph):
         last_node: Optional[CPNode] = None
         last_highlevel_op: Optional[CPNode] = None
         op_depth = 0
+        last_ev_parent: Optional[int] = None
 
         def is_op_or_runtime(ev_id):
             # ops to consider
@@ -242,6 +338,7 @@ class CPGraph(nx.DiGraph):
             nonlocal last_node
             nonlocal last_highlevel_op
             nonlocal op_depth
+            nonlocal last_ev_parent
             logger.debug(
                 "=" * csnode.depth
                 + f"Entering node {self._get_node_name(ev_id)}, id = {ev_id}"
@@ -259,8 +356,10 @@ class CPGraph(nx.DiGraph):
             op_depth += 1
 
             if last_node is not None:
-                self._add_edge_helper(last_node, start_node)
+                e = self._add_edge_helper(last_node, start_node)
+                self._attribute_edge(e, last_ev_parent)
             last_node = start_node
+            last_ev_parent = csnode.parent
 
             logger.debug(
                 "=" * csnode.depth + f"Op depth = {op_depth} last_node={last_node}"
@@ -270,6 +369,7 @@ class CPGraph(nx.DiGraph):
             nonlocal last_node
             nonlocal last_highlevel_op
             nonlocal op_depth
+            nonlocal last_ev_parent
             logger.debug(
                 "=" * csnode.depth
                 + f"Exiting node {self._get_node_name(ev_id)}, id = {ev_id}"
@@ -287,13 +387,15 @@ class CPGraph(nx.DiGraph):
                         "Zeroing weight for synchronization runtime call "
                         f"id = {ev_id}"
                     )
-                self._add_edge_helper(last_node, end_node, zero_weight=zero_weight)
+                e = self._add_edge_helper(last_node, end_node, zero_weight=zero_weight)
+                self._attribute_edge(e, last_ev_parent)
 
             if op_depth == 0:
                 last_node = None
                 last_highlevel_op = end_node
             else:
                 last_node = end_node
+                last_ev_parent = csnode.parent
 
             logger.debug(
                 "=" * csnode.depth + f"Op depth = {op_depth} last_node={last_node}"
@@ -573,7 +675,8 @@ class CPGraph(nx.DiGraph):
             )
 
             start_node, end_node = self._add_event(eid)
-            self._add_edge_helper(start_node, end_node)
+            e = self._add_edge_helper(start_node, end_node)
+            self._attribute_edge(e, -1)
 
             kernel_sync_index = kernel_sync.get(eid)
             kernel_sync_end: Optional[CPNode] = None

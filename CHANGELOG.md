@@ -22,6 +22,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 #### Fixed
 - Fixed issue #65 to handle floating point counter values in cupti\_counter\_analysis.
 - Fixes bug in Critical path analysis relating to listing out the edges on the critical path.
+- Updated critical path analysis with edge attribution.
 
 ## [0.2.0] - 2023-05-22
 #### Added
