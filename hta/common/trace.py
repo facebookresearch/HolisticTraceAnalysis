@@ -208,10 +208,6 @@ def compress_df(
     """
     cfg = cfg or ParserConfig.get_default_cfg()
 
-    # assign an index to each event
-    df.reset_index(inplace=True)
-    df["index"] = pd.to_numeric(df["index"], downcast="integer")
-
     # drop rows with null values
     df.dropna(axis=0, subset=["dur", "cat"], inplace=True)
     df.drop(df[df["cat"] == "Trace"].index, inplace=True)
@@ -446,6 +442,14 @@ def parse_trace_dataframe(
     df: pd.DataFrame = pd.DataFrame()
     if "traceEvents" in trace_record:
         df = pd.DataFrame(trace_record["traceEvents"])
+
+        # assign an index to each event
+        df.reset_index(inplace=True)
+        df["index"] = pd.to_numeric(df["index"], downcast="integer")
+
+        # add fwd bwd links between CPU ops
+        add_fwd_bwd_links(df)
+
         df, local_symbol_table = compress_df(df, cfg)
         transform_correlation_to_index(df)
         add_iteration(df, local_symbol_table)
@@ -455,6 +459,83 @@ def parse_trace_dataframe(
         f"Parsed {trace_file_path} in {(t_end - t_start):.2f} seconds; current PID:{os. getpid()}"
     )
     return meta, df, local_symbol_table
+
+
+def add_fwd_bwd_links(df: pd.DataFrame) -> None:
+    df_fwdbwd = df.loc[df.cat.eq("fwdbwd")]
+    # Check if fwdbwd events are present
+    if df_fwdbwd.empty:
+        return
+    df_fwdbwd_start = df_fwdbwd.query("ph == 's'")[["ts", "id", "pid", "tid"]]
+    df_fwdbwd_end = df_fwdbwd.query("ph == 'f' and bp == 'e'")[
+        ["ts", "id", "pid", "tid"]
+    ]
+
+    df_cpu = df.loc[df.cat.eq("cpu_op")][["index", "ts"]]
+    df_fwdbwd_start_events = df_fwdbwd_start.merge(df_cpu, how="inner", on="ts")
+    df_fwdbwd_start_events.rename(columns={"index": "index_start"}, inplace=True)
+
+    df_fwdbwd_end_events = df_fwdbwd_end.merge(df_cpu, how="inner", on="ts")
+    df_fwdbwd_end_events.rename(columns={"index": "index_end"}, inplace=True)
+
+    if df_fwdbwd_start_events.empty or df_fwdbwd_end_events.empty:
+        return
+
+    df_fwdbwd_start_events = pd.concat(
+        g.sort_index().tail(1) for _, g in df_fwdbwd_start_events.groupby("id")
+    )
+    df_fwdbwd_end_events = pd.concat(
+        g.sort_index().tail(1) for _, g in df_fwdbwd_end_events.groupby("id")
+    )
+
+    df_fwdbwd_merge = df_fwdbwd_start_events.merge(
+        df_fwdbwd_end_events, how="inner", on="id", suffixes=("_start", "_end")
+    )
+
+    fwdbwd_start_to_end_map = {}
+    fwdbwd_end_to_start_map = {}
+    for _, entry in df_fwdbwd_merge.iterrows():
+        start_tuple = (
+            entry["ts_start"],
+            entry["pid_start"],
+            entry["tid_start"],
+            entry["index_start"],
+        )
+        end_tuple = (
+            entry["ts_end"],
+            entry["pid_end"],
+            entry["tid_end"],
+            entry["index_end"],
+        )
+
+        fwdbwd_start_to_end_map[start_tuple] = entry["index_end"]
+        fwdbwd_end_to_start_map[end_tuple] = entry["index_start"]
+
+    def _set_fwdbwd_index(row):
+        if row.get("cat") != "cpu_op":
+            return -1
+        key = (row.ts, row.pid, row.tid, row.get("index"))
+        # print(key)
+        if key in fwdbwd_start_to_end_map:
+            return fwdbwd_start_to_end_map[key]
+        elif key in fwdbwd_end_to_start_map:
+            return fwdbwd_end_to_start_map[key]
+        else:
+            return -1
+
+    def _set_fwd_or_bwd(row):
+        if row.get("cat") != "cpu_op":
+            return -1
+        key = (row.ts, row.pid, row.tid, row.get("index"))
+        if key in fwdbwd_start_to_end_map:
+            return 0
+        elif key in fwdbwd_end_to_start_map:
+            return 1
+        else:
+            return -1
+
+    df["fwdbwd_index"] = df.apply(_set_fwdbwd_index, axis=1)
+    df["fwdbwd"] = df.apply(_set_fwd_or_bwd, axis=1)
 
 
 def decode_symbol_id_to_symbol_name(
