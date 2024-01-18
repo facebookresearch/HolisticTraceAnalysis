@@ -39,8 +39,8 @@ class CriticalPathAnalysisTestCase(unittest.TestCase):
 
         # Check the graph construction for the aten::relu_ operator
         # There are 3 stacked operators/runtime events here;
-        #  aten::relu_
-        #    aten::clamp_min_
+        #  aten::relu_-------------
+        #    aten::clamp_min_----
         #      cudaLaunchKernel
         # quick sanity check that we are looking at right events
 
@@ -63,18 +63,47 @@ class CriticalPathAnalysisTestCase(unittest.TestCase):
         self.assertEqual(check_nodes(clamp_min_idx), expected_node_ids[1])
         self.assertEqual(check_nodes(cuda_launch_idx), expected_node_ids[2])
 
-        def check_edge(start_nid: int, end_nid: int, weight: int) -> None:
+        def check_edge(start_nid: int, end_nid: int, weight: int, attr_ev: int) -> None:
+            """Arga = start node id, end node id, weight of edge, ev id to attirbute to"""
             e = cp_graph.edges[start_nid, end_nid]["object"]
             self.assertEqual(e.begin, start_nid)
             self.assertEqual(e.end, end_nid)
             self.assertEqual(e.weight, weight, msg=f"edge = {e}")
+            self.assertEqual(
+                cp_graph.edge_to_event_map[(e.begin, e.end)],
+                attr_ev,
+                msg=f"edge = {e}, expected attributed event = {attr_ev}",
+            )
+            return e
 
         # expected_node_ids[...][0] is the start node, and [...][1] is the end node.
-        check_edge(expected_node_ids[0][0], expected_node_ids[1][0], 15)
-        check_edge(expected_node_ids[1][0], expected_node_ids[2][0], 14)
-        check_edge(expected_node_ids[2][0], expected_node_ids[2][1], 17)
-        check_edge(expected_node_ids[2][1], expected_node_ids[1][1], 15)
-        check_edge(expected_node_ids[1][1], expected_node_ids[0][1], 32)
+        e1 = check_edge(expected_node_ids[0][0], expected_node_ids[1][0], 15, relu_idx)
+        e2 = check_edge(
+            expected_node_ids[1][0], expected_node_ids[2][0], 14, clamp_min_idx
+        )
+        e3 = check_edge(
+            expected_node_ids[2][0], expected_node_ids[2][1], 17, cuda_launch_idx
+        )
+        e4 = check_edge(
+            expected_node_ids[2][1], expected_node_ids[1][1], 15, clamp_min_idx
+        )
+        e5 = check_edge(expected_node_ids[1][1], expected_node_ids[0][1], 32, relu_idx)
+
+        # Make sure edges show up when we reverse look up attributed edges from event id.
+        #  --------------aten::relu_---------------
+        #   <e1>|-------aten::clamp_min_------|<e5>
+        #       <-e2->|cudaLaunchKernel|<-e4->
+        #             | <-----e3-----> |
+
+        self.assertEqual(
+            set(cp_graph.get_edges_attributed_to_event(relu_idx)), {e1, e5}
+        )
+        self.assertEqual(
+            set(cp_graph.get_edges_attributed_to_event(clamp_min_idx)), {e2, e4}
+        )
+        self.assertEqual(
+            set(cp_graph.get_edges_attributed_to_event(cuda_launch_idx)), {e3}
+        )
 
         # Check kernel launch and kernel-kernel delays
         # fft kernel correlation ID 5597
@@ -129,6 +158,18 @@ class CriticalPathAnalysisTestCase(unittest.TestCase):
                 type=CPEdgeType.SYNC_DEPENDENCY,
             ),
         )
+
+        # Check that all edges have event attribution
+        for (u, v) in cp_graph.edges:
+            e = cp_graph.edges[u, v]["object"]
+            if e.type == CPEdgeType.OPERATOR_KERNEL:
+                self.assertTrue(
+                    (u, v) in cp_graph.edge_to_event_map,
+                    msg=f"edge = {(u,v)}, obj = {e}",
+                )
+                self.assertTrue(cp_graph.get_event_attribution_for_edge(e))
+            else:
+                self.assertEqual(cp_graph.get_event_attribution_for_edge(e), None)
 
         # Make sure critical path is as expected
         self.assertEqual(len(cp_graph.critical_path_nodes), 315)
