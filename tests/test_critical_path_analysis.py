@@ -14,12 +14,17 @@ from hta.trace_analysis import TraceAnalysis
 class CriticalPathAnalysisTestCase(unittest.TestCase):
     def setUp(self):
         self.base_data_dir = str(Path(__file__).parent.parent.joinpath("tests/data"))
-
-    def test_critical_path_analysis(self):
         critical_path_trace_dir: str = os.path.join(
             self.base_data_dir, "critical_path/simple_add"
         )
-        critical_path_t = TraceAnalysis(trace_dir=critical_path_trace_dir)
+        self.simple_add_trace = TraceAnalysis(trace_dir=critical_path_trace_dir)
+        critical_path_trace_dir2: str = os.path.join(
+            self.base_data_dir, "critical_path/alexnet"
+        )
+        self.alexnet_trace = TraceAnalysis(trace_dir=critical_path_trace_dir2)
+
+    def test_critical_path_analysis(self):
+        critical_path_t = self.simple_add_trace
 
         annotation = "[param|pytorch.model.alex_net|0|0|0|measure|forward]"
         instance_id = 1
@@ -258,10 +263,7 @@ class CriticalPathAnalysisTestCase(unittest.TestCase):
                 )
 
         # AlexNet has inter-stream synchronization using CUDA Events
-        critical_path_trace_dir2: str = os.path.join(
-            self.base_data_dir, "critical_path/alexnet"
-        )
-        critical_path_t = TraceAnalysis(trace_dir=critical_path_trace_dir2)
+        critical_path_t = self.alexnet_trace
 
         trace_df = critical_path_t.t.get_trace(0)
         sym_table = critical_path_t.t.symbol_table.get_sym_table()
@@ -300,6 +302,27 @@ class CriticalPathAnalysisTestCase(unittest.TestCase):
                 type=CPEdgeType.SYNC_DEPENDENCY,
             ),
         )
+
+    def test_critical_path_breakdown(self):
+        annotation = "[param|pytorch.model.alex_net|0|0|0|measure|forward]"
+        instance_id = 1
+
+        critical_path_t = self.alexnet_trace
+        cp_graph, success = critical_path_t.critical_path_analysis(
+            rank=0, annotation=annotation, instance_id=instance_id
+        )
+        self.assertTrue(success)
+
+        # Call the summary function
+        summary_df = cp_graph.summary()
+        self.assertEqual(len(summary_df), 5)
+
+        # Check full path breakdown
+        edf = cp_graph.get_critical_path_breakdown()
+        self.assertEqual(len(edf), len(cp_graph.critical_path_edges_set))
+
+        # Check the boundby column is populated
+        self.assertEqual(edf.bound_by.isnull().sum() + edf.bound_by.isna().sum(), 0)
 
 
 if __name__ == "__main__":

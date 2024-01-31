@@ -17,9 +17,10 @@ import pandas as pd
 
 from hta.analyzers.trace_counters import TraceCounters
 
-from hta.common.trace import Trace
+from hta.common.trace import decode_symbol_id_to_symbol_name, Trace
 from hta.common.trace_call_graph import CallGraph, CallStackGraph, DeviceType
 from hta.configs.config import logger
+from hta.utils.utils import is_comm_kernel
 
 
 @dataclass
@@ -798,6 +799,74 @@ class CPGraph(nx.DiGraph):
         assert len(self.critical_path_edges_set) == (len(self.critical_path_nodes) - 1)
         return True
 
+    def get_critical_path_breakdown(self) -> Optional[pd.DataFrame]:
+        r"""
+        Returns a breakdown of the critical path with each edge in the
+        path attributed to an event in the trace.
+
+        Returns: pd.Dataframe
+            The output dataframe has one row per edge in the critical path.
+            It includes the columns:
+                event_id - Index of the event in original trace dataframe
+                s_name - Shortened string name of the event.
+                duration - Duration or weight of the edge in critical path
+                type - Type of edge. Could be one of TODO
+                cat, pid, tid, stream - Columns corresponding to similar values
+                    in the original t/race dataframe
+                bound_by - This column classifies the edges in the critical path
+                    as bounded by "cpu_bound", "gpu_compute_bound",
+                    "gpu_kernel_kernel_overhead" (gaps between kernels)
+                    "gpu_kernel_launch_overhead" (delay between CPU to GPU launch)
+        """
+        if len(self.critical_path_nodes) == 0:
+            return None
+
+        trace_df = self.trace_df
+        decode_symbol_id_to_symbol_name(
+            trace_df, self.symbol_table, use_shorten_name=True
+        )
+
+        # Construct simple dataframe from edges on critical path
+        def make_edge_record(e):
+            return {
+                "event_idx": self.get_event_attribution_for_edge(e),
+                "duration": e.weight,
+                "type": str(e.type.value),
+            }
+
+        edge_df = pd.DataFrame.from_records(
+            make_edge_record(e) for e in self.critical_path_edges_set
+        )
+
+        edge_events_df = pd.merge(
+            edge_df,
+            trace_df[["s_name", "cat", "pid", "tid", "stream", "index"]],
+            left_on="event_idx",
+            right_on="index",
+            how="left",
+        )
+
+        # Add column to classify boundedness
+        edge_events_df["bound_by"] = edge_events_df.apply(bound_by, axis=1)
+        return edge_events_df
+
+    def summary(self) -> pd.core.series.Series:
+        """Displays a summary or breakdown of the critical path into one of the following
+        - cpu_bound
+        - gpu_compute_bound
+        - gpu_communication_bound (NCCL Collectives)
+        - gpu_kernel_kernel_overhead (Gaps between GPU kernels)
+        - gpu_kernel_launch_overhead (Delay launching kernels from CPU to GPU)
+
+        Returns:
+            A summary pandas series with bottleneck type -> % of duration on critical path.
+        Also see get_critical_path_breakdown().
+        """
+        edf = self.get_critical_path_breakdown()
+        summary = edf.groupby("bound_by").duration.sum() / edf.duration.sum() * 100
+        print("Critical Path broken down by boundedness = (in % of duration)")
+        return summary
+
     def show_critical_path(self) -> None:
         """List out the nodes in the critical path graph"""
         for n in self.critical_path_nodes:
@@ -806,6 +875,24 @@ class CPGraph(nx.DiGraph):
                 f"Critical {node}, ev_id = {node.ev_idx} "
                 f"ev_name = {self._get_node_name(node.ev_idx)}"
             )
+
+
+def bound_by(row: Dict[str, Any]) -> str:
+    """Function to classify the bounding resource for an edge on the critical path"""
+    if row["type"] == "critical_path_kernel_kernel_delay":
+        return "gpu_kernel_kernel_overhead"
+    if row["type"] == "critical_path_kernel_launch_delay":
+        return "gpu_kernel_launch_overhead"
+    if row["type"] in ["critical_path_dependency", "critical_path_sync_dependency"]:
+        return ""
+
+    assert not pd.isna(row["s_name"]), f"name of edge is na : row = {row}"
+
+    if row["stream"] < 0:
+        return "cpu_bound"
+    if is_comm_kernel(row["s_name"]):
+        return "gpu_communication_bound"
+    return "gpu_compute_bound"
 
 
 class CriticalPathAnalysis:
