@@ -11,6 +11,8 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 - Added support for H100 traces.
 - (Experimental) Support to read PyTorch Execution Trace and correlate it with PyTorch Profiler Trace.
 - (Experimental) Added lightweight critical path analysis feature.
+- (Experimental) Critical path analysis features: event attribution and `summary()`
+- (Experimental) Critical path analysis fixes: fixing async memcpy and adding GPU to CPU event based synchronization.
 
 #### Changed
 - Change test data path in unittests from relative path to real path to support running test within IDEs.

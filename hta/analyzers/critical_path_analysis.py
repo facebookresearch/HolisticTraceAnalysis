@@ -91,6 +91,10 @@ class CPGraph(nx.DiGraph):
     BLOCKING_SYNC_CALLS = [
         "cudaDeviceSynchronize",
         "cudaStreamSynchronize",
+        # CUDA event APIshttps://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__EVENT.html
+        "cudaEventQuery",
+        "cudaEventSynchronize",
+        # Memory copies
         "cudaMemcpy",
         # In some cases even Async memcpy might synchronize
         # https://docs.nvidia.com/cuda/cuda-runtime-api/api-sync-behavior.html#api-sync-behavior__memcpy-sync
@@ -520,7 +524,7 @@ class CPGraph(nx.DiGraph):
 
         return cuda_stream_wait_events.set_index("index")
 
-    def _check_stream_wait_event_helper(self, row) -> bool:
+    def _check_event_sync_helper(self, row) -> bool:
         eid = row["index"]
         if "wait_on_cuda_event_record_corr_id" not in row:
             logger.warning(
@@ -590,6 +594,7 @@ class CPGraph(nx.DiGraph):
         sync_cat = sym_id_map.get("cuda_sync", -1)
         context_sync = sym_id_map.get("Context Sync", -1)
         stream_sync = sym_id_map.get("Stream Sync", -1)
+        event_sync = sym_id_map.get("Event Sync", -1)
         stream_wait_event = sym_id_map.get("Stream Wait Event", -1)
 
         # Sort kernels by start timestamp but use end time_stamp for sync events.
@@ -620,11 +625,10 @@ class CPGraph(nx.DiGraph):
             )
 
             name = row["name"]
-            if name == stream_wait_event:
-                # Stream Wait event is indicating a dependency between
-                # the next GPU kernel on this stream and another GPU kernel
 
-                if not self._check_stream_wait_event_helper(row):
+            # Handle event synchronizations
+            if name == stream_wait_event or name == event_sync:
+                if not self._check_event_sync_helper(row):
                     return
 
                 # Note: use the full trace to find the src kernel
@@ -632,28 +636,43 @@ class CPGraph(nx.DiGraph):
                     row["index_previous_launch"]
                 ]
 
-                # Get the corresponding CPU event for this StreamWaitEvent
-                dest_kernel_launch_index = cuda_stream_wait_events.loc[
-                    row["index_correlation"]
-                ]["index_next_launch"]
+                if name == stream_wait_event:
+                    # Stream Wait event is indicating a dependency between
+                    # the next GPU kernel on this stream and another GPU kernel
 
-                if dest_kernel_launch_index < 0:
-                    # TODO make a warning?
-                    return
+                    # Get the corresponding GPU event for this cudaStreamWaitEvent()
+                    dest_kernel_launch_index = cuda_stream_wait_events.loc[
+                        row["index_correlation"]
+                    ]["index_next_launch"]
 
-                # Use the next lanuch to find dest_kernel
-                dest_kernel_index = self.full_trace_df.index_correlation[
-                    dest_kernel_launch_index
-                ]
+                    if dest_kernel_launch_index < 0:
+                        # TODO make a warning?
+                        return
 
-                logger.debug(
-                    f"Scheduling a Stream Sync on stream {row['stream']} "
-                    f" dest kernel index {dest_kernel_index}, corr id = "
-                    f"{self.full_trace_df.correlation.loc[dest_kernel_index]}\n "
-                    f"on src kernel with index = {src_kernel_index}, corr id = "
-                    f"{self.full_trace_df.correlation.loc[src_kernel_index]}"
-                )
-                kernel_sync[dest_kernel_index] = src_kernel_index
+                    # Use the next launch to find dest_kernel
+                    dest_kernel_index = self.full_trace_df.index_correlation[
+                        dest_kernel_launch_index
+                    ]
+
+                    logger.debug(
+                        f"Scheduling a Stream Sync on stream {row['stream']} "
+                        f" dest kernel index {dest_kernel_index}, corr id = "
+                        f"{self.full_trace_df.correlation.loc[dest_kernel_index]}\n "
+                        f"on src kernel with index = {src_kernel_index}, corr id = "
+                        f"{self.full_trace_df.correlation.loc[src_kernel_index]}"
+                    )
+                    kernel_sync[dest_kernel_index] = src_kernel_index
+                else:
+                    logger.debug(
+                        "Adding cudaEventSynchronize GPU->CPU edge between GPU kernel"
+                        f" with index = {src_kernel_index}, corr id = "
+                        f"{self.full_trace_df.correlation.loc[src_kernel_index]}"
+                        f" to CPU event index {row['index_correlation']}, corr id ="
+                        f"{self.full_trace_df.correlation.loc[row['index_correlation']]}"
+                    )
+                    # TODO
+                    _, gpu_end_node = self.get_nodes_for_event(src_kernel_index)
+                    self._add_gpu_cpu_sync_edge(gpu_end_node, row["index_correlation"])
                 return
 
             assert name == stream_sync or name == context_sync
