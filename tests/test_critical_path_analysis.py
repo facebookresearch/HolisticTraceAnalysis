@@ -22,6 +22,10 @@ class CriticalPathAnalysisTestCase(unittest.TestCase):
             self.base_data_dir, "critical_path/alexnet"
         )
         self.alexnet_trace = TraceAnalysis(trace_dir=critical_path_trace_dir2)
+        critical_path_trace_dir3: str = os.path.join(
+            self.base_data_dir, "critical_path/cuda_event_sync"
+        )
+        self.event_sync_trace = TraceAnalysis(trace_dir=critical_path_trace_dir3)
 
     def test_critical_path_analysis(self):
         critical_path_t = self.simple_add_trace
@@ -302,6 +306,57 @@ class CriticalPathAnalysisTestCase(unittest.TestCase):
                 type=CPEdgeType.SYNC_DEPENDENCY,
             ),
         )
+
+    def test_critical_path_analysis_event_sync(self):
+        """Checks cudaEventSync() synchronization edges"""
+        critical_path_t = self.event_sync_trace
+
+        annotation = "ProfilerStep"
+        instance_id = 0
+        cp_graph, success = critical_path_t.critical_path_analysis(
+            rank=0, annotation=annotation, instance_id=instance_id
+        )
+        self.assertTrue(success)
+
+        trace_df = critical_path_t.t.get_trace(0)
+        sym_table = critical_path_t.t.symbol_table.get_sym_table()
+
+        def get_node_name(nid):
+            if nid < 0:
+                return "ROOT"
+            trace_entry = trace_df.loc[nid].to_dict()
+            return sym_table[int(trace_entry["name"])]
+
+        cuda_kernel_idx = 33
+        cuda_event_sync_idx = 41
+        cuda_event_query_idx = 45
+
+        self.assertEqual(
+            get_node_name(cuda_kernel_idx),
+            "at::cuda::(anonymous namespace)::spin_kernel(long)",
+        )
+        self.assertEqual(get_node_name(cuda_event_sync_idx), "cudaEventSynchronize")
+        self.assertEqual(get_node_name(cuda_event_query_idx), "cudaEventQuery")
+
+        # There are two GPU -> CPU dependencies in this trace
+        # both start at a CUDA kernel that precedes the CUDA event and ends in trace.
+        _, cuda_kernel_end = cp_graph.get_nodes_for_event(cuda_kernel_idx)
+        _, cuda_event_sync_end = cp_graph.get_nodes_for_event(cuda_event_sync_idx)
+        _, cuda_event_query_end = cp_graph.get_nodes_for_event(cuda_event_query_idx)
+
+        def check_sync_edge(start_node_idx: int, end_node_idx: int) -> None:
+            gpu_cpu_sync_edge = cp_graph.edges[start_node_idx, end_node_idx]["object"]
+            self.assertEqual(
+                gpu_cpu_sync_edge,
+                CPEdge(
+                    begin=start_node_idx,
+                    end=end_node_idx,
+                    weight=0,
+                    type=CPEdgeType.SYNC_DEPENDENCY,
+                ),
+            )
+
+        check_sync_edge(cuda_kernel_end.idx, cuda_event_sync_end.idx)
 
     def test_critical_path_breakdown(self):
         annotation = "[param|pytorch.model.alex_net|0|0|0|measure|forward]"
