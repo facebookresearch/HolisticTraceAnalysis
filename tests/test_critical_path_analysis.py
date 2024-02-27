@@ -7,7 +7,11 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Tuple
 
-from hta.analyzers.critical_path_analysis import CPEdge, CPEdgeType
+from hta.analyzers.critical_path_analysis import (
+    CPEdge,
+    CPEdgeType,
+    CriticalPathAnalysis,
+)
 from hta.trace_analysis import TraceAnalysis
 
 
@@ -150,6 +154,21 @@ class CriticalPathAnalysisTestCase(unittest.TestCase):
                 type=CPEdgeType.KERNEL_KERNEL_DELAY,
             ),
         )
+        # also check for 0 duration causal launch edge
+        ampere_runtime_idx = trace_df.index_correlation.loc[ampere_kernel_idx]
+        r2start, _ = cp_graph.get_nodes_for_event(ampere_runtime_idx)
+        zero_weight_kernel_launch_edge = cp_graph.edges[r2start.idx, k2start.idx][
+            "object"
+        ]
+        self.assertEqual(
+            zero_weight_kernel_launch_edge,
+            CPEdge(
+                begin=r2start.idx,
+                end=k2start.idx,
+                weight=0,
+                type=CPEdgeType.KERNEL_LAUNCH_DELAY,
+            ),
+        )
 
         # Check device sync event
         epilogue_kernel_idx = 1275
@@ -211,9 +230,18 @@ class CriticalPathAnalysisTestCase(unittest.TestCase):
                     for e in trace_events
                     if "critical_path" in e.get("cat", "")
                 )
-                cpgraph_edge_counts = Counter(
-                    cp_graph.edges[u, v]["object"].type for (u, v) in cp_graph.edges
+
+                cpgraph_edges = (
+                    cp_graph.edges[u, v]["object"] for (u, v) in cp_graph.edges
                 )
+                if not CriticalPathAnalysis._show_zero_weight_launch_edges():
+                    cpgraph_edges = filter(
+                        lambda e: not CriticalPathAnalysis._is_zero_weight_launch_edge(
+                            e
+                        ),
+                        cpgraph_edges,
+                    )
+                cpgraph_edge_counts = Counter(e.type for e in cpgraph_edges)
 
                 for etype in CPEdgeType:
                     self.assertEqual(
