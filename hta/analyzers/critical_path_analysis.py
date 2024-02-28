@@ -23,6 +23,9 @@ from hta.configs.config import logger
 from hta.utils.utils import is_comm_kernel
 
 
+CP_LAUNCH_EDGE_ENV = "CRITICAL_PATH_SHOW_ZERO_WEIGHT_LAUNCH_EDGE"
+
+
 @dataclass
 class CPNode:
     """A node in the critical path di-graph.
@@ -551,6 +554,26 @@ class CPGraph(nx.DiGraph):
         )
         self._add_edge_helper(gpu_node, end_node, type=CPEdgeType.SYNC_DEPENDENCY)
 
+    def _add_kernel_launch_delay_edge(
+        self, runtime_index: int, kernel_start_node: CPNode, zero_weight: bool = False
+    ) -> bool:
+        """Add a kernel launch delay edge from CUDA runtime launch event to a GPU kernel.
+        @args runtime_index(int): event index of the runtime
+        @args kernel_start_node(CPNode): start node of the GPU kernel
+
+        Return (boool) false if runtime event could not be looked up
+        """
+        runtime_start, _ = self.get_nodes_for_event(runtime_index)
+        if runtime_start is None:
+            return False
+        self._add_edge_helper(
+            runtime_start,
+            kernel_start_node,
+            type=CPEdgeType.KERNEL_LAUNCH_DELAY,
+            zero_weight=zero_weight,
+        )
+        return True
+
     def _construct_graph_from_kernels(self) -> None:
         """Create nodes and edges for GPU kernels"""
         # Note getting queue length on the clipped dataframe was showing errors,
@@ -719,6 +742,7 @@ class CPGraph(nx.DiGraph):
             kernel_sync_end: Optional[CPNode] = None
 
             edge_added = False
+            launch_delay_added = False
 
             # Check if we need to sync between two kernels
             if kernel_sync_index is not None:
@@ -750,6 +774,8 @@ class CPGraph(nx.DiGraph):
                 f" last_node.ts = {last_node[stream].ts if last_node.get(stream) is not None else -1}"
                 f" runtime.ts = {self.full_trace_df.ts.loc[runtime_index]}"
             )
+
+            # Kernel Launch vs Kernel-Kernel delays
             if (
                 # There were no outstanding kernels on this stream during the launch
                 queue_length_runtime == 1
@@ -765,18 +791,14 @@ class CPGraph(nx.DiGraph):
                     or kernel_sync_end.ts < self.full_trace_df.ts.loc[runtime_index]
                 )
             ):
-                # Add launch delay edge if there were no outstanding kernels
-                # when the CUDA runtime was launching it.
-                runtime_start, _ = self.get_nodes_for_event(runtime_index)
-                assert runtime_start is not None, (
+                success = self._add_kernel_launch_delay_edge(runtime_index, start_node)
+                assert success, (
                     f"Could not find runtime index = {runtime_index}, current kernel "
                     f"stream = {stream}, "
                     f"name = {self._get_node_name(eid)}, correlation = {row['correlation']}"
                 )
-                self._add_edge_helper(
-                    runtime_start, start_node, type=CPEdgeType.KERNEL_LAUNCH_DELAY
-                )
                 edge_added = True
+                launch_delay_added = True
             elif (
                 last_node.get(stream) is not None
                 # and the kernel sync dependency if any finished earlier than last node
@@ -791,12 +813,23 @@ class CPGraph(nx.DiGraph):
                     last_node[stream], start_node, type=CPEdgeType.KERNEL_KERNEL_DELAY
                 )
                 edge_added = True
-            elif not edge_added:
+
+            if not edge_added:
                 # Neither of Sync, kernel-kernel or kernel launch edges were added
                 logger.warning(
                     f"No edge was added - queue length is {queue_length_runtime}!= 1 but no "
                     f"last kernel on stream {stream}, current kernel: "
                     f"name = {self._get_node_name(eid)}, correlation = {row['correlation']}"
+                )
+
+            # When we modify the CPGraph for  performance simulations, we do not want
+            # GPU kernels to start  before their CPU launch counterparts.
+            # To prevest this we always add a 0 weight edge for runtime launch -> kernel
+            # the launch delay is not in critical path.
+            if not launch_delay_added:
+                # Try adding this if runtime is found
+                self._add_kernel_launch_delay_edge(
+                    runtime_index, start_node, zero_weight=True
                 )
 
             last_node[stream] = end_node
@@ -1060,6 +1093,14 @@ class CriticalPathAnalysis:
 
         return cp_graph, cp_graph.critical_path()
 
+    @staticmethod
+    def _show_zero_weight_launch_edges() -> bool:
+        return os.environ.get(CP_LAUNCH_EDGE_ENV, -1) == 0
+
+    @staticmethod
+    def _is_zero_weight_launch_edge(e: CPEdge) -> bool:
+        return e.type == CPEdgeType.KERNEL_LAUNCH_DELAY and e.weight == 0
+
     @classmethod
     def overlay_critical_path_analysis(
         cls,
@@ -1090,6 +1131,13 @@ class CriticalPathAnalysis:
                 Default value = False.
 
         Returns: the overlaid_trace_file path.
+
+        Note: In case of kernel launches that are not on the critical path the graph
+        still has a 0 weight edge between CUDA runtime and kernel. These 0 weight
+        edges are not shown in the overlaid trace by default. Set the environment
+        variable CRITICAL_PATH_SHOW_ZERO_WEIGHT_LAUNCH_EDGE=1 to enable adding this
+        to the overlaid trace. Add this to your notebook
+        `os.environ["CRITICAL_PATH_SHOW_ZERO_WEIGHT_LAUNCH_EDGE"] = 1`
         """
         if only_show_critical_events:
             show_all_edges = False
@@ -1154,6 +1202,12 @@ class CriticalPathAnalysis:
                 critical_path_graph.edges[u, v]["object"]
                 for u, v in critical_path_graph.edges
             )
+            if not CriticalPathAnalysis._show_zero_weight_launch_edges():
+                edges = (
+                    e
+                    for e in edges
+                    if not CriticalPathAnalysis._is_zero_weight_launch_edge(e)
+                )
         else:
             edges = (e for e in critical_path_graph.critical_path_edges_set)
 

@@ -582,6 +582,13 @@ class TraceAnalysis:
         Returns: the overlaid trace file path. The generated trace file will
         have a prefix of "overlaid_critical_path\_" in its name compared
         to the original trace file.
+
+        Note: In case of kernel launches that are not on the critical path the graph
+        still has a 0 weight edge between CUDA runtime and kernel. These 0 weight
+        edges are not shown in the overlaid trace by default. Set the environment
+        variable CRITICAL_PATH_SHOW_ZERO_WEIGHT_LAUNCH_EDGE=1 to enable adding this
+        to the overlaid trace. Add this to your notebook
+        `os.environ["CRITICAL_PATH_SHOW_ZERO_WEIGHT_LAUNCH_EDGE"] = 1`
         """
         return CriticalPathAnalysis.overlay_critical_path_analysis(
             self.t,
