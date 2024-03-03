@@ -188,7 +188,7 @@ class CriticalPathAnalysisTestCase(unittest.TestCase):
         )
 
         # Check that all edges have event attribution
-        for (u, v) in cp_graph.edges:
+        for u, v in cp_graph.edges:
             e = cp_graph.edges[u, v]["object"]
             if e.type == CPEdgeType.OPERATOR_KERNEL:
                 self.assertTrue(
