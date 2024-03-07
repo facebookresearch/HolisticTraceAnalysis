@@ -23,7 +23,8 @@ from hta.configs.config import logger
 from hta.utils.utils import is_comm_kernel
 
 
-CP_LAUNCH_EDGE_ENV = "CRITICAL_PATH_SHOW_ZERO_WEIGHT_LAUNCH_EDGE"
+CP_LAUNCH_EDGE_ENV = "CRITICAL_PATH_ADD_ZERO_WEIGHT_LAUNCH_EDGE"
+CP_LAUNCH_EDGE_SHOW_ENV = "CRITICAL_PATH_SHOW_ZERO_WEIGHT_LAUNCH_EDGE"
 
 
 @dataclass
@@ -103,6 +104,13 @@ class CPGraph(nx.DiGraph):
         # https://docs.nvidia.com/cuda/cuda-runtime-api/api-sync-behavior.html#api-sync-behavior__memcpy-sync
         "cudaMemcpyAsync",
     ]
+
+    def _add_zero_weight_launch_edges(self) -> bool:
+        env = os.environ.get(CP_LAUNCH_EDGE_ENV, None)
+        if env is None:
+            # default
+            return False
+        return env == "1"
 
     def __init__(self, t: "Trace", t_full: "Trace", rank: int) -> None:
         self.cg = CallGraph(t, ranks=[rank])
@@ -312,6 +320,10 @@ class CPGraph(nx.DiGraph):
         return self._event_to_attributed_edges_map.get(ev_idx, [])
 
     def _construct_graph(self) -> None:
+        if self._add_zero_weight_launch_edges():
+            logger.warning(
+                "Adding zero weight launch edges to retain causality in subsequent simulations."
+            )
         cpu_call_stacks = (
             csg for csg in self.cg.call_stacks if csg.device_type == DeviceType.CPU
         )
@@ -693,9 +705,13 @@ class CPGraph(nx.DiGraph):
                         f" to CPU event index {row['index_correlation']}, corr id ="
                         f"{self.full_trace_df.correlation.loc[row['index_correlation']]}"
                     )
-                    # TODO
                     _, gpu_end_node = self.get_nodes_for_event(src_kernel_index)
-                    self._add_gpu_cpu_sync_edge(gpu_end_node, row["index_correlation"])
+                    if (
+                        gpu_end_node is not None
+                    ):  # boundary case if previous was out of window
+                        self._add_gpu_cpu_sync_edge(
+                            gpu_end_node, row["index_correlation"]
+                        )
                 return
 
             assert name == stream_sync or name == context_sync
@@ -826,7 +842,7 @@ class CPGraph(nx.DiGraph):
             # GPU kernels to start  before their CPU launch counterparts.
             # To prevest this we always add a 0 weight edge for runtime launch -> kernel
             # the launch delay is not in critical path.
-            if not launch_delay_added:
+            if self._add_zero_weight_launch_edges() and not launch_delay_added:
                 # Try adding this if runtime is found
                 self._add_kernel_launch_delay_edge(
                     runtime_index, start_node, zero_weight=True
@@ -1095,7 +1111,7 @@ class CriticalPathAnalysis:
 
     @staticmethod
     def _show_zero_weight_launch_edges() -> bool:
-        return os.environ.get(CP_LAUNCH_EDGE_ENV, -1) == 0
+        return os.environ.get(CP_LAUNCH_EDGE_SHOW_ENV, -1) == 0
 
     @staticmethod
     def _is_zero_weight_launch_edge(e: CPEdge) -> bool:
