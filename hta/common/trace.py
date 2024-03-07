@@ -440,6 +440,7 @@ def parse_trace_dataframe(
 
     meta: Dict[str, Any] = {k: v for k, v in trace_record.items() if k != "traceEvents"}
     df: pd.DataFrame = pd.DataFrame()
+    local_symbol_table: TraceSymbolTable = TraceSymbolTable()
     if "traceEvents" in trace_record:
         df = pd.DataFrame(trace_record["traceEvents"])
 
