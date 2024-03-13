@@ -25,6 +25,7 @@ from hta.common.call_stack import CallGraph, CallStackGraph, DeviceType
 from hta.common.trace import decode_symbol_id_to_symbol_name, Trace
 from hta.configs.config import logger
 from hta.utils.utils import is_comm_kernel
+from line_profiler import profile
 
 
 CP_LAUNCH_EDGE_ENV = "CRITICAL_PATH_ADD_ZERO_WEIGHT_LAUNCH_EDGE"
@@ -323,6 +324,7 @@ class CPGraph(nx.DiGraph):
         """
         return self._event_to_attributed_edges_map.get(ev_idx, [])
 
+    @profile
     def _construct_graph(self) -> None:
         if self._add_zero_weight_launch_edges():
             logger.warning(
@@ -447,6 +449,7 @@ class CPGraph(nx.DiGraph):
         sym_index = self.symbol_table.get_sym_id_map()
         if "cudaEventRecord" not in sym_index:
             return None
+        cudaEventRecord_id = sym_index.get("cudaEventRecord")
 
         # CUDA launch runtime calls
         runtime_calls: pd.DataFrame = (
@@ -456,8 +459,6 @@ class CPGraph(nx.DiGraph):
             .copy()
             .sort_values(by="ts", axis=0)
         )
-
-        cudaEventRecord_id = sym_index.get("cudaEventRecord")
 
         # CUDA Record Event calls
         cuda_record_calls = (
@@ -475,6 +476,88 @@ class CPGraph(nx.DiGraph):
 
         cuda_record_calls["index_previous_launch"] = cuda_record_calls.apply(
             lambda x: _previous_launch(x["ts"], x["pid"], x["tid"]), axis=1
+        )
+
+        return cuda_record_calls
+
+    def _get_cuda_event_record_df1(self) -> Optional[pd.DataFrame]:
+        """For Event based synchronization we need to track the last
+        kernel/memcpy launched on a CPU thread just before the cudaEventRecord
+        was called i.e. the CUDA event was recorded.
+
+        This function returns a dataframe of cudaEventRecord events,
+        and includes an additional column 'index_previous_launch'
+        that specifies the closest CUDA kernel launch on the same CPU thread.
+        """
+        sym_index = self.symbol_table.get_sym_id_map()
+        if "cudaEventRecord" not in sym_index:
+            return None
+        cudaEventRecord_id = sym_index.get("cudaEventRecord")
+
+        # CUDA launch runtime calls
+        runtime_calls: pd.DataFrame = (
+            self.full_trace_df.query(
+                self.symbol_table.get_runtime_launch_events_query()
+            )
+            .copy()
+            .sort_values(by="ts", axis=0)
+        )
+        # Give a sequential launch ID for every launch event
+        runtime_calls.reset_index(inplace=True)
+        runtime_calls["launch_id"] = runtime_calls.index
+
+        # CUDA Record Event calls
+        cuda_record_calls = (
+            self.full_trace_df.query(f"name == {cudaEventRecord_id}")
+            .copy()
+            .sort_values(by="ts", axis=0)
+        )
+
+        def find_previous_launch(pid, tid):
+            """Correlates the closes CUDA kernel launch to a CUDA Record Event"""
+            comb = (
+                pd.concat([runtime_calls, cuda_record_calls])
+                .sort_values(by="ts", axis=0)
+                .query(f"pid == {pid} and tid == {tid}")
+                .copy()
+            )
+            comb.launch_id.fillna(-1, inplace=True)
+            # previous_launch_id is max of launch ids seen uptill now
+            comb.loc[:, "previous_launch_id"] = comb.launch_id.cummax(skipna=False)
+
+            comb_launches = comb.loc[comb.name != cudaEventRecord_id].copy()
+            comb_cuda_records = comb.loc[comb.name == cudaEventRecord_id].copy()
+            comb_cuda_records.drop(axis=1, columns="launch_id", inplace=True)
+
+            # Now join the previous_launch_id to actually kernel launch events.
+            return pd.merge(
+                comb_cuda_records,
+                comb_launches[["launch_id", "index", "correlation"]],
+                left_on="previous_launch_id",
+                right_on="launch_id",
+                how="left",
+                suffixes=["", "_launch_event"],
+                # multiple CUDA records can have same previous launch ID, but not vice versa
+                validate="many_to_one",
+            )
+
+        cuda_record_dfs = [
+            find_previous_launch(pid, tid)
+            for (pid, tid) in cuda_record_calls[["pid", "tid"]]
+            .groupby(["pid", "tid"])
+            .groups.keys()
+        ]
+        cuda_record_calls = pd.concat(cuda_record_dfs, axis=0).sort_values(by="ts", axis=0)
+
+        # cleanup
+        cuda_record_calls.drop(axis=1, columns=["level_0", "index"], inplace=True)
+        cuda_record_calls.drop(
+            axis=1,
+            columns=["launch_id", "previous_launch_id", "correlation_launch_event"],
+            inplace=True,
+        )
+        cuda_record_calls.rename(
+            columns={"index_launch_event": "index_previous_launch"}, inplace=True
         )
 
         return cuda_record_calls
@@ -514,6 +597,9 @@ class CPGraph(nx.DiGraph):
             )
             .set_index("index")
         )
+        # Give a sequential launch ID for every launch event
+        #runtime_calls.reset_index(inplace=True)
+        #runtime_calls["launch_id"] = runtime_calls.index
 
         # CUDA stream wait event runtime calls and associated CUDA stream
         cudaStreamWaitEvent_id = sym_index.get("cudaStreamWaitEvent")
@@ -863,6 +949,7 @@ class CPGraph(nx.DiGraph):
             logger.info(f"node id = {n}, node = {node}")
             logger.info("  neighbors = ", ",".join((str(n) for n in self.neighbors(n))))
 
+    @profile
     def critical_path(self) -> bool:
         """Calculates the critical path across nodes"""
         if not self._validate_graph():
