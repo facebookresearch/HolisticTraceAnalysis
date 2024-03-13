@@ -464,7 +464,8 @@ class CPGraph(nx.DiGraph):
 
         def _previous_launch(ts: int, pid: int, tid: int) -> Optional[int]:
             """Find the previous CUDA launch on same pid and tid"""
-            df = runtime_calls.query(f"pid == {pid} and tid == {tid}")
+            pid_match_df = runtime_calls[runtime_calls.pid == pid]
+            df = pid_match_df[pid_match_df.tid == tid]
             lower_neighbors = df[df["ts"] < ts]["ts"]
             return lower_neighbors.idxmax() if len(lower_neighbors) else None
 
