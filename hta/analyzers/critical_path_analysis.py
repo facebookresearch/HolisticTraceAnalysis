@@ -17,8 +17,12 @@ import pandas as pd
 
 from hta.analyzers.trace_counters import TraceCounters
 
+# Revert to old call stack as we have an issue with new one
+# https://github.com/facebookresearch/HolisticTraceAnalysis/issues/113
+# from hta.common.trace_call_graph import CallGraph, CallStackGraph, DeviceType
+from hta.common.call_stack import CallGraph, CallStackGraph, DeviceType
+
 from hta.common.trace import decode_symbol_id_to_symbol_name, Trace
-from hta.common.trace_call_graph import CallGraph, CallStackGraph, DeviceType
 from hta.configs.config import logger
 from hta.utils.utils import is_comm_kernel
 
