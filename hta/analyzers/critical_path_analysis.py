@@ -588,6 +588,7 @@ class CPGraph(nx.DiGraph):
         cuda_record_calls.rename(
             columns={"index_launch_event": "index_previous_launch"}, inplace=True
         )
+        cuda_record_calls.index_previous_launch.fillna(-1, inplace=True)
 
         return cuda_record_calls
 
@@ -763,6 +764,7 @@ class CPGraph(nx.DiGraph):
         cuda_stream_wait_events.rename(
             columns={"index_launch_event": "index_next_launch"}, inplace=True
         )
+        cuda_stream_wait_events.index_next_launch.fillna(-1, inplace=True)
 
         return cuda_stream_wait_events.set_index("index")
 
