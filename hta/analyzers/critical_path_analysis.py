@@ -865,6 +865,10 @@ class CPGraph(nx.DiGraph):
 
     def critical_path(self) -> bool:
         """Calculates the critical path across nodes"""
+        if not self._validate_graph():
+            raise ValueError(
+                "Graph is not valid, see prints above for help on debugging"
+            )
         try:
             self.critical_path_nodes = nx.dag_longest_path(self, weight="weight")
         except nx.NetworkXUnfeasible as err:
@@ -893,6 +897,41 @@ class CPGraph(nx.DiGraph):
                 break
 
         assert len(self.critical_path_edges_set) == (len(self.critical_path_nodes) - 1)
+        return True
+
+    def _validate_graph(self) -> bool:
+        """Validate the graph can be trusted for analysis"""
+        # check for negative values
+        negative_weights: bool = False
+        for u, v in self.edges:
+            e = self.edges[u, v]["object"]
+            if e.weight < 0:
+                src, dest = self.node_list[u], self.node_list[v]
+                logger.error(f"Found an edge with negative weight {e}")
+                logger.error(
+                    f" Source node idx {src.ev_idx}, "
+                    f" node name = {self._get_node_name(src.ev_idx)}"
+                )
+                logger.error(
+                    f" Dest node idx {dest.ev_idx}, "
+                    f" node name = {self._get_node_name(dest.ev_idx)}"
+                )
+                negative_weights = True
+        if negative_weights:
+            logger.error(
+                "Negative weights means before-after relationships are not valid"
+            )
+            return False
+
+        # check for cycles
+        has_cycles = not nx.is_directed_acyclic_graph(self)
+        if has_cycles:
+            logger.error("This graph has cycles, you can debug this by running -")
+            logger.error(" import networkx as nx")
+            logger.error(" C = sorted(nx.simple_cycles(cp_graph))")
+            logger.error("and try len(C), C[0] ")
+            return False
+
         return True
 
     def get_critical_path_breakdown(self) -> Optional[pd.DataFrame]:
@@ -1081,12 +1120,8 @@ class CriticalPathAnalysis:
         # and also fiter out 0 duration events as they mess up the
         # event stack generation
         cpu_kernels = trace_df[trace_df["stream"].eq(-1)]
-        cudaEventRecord_id = sym_index.get("cudaEventRecord", -100)
         stream_wait_event_id = sym_index.get("Stream Wait Event", -200)
-        a = cpu_kernels.query(
-            f"(ts >= {start_ts} and ts <= {end_ts}) and "
-            f"(name == {cudaEventRecord_id} or dur > 0)"
-        )
+        a = cpu_kernels.query(f"(ts >= {start_ts} and ts <= {end_ts}) and (dur > 0)")
 
         # Only consider GPU kernels whose runtime events are in the correct
         # time window
