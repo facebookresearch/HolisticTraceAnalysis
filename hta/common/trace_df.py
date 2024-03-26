@@ -2,7 +2,7 @@ from typing import List, Tuple
 
 import pandas as pd
 
-from hta.common.trace import TraceSymbolTable
+from hta.common.trace_symbol_table import TraceSymbolTable
 
 
 def get_iterations(df: pd.DataFrame) -> List[int]:

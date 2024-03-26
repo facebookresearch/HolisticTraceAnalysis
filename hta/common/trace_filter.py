@@ -3,7 +3,8 @@ from typing import List, Optional, Tuple, Union
 
 import pandas as pd
 
-from hta.common.trace import logger, TraceSymbolTable
+from hta.common.trace import logger
+from hta.common.trace_symbol_table import TraceSymbolTable
 from hta.utils.utils import get_symbol_column_names
 
 
@@ -291,7 +292,9 @@ class NameFilter(Filter):
             _symbol_table = (
                 symbol_table
                 if symbol_table
-                else self.symbol_table if self.symbol_table else TraceSymbolTable()
+                else self.symbol_table
+                if self.symbol_table
+                else TraceSymbolTable()
             )
             return NameIdColumnFilter(self.name_pattern)(df, _symbol_table)
 

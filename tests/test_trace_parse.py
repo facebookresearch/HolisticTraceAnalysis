@@ -5,9 +5,16 @@
 import os
 import unittest
 
+# import unittest.mock as mock
+
 import pandas as pd
 
 from hta.common.trace import parse_trace_dict, Trace
+from hta.common.trace_parser import (
+    _auto_detect_parser_backend,
+    get_default_trace_parsing_backend,
+    set_default_trace_parsing_backend,
+)
 
 
 class TraceParseTestCase(unittest.TestCase):
@@ -46,7 +53,11 @@ class TraceParseTestCase(unittest.TestCase):
             parse_trace_dict(os.path.join(trace_dir, rank_0_file))["traceEvents"]
         )
         df.dropna(axis=0, subset=["dur", "cat"], inplace=True)
-        df.drop(df[df["cat"] == "Trace"].index, inplace=True)
+
+        to_drop_cats = ["Trace"]
+        if get_default_trace_parsing_backend() != "json":
+            to_drop_cats.append("python_function")
+        df.drop(df[df["cat"].isin(to_drop_cats)].index, inplace=True)
         return df
 
     def setUp(self) -> None:
@@ -115,6 +126,27 @@ class TraceParseTestCase(unittest.TestCase):
             self.assertDictEqual(
                 gpu_kernels_per_iteration, correlated_cpu_ops_per_iteration
             )
+
+
+@unittest.skipIf(
+    _auto_detect_parser_backend() == "json", "Skipping ijson based trace load tests"
+)
+class TraceParseIjsonTestCase(TraceParseTestCase):
+    @classmethod
+    def setUpClass(cls):
+        set_default_trace_parsing_backend("ijson_batch_and_compress")
+        super(TraceParseIjsonTestCase, cls).setUpClass()
+
+    @classmethod
+    def tearDownClass(cls):
+        set_default_trace_parsing_backend("json")
+
+    # @mock.patch('ijson.backend')
+    # def test_optimal_backend_detection(self, mock_backend) -> None:
+    #     mock_backend = "xxx"
+    #     self.assertEqual(_auto_detect_parser_backend(), "json")
+    #     mock_backend = "yajl_2c"
+    #     self.assertEqual(_auto_detect_parser_backend(), "ijson_batch_and_compress")
 
 
 if __name__ == "__main__":  # pragma: no cover

@@ -2,6 +2,13 @@ import copy
 from enum import Enum
 from typing import Dict, List, NamedTuple, Optional, Set, Union
 
+SUPPORTED_PARSER_BACKENDS = [
+    "json",
+    "ijson",
+    "ijson_batched",
+    "ijson_batch_and_compress",
+]
+
 
 class ValueType(Enum):
     """ValueType enumerates the possible data types for the attribute values."""
@@ -90,9 +97,19 @@ AVAILABLE_ARGS: Dict[str, AttributeSpec] = {
 
 
 class ParserConfig:
-    """TraceParserConfig specifies how to parse a json trace file.
+    f"""TraceParserConfig specifies how to parse a json trace file.
 
-    The current implementation only supports customization on `args` parsing.
+    +args (List[AttributeSpec]): Supports customization on `args` parsing.
+        Please see the `AttributeSpec` class for details.
+    +trace_memory (bool): Measures the peak memory usage during parsing with `tracemalloc`.
+        This is off by default as it adds performance overhead.
+    +parser_backend (Optional[str]): HTA supports simple 'json' as well as iterative 'ijson'
+        backend for loading large traces in a batched/memory efficient manner.
+        Default is "json" as the ijson backend is under development.
+        Supported modes are {SUPPORTED_PARSER_BACKENDS}
+        Use 'ijson_batch_and_compress' for best results.
+        Please see https://github.com/facebookresearch/HolisticTraceAnalysis/pull/110
+
     This class can be extended to support other customizations.
     """
 
@@ -120,6 +137,8 @@ class ParserConfig:
 
     def __init__(self, args: Optional[List[AttributeSpec]] = None):
         self.args: List[AttributeSpec] = args if args else self.get_default_args()
+        self.parser_backend: Optional[str] = None
+        self.trace_memory: bool = False
 
     @classmethod
     def get_default_cfg(cls) -> "ParserConfig":
@@ -151,6 +170,14 @@ class ParserConfig:
             if arg.name not in arg_set:
                 self.args.append(arg)
                 arg_set.add(arg.name)
+
+    def set_parser_backend(self, parser_backend: str) -> None:
+        if parser_backend not in SUPPORTED_PARSER_BACKENDS:
+            raise ValueError(
+                f"Unsupported parser backend = {parser_backend},"
+                f" must be one of {SUPPORTED_PARSER_BACKENDS}"
+            )
+        self.parser_backend = parser_backend
 
 
 # Define a global ParserConfig variable for internal use. To access this variable,

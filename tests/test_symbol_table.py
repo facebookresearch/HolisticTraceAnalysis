@@ -6,7 +6,7 @@ import multiprocessing as mp
 import unittest
 from typing import List, Set
 
-from hta.common.trace import TraceSymbolTable
+from hta.common.trace_symbol_table import TraceSymbolTable
 
 
 class SymbolDecoder:

@@ -7,7 +7,6 @@ from typing import Dict, List
 import numpy as np
 
 import pandas as pd
-from hta.common.trace import TraceSymbolTable
 
 from hta.common.trace_call_stack import (
     _less_than,
@@ -16,6 +15,7 @@ from hta.common.trace_call_stack import (
     CallStackNode,
     sort_events,
 )
+from hta.common.trace_symbol_table import TraceSymbolTable
 
 
 class CallStackTestCase(unittest.TestCase):
