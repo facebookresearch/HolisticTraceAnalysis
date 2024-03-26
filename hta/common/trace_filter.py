@@ -288,11 +288,13 @@ class NameFilter(Filter):
         if symbol_table is None and self.symbol_table is None:
             return NameStringColumnFilter(self.name_pattern)(df)
         else:
-            _symbol_table = (
-                symbol_table
-                if symbol_table
-                else self.symbol_table if self.symbol_table else TraceSymbolTable()
-            )
+            if symbol_table:
+                _symbol_table = symbol_table
+            elif self.symbol_table:
+                _symbol_table = self.symbol_table
+            else:
+                _symbol_table = TraceSymbolTable()
+
             return NameIdColumnFilter(self.name_pattern)(df, _symbol_table)
 
 
