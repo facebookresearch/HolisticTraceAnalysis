@@ -3,6 +3,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import os
+import sys
 from collections import defaultdict
 
 from copy import deepcopy
@@ -435,6 +436,42 @@ class CPGraph(nx.DiGraph):
 
         csg.dfs_traverse(enter_func, exit_func)
 
+    def _get_cuda_runtime_calls_df(self, retain_index: bool = True) -> pd.DataFrame:
+        """Returns a dataframe of CUDA launch runtime calls and associated CUDA stream
+        The returned dataframe has addtional columns
+        * stream_kernel: for the CUDA stream the runtime event launched on
+        * launch id: is a sequential number for each kernel/memx launch. This is useful
+                     in CUDA event synchronization algorithms
+
+        @args: retain_index - keep the original trace index
+        """
+        gpu_kernels = self.full_trace_df.query("stream != -1 and index_correlation > 0")
+
+        runtime_calls = (
+            (
+                self.full_trace_df.query(
+                    self.symbol_table.get_runtime_launch_events_query()
+                )
+                .copy()
+                .sort_values(by="ts", axis=0)
+            )
+            .merge(
+                gpu_kernels[["stream", "index"]],
+                left_on="index_correlation",
+                right_on="index",
+                suffixes=["", "_kernel"],
+            )
+            .set_index("index")
+        )
+
+        # Give a sequential launch ID for every launch event
+        runtime_calls.reset_index(inplace=True)
+        runtime_calls["launch_id"] = runtime_calls.index
+        if retain_index:
+            runtime_calls.set_index("index", inplace=True)
+
+        return runtime_calls
+
     def _get_cuda_event_record_df(self) -> Optional[pd.DataFrame]:
         """For Event based synchronization we need to track the last
         kernel/memcpy launched on a CPU thread just before the cudaEventRecord
@@ -447,17 +484,10 @@ class CPGraph(nx.DiGraph):
         sym_index = self.symbol_table.get_sym_id_map()
         if "cudaEventRecord" not in sym_index:
             return None
+        cudaEventRecord_id = sym_index.get("cudaEventRecord")
 
         # CUDA launch runtime calls
-        runtime_calls: pd.DataFrame = (
-            self.full_trace_df.query(
-                self.symbol_table.get_runtime_launch_events_query()
-            )
-            .copy()
-            .sort_values(by="ts", axis=0)
-        )
-
-        cudaEventRecord_id = sym_index.get("cudaEventRecord")
+        runtime_calls = self._get_cuda_runtime_calls_df(retain_index=False)
 
         # CUDA Record Event calls
         cuda_record_calls = (
@@ -466,16 +496,54 @@ class CPGraph(nx.DiGraph):
             .sort_values(by="ts", axis=0)
         )
 
-        def _previous_launch(ts: int, pid: int, tid: int) -> Optional[int]:
-            """Find the previous CUDA launch on same pid and tid"""
-            pid_match_df = runtime_calls[runtime_calls.pid == pid]
-            df = pid_match_df[pid_match_df.tid == tid]
-            lower_neighbors = df[df["ts"] < ts]["ts"]
-            return lower_neighbors.idxmax() if len(lower_neighbors) else None
+        def find_previous_launch(pid, tid):
+            """Correlates the closes CUDA kernel launch to a CUDA Record Event"""
+            comb = (
+                pd.concat([runtime_calls, cuda_record_calls])
+                .sort_values(by="ts", axis=0)
+                .query(f"pid == {pid} and tid == {tid}")
+                .copy()
+            )
+            comb.launch_id.fillna(-1, inplace=True)
+            # previous_launch_id is max of launch ids seen uptill now
+            comb.loc[:, "previous_launch_id"] = comb.launch_id.cummax(skipna=False)
 
-        cuda_record_calls["index_previous_launch"] = cuda_record_calls.apply(
-            lambda x: _previous_launch(x["ts"], x["pid"], x["tid"]), axis=1
+            comb_launches = comb.loc[comb.name != cudaEventRecord_id].copy()
+            comb_cuda_records = comb.loc[comb.name == cudaEventRecord_id].copy()
+            comb_cuda_records.drop(axis=1, columns="launch_id", inplace=True)
+
+            # Now join the previous_launch_id to actual kernel launch events.
+            return pd.merge(
+                comb_cuda_records,
+                comb_launches[["launch_id", "index", "correlation"]],
+                left_on="previous_launch_id",
+                right_on="launch_id",
+                how="left",
+                suffixes=["", "_launch_event"],
+                # multiple CUDA records can have same previous launch ID, but not vice versa
+                validate="many_to_one",
+            )
+
+        pid_tids = (
+            cuda_record_calls[["pid", "tid"]].groupby(["pid", "tid"]).groups.keys()
         )
+
+        cuda_record_dfs = [find_previous_launch(pid, tid) for (pid, tid) in pid_tids]
+        cuda_record_calls = pd.concat(cuda_record_dfs, axis=0).sort_values(
+            by="ts", axis=0
+        )
+
+        # Cleanup temporary columns
+        # PS: you can comment the below if you need to debug any issue
+        cuda_record_calls.drop(
+            axis=1,
+            columns=["launch_id", "previous_launch_id", "correlation_launch_event"],
+            inplace=True,
+        )
+        cuda_record_calls.rename(
+            columns={"index_launch_event": "index_previous_launch"}, inplace=True
+        )
+        cuda_record_calls.index_previous_launch.fillna(-1, inplace=True)
 
         return cuda_record_calls
 
@@ -495,14 +563,30 @@ class CPGraph(nx.DiGraph):
         ):
             return None
 
+        # CUDA launch runtime calls
+        runtime_calls = self._get_cuda_runtime_calls_df()
+        runtime_calls.drop(axis=1, columns=["stream"], inplace=True)
+        runtime_calls.rename(columns={"stream_kernel": "stream"}, inplace=True)
+
         gpu_kernels = self.full_trace_df.query("stream != -1 and index_correlation > 0")
 
-        # CUDA launch runtime calls and associated CUDA stream
-        runtime_calls = (
+        # CUDA stream wait event runtime calls and associated CUDA stream
+        cudaStreamWaitEvent_id = sym_index.get("cudaStreamWaitEvent")
+        cuda_stream_wait_events = (
             (
                 self.full_trace_df.query(
-                    self.symbol_table.get_runtime_launch_events_query()
-                )[["index", "ts", "pid", "tid", "index_correlation"]]
+                    f"name == {cudaStreamWaitEvent_id} and index_correlation > 0"
+                )[
+                    [
+                        "index",
+                        "name",
+                        "ts",
+                        "pid",
+                        "tid",
+                        "correlation",
+                        "index_correlation",
+                    ]
+                ]
                 .copy()
                 .sort_values(by="ts", axis=0)
             )
@@ -515,32 +599,62 @@ class CPGraph(nx.DiGraph):
             .set_index("index")
         )
 
-        # CUDA stream wait event runtime calls and associated CUDA stream
-        cudaStreamWaitEvent_id = sym_index.get("cudaStreamWaitEvent")
-        cuda_stream_wait_events = (
-            self.full_trace_df.query(
-                f"name == {cudaStreamWaitEvent_id} and index_correlation > 0"
-            )[["index", "ts", "pid", "tid", "correlation", "index_correlation"]]
-            .copy()
-            .sort_values(by="ts", axis=0)
-        ).merge(
-            gpu_kernels[["stream", "index"]],
-            left_on="index_correlation",
-            right_on="index",
-            suffixes=["", "_kernel"],
-        )
-
-        def _next_launch(ts: int, pid: int, tid: int, stream: int) -> int:
-            """Find the next CUDA launch on same pid, tid and stream"""
-            df = runtime_calls.query(
-                f"pid == {pid} and tid == {tid} and stream == {stream}"
+        def find_next_launch(pid, tid, stream):
+            """Correlates the closes CUDA kernel launch to a CUDA Stream Wait Event"""
+            # Combine CUDA runtime launch calls and cuda stream wait event calls
+            # on the same pid, tid, stream
+            comb = (
+                pd.concat([runtime_calls, cuda_stream_wait_events])
+                .sort_values(by="ts", axis=0)
+                .query(f"pid == {pid} and tid == {tid} and stream == {stream}")
+                .copy()
             )
-            upper_neighbors = df[df["ts"] > ts]["ts"]
-            return upper_neighbors.idxmin() if len(upper_neighbors) else -1
+            comb.launch_id.fillna(sys.maxsize, inplace=True)
 
-        cuda_stream_wait_events["index_next_launch"] = cuda_stream_wait_events.apply(
-            lambda x: _next_launch(x["ts"], x["pid"], x["tid"], x["stream"]), axis=1
+            # Next launch ID is the next lowest launch ID in the sorted dataframe
+            comb["next_launch_id"] = comb["launch_id"].iloc[::-1].cummin()
+            comb.reset_index(inplace=True)
+
+            comb_launches = comb.loc[comb.name != cudaStreamWaitEvent_id].copy()
+            comb_stream_wait_events = comb.loc[
+                comb.name == cudaStreamWaitEvent_id
+            ].copy()
+            comb_stream_wait_events.drop(axis=1, columns="launch_id", inplace=True)
+
+            # Now join the next_launch_id to actual kernel launch events.
+            return pd.merge(
+                comb_stream_wait_events,
+                comb_launches[["launch_id", "index", "correlation"]],
+                left_on="next_launch_id",
+                right_on="launch_id",
+                how="left",
+                suffixes=["", "_launch_event"],
+            )
+
+        pid_tid_streams = (
+            cuda_stream_wait_events[["pid", "tid", "stream"]]
+            .drop_duplicates()
+            .to_dict("records")
         )
+
+        cuda_stream_wait_events = pd.concat(
+            [
+                find_next_launch(r["pid"], r["tid"], r["stream"])
+                for r in pid_tid_streams
+            ],
+            axis=0,
+        ).sort_values(by="ts", axis=0)
+
+        # Cleanup temporary columns
+        cuda_stream_wait_events.drop(
+            axis=1,
+            columns=["launch_id", "next_launch_id", "correlation_launch_event"],
+            inplace=True,
+        )
+        cuda_stream_wait_events.rename(
+            columns={"index_launch_event": "index_next_launch"}, inplace=True
+        )
+        cuda_stream_wait_events.index_next_launch.fillna(-1, inplace=True)
 
         return cuda_stream_wait_events.set_index("index")
 
