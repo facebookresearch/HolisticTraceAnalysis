@@ -102,7 +102,7 @@ with profile(
   with_stack = True
 ) as prof:
 
-   for _ in range(EPOCHS):
+   for _ in range(NUM_EPOCHS):
       for step, batch_data in enumerate(data_loader):
          train(batch_data)
          prof.step()
