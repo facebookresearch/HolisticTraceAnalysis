@@ -27,7 +27,7 @@ To profile, wrap the code in the ``profile`` context manager as shown below.
 
     from torch.profiler import profile, schedule, tensorboard_trace_handler
 
-    tracing_schedule = schedule(skip_first=5, wait=5, warmup=2, active=2, repeat=1)
+    tracing_schedule = schedule(skip_first = 5, wait = 5, warmup = 2, active = 2, repeat = 1)
     trace_handler = tensorboard_trace_handler(dir_name="traces", use_gzip=True)
 
     NUM_EPOCHS = 5 # arbitrary number of epochs to profile
@@ -46,5 +46,5 @@ To profile, wrap the code in the ``profile`` context manager as shown below.
               train(batch_data)
               prof.step()
 
-Line 17 in the code snippet above signals to the profiler that a training
+Line 19 in the code snippet above signals to the profiler that a training
 iteration has completed.
