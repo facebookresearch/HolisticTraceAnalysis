@@ -83,6 +83,31 @@ Learn more about the features and the API from our [documentation](https://hta.r
 ### Data Preparation
 All traces collected from a job must reside in a unique folder.
 
+An example of trace collection using the PyTorch Profiler is shown below:
+
+```python
+from torch.profiler import profile, schedule, tensorboard_trace_handler
+
+tracing_schedule = schedule(skip_first=5, wait=5, warmup=2, active=2, repeat=1)
+trace_handler = tensorboard_trace_handler(dir_name="traces", use_gzip=True)
+
+NUM_EPOCHS = 10 # arbitrary number of epochs to profile
+
+with profile(
+  activities = [ProfilerActivity.CPU, ProfilerActivity.CUDA],
+  schedule = tracing_schedule,
+  on_trace_ready = trace_handler,
+  profile_memory = True,
+  record_shapes = True,
+  with_stack = True
+) as prof:
+
+   for _ in EPOCHS:
+      for step, batch_data in enumerate(data_loader):
+         train(batch_data)
+         prof.step()
+```
+
 ### Analysis in a Jupyter notebook
 
 Activate the Conda environment and launch a Jupyter notebook.
@@ -94,7 +119,7 @@ jupyter notebook
 Import HTA, and create a `TraceAnalysis` object
 ``` python
 from hta.trace_analysis import TraceAnalysis
-analyzer = TraceAnalysis(trace_dir = "/path/to/folder/containing/the/traces")
+analyzer = TraceAnalysis(trace_dir = "traces") # path to the trace folder
 ```
 
 #### Basic Usage

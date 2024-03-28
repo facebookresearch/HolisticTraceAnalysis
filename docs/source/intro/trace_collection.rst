@@ -23,12 +23,14 @@ To profile, wrap the code in the ``profile`` context manager as shown below.
 
 .. code-block:: python
     :linenos:
-    :emphasize-lines: 17
+    :emphasize-lines: 19
 
     from torch.profiler import profile, schedule, tensorboard_trace_handler
 
     tracing_schedule = schedule(skip_first=5, wait=5, warmup=2, active=2, repeat=1)
-    trace_handler = tensorboard_trace_handler(dir_name=/output/folder, use_gzip=True)
+    trace_handler = tensorboard_trace_handler(dir_name="traces", use_gzip=True)
+
+    NUM_EPOCHS = 5 # arbitrary number of epochs to profile
 
     with profile(
       activities = [ProfilerActivity.CPU, ProfilerActivity.CUDA],
@@ -39,9 +41,10 @@ To profile, wrap the code in the ``profile`` context manager as shown below.
       with_stack = True
     ) as prof:
 
-        for step, batch_data in enumerate(data_loader):
-            train(batch_data)
-            prof.step()
+        for _ in range(NUM_EPOCHS):
+          for step, batch_data in enumerate(data_loader):
+              train(batch_data)
+              prof.step()
 
 Line 17 in the code snippet above signals to the profiler that a training
 iteration has completed.
