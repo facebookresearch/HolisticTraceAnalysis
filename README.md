@@ -88,8 +88,8 @@ An example of trace collection using the PyTorch Profiler is shown below:
 ```python
 from torch.profiler import profile, schedule, tensorboard_trace_handler
 
-tracing_schedule = schedule(skip_first=5, wait=5, warmup=2, active=2, repeat=1)
-trace_handler = tensorboard_trace_handler(dir_name="traces", use_gzip=True)
+tracing_schedule = schedule(skip_first = 5, wait = 5, warmup = 2, active = 2, repeat = 1)
+trace_handler = tensorboard_trace_handler(dir_name = "traces/", use_gzip = True)
 
 NUM_EPOCHS = 10 # arbitrary number of epochs to profile
 
@@ -102,7 +102,7 @@ with profile(
   with_stack = True
 ) as prof:
 
-   for _ in EPOCHS:
+   for _ in range(EPOCHS):
       for step, batch_data in enumerate(data_loader):
          train(batch_data)
          prof.step()
@@ -119,7 +119,11 @@ jupyter notebook
 Import HTA, and create a `TraceAnalysis` object
 ``` python
 from hta.trace_analysis import TraceAnalysis
-analyzer = TraceAnalysis(trace_dir = "traces") # path to the trace folder
+analyzer = TraceAnalysis(trace_dir = "traces/") # path to the trace folder
+
+# or 
+
+analyzer = TraceAnalysis(trace_files={0: 'trace_0.json', 1: 'trace_1.json.gz'})
 ```
 
 #### Basic Usage
