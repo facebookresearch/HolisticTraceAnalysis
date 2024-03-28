@@ -25,7 +25,7 @@ API.
 
 .. code-block:: python
 
-  analyzer = TraceAnalysis(trace_dir = "/path/to/trace/folder")
+  analyzer = TraceAnalysis(trace_dir = "traces/")
   analyzer.generate_trace_with_counters()
 
 A screenshot of the generated trace file with augmented counters.

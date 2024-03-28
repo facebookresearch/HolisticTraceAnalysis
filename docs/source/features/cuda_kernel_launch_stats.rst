@@ -12,7 +12,8 @@ CPU operator ending. The kernel launch info can be generated as follows:
 
 .. code-block:: python
 
-  analyzer = TraceAnalysis(trace_dir="/path/to/trace/dir")
+  analyzer = TraceAnalysis(trace_dir = "traces/")
+
   kernel_info_df = analyzer.get_cuda_kernel_launch_stats()
 
 A screenshot of the generated dataframe is given below.
