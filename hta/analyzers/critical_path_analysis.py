@@ -3,6 +3,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import os
+import sys
 from collections import defaultdict
 
 from copy import deepcopy
@@ -17,13 +18,18 @@ import pandas as pd
 
 from hta.analyzers.trace_counters import TraceCounters
 
+# Revert to old call stack as we have an issue with new one
+# https://github.com/facebookresearch/HolisticTraceAnalysis/issues/113
+# from hta.common.trace_call_graph import CallGraph, CallStackGraph, DeviceType
+from hta.common.call_stack import CallGraph, CallStackGraph, DeviceType
+
 from hta.common.trace import decode_symbol_id_to_symbol_name, Trace
-from hta.common.trace_call_graph import CallGraph, CallStackGraph, DeviceType
 from hta.configs.config import logger
 from hta.utils.utils import is_comm_kernel
 
 
-CP_LAUNCH_EDGE_ENV = "CRITICAL_PATH_SHOW_ZERO_WEIGHT_LAUNCH_EDGE"
+CP_LAUNCH_EDGE_ENV = "CRITICAL_PATH_ADD_ZERO_WEIGHT_LAUNCH_EDGE"
+CP_LAUNCH_EDGE_SHOW_ENV = "CRITICAL_PATH_SHOW_ZERO_WEIGHT_LAUNCH_EDGE"
 
 
 @dataclass
@@ -103,6 +109,13 @@ class CPGraph(nx.DiGraph):
         # https://docs.nvidia.com/cuda/cuda-runtime-api/api-sync-behavior.html#api-sync-behavior__memcpy-sync
         "cudaMemcpyAsync",
     ]
+
+    def _add_zero_weight_launch_edges(self) -> bool:
+        env = os.environ.get(CP_LAUNCH_EDGE_ENV, None)
+        if env is None:
+            # default
+            return False
+        return env == "1"
 
     def __init__(self, t: "Trace", t_full: "Trace", rank: int) -> None:
         self.cg = CallGraph(t, ranks=[rank])
@@ -312,6 +325,10 @@ class CPGraph(nx.DiGraph):
         return self._event_to_attributed_edges_map.get(ev_idx, [])
 
     def _construct_graph(self) -> None:
+        if self._add_zero_weight_launch_edges():
+            logger.warning(
+                "Adding zero weight launch edges to retain causality in subsequent simulations."
+            )
         cpu_call_stacks = (
             csg for csg in self.cg.call_stacks if csg.device_type == DeviceType.CPU
         )
@@ -419,6 +436,42 @@ class CPGraph(nx.DiGraph):
 
         csg.dfs_traverse(enter_func, exit_func)
 
+    def _get_cuda_runtime_calls_df(self, retain_index: bool = True) -> pd.DataFrame:
+        """Returns a dataframe of CUDA launch runtime calls and associated CUDA stream
+        The returned dataframe has addtional columns
+        * stream_kernel: for the CUDA stream the runtime event launched on
+        * launch id: is a sequential number for each kernel/memx launch. This is useful
+                     in CUDA event synchronization algorithms
+
+        @args: retain_index - keep the original trace index
+        """
+        gpu_kernels = self.full_trace_df.query("stream != -1 and index_correlation > 0")
+
+        runtime_calls = (
+            (
+                self.full_trace_df.query(
+                    self.symbol_table.get_runtime_launch_events_query()
+                )
+                .copy()
+                .sort_values(by="ts", axis=0)
+            )
+            .merge(
+                gpu_kernels[["stream", "index"]],
+                left_on="index_correlation",
+                right_on="index",
+                suffixes=["", "_kernel"],
+            )
+            .set_index("index")
+        )
+
+        # Give a sequential launch ID for every launch event
+        runtime_calls.reset_index(inplace=True)
+        runtime_calls["launch_id"] = runtime_calls.index
+        if retain_index:
+            runtime_calls.set_index("index", inplace=True)
+
+        return runtime_calls
+
     def _get_cuda_event_record_df(self) -> Optional[pd.DataFrame]:
         """For Event based synchronization we need to track the last
         kernel/memcpy launched on a CPU thread just before the cudaEventRecord
@@ -431,17 +484,10 @@ class CPGraph(nx.DiGraph):
         sym_index = self.symbol_table.get_sym_id_map()
         if "cudaEventRecord" not in sym_index:
             return None
+        cudaEventRecord_id = sym_index.get("cudaEventRecord")
 
         # CUDA launch runtime calls
-        runtime_calls: pd.DataFrame = (
-            self.full_trace_df.query(
-                self.symbol_table.get_runtime_launch_events_query()
-            )
-            .copy()
-            .sort_values(by="ts", axis=0)
-        )
-
-        cudaEventRecord_id = sym_index.get("cudaEventRecord")
+        runtime_calls = self._get_cuda_runtime_calls_df(retain_index=False)
 
         # CUDA Record Event calls
         cuda_record_calls = (
@@ -450,15 +496,54 @@ class CPGraph(nx.DiGraph):
             .sort_values(by="ts", axis=0)
         )
 
-        def _previous_launch(ts: int, pid: int, tid: int) -> Optional[int]:
-            """Find the previous CUDA launch on same pid and tid"""
-            df = runtime_calls.query(f"pid == {pid} and tid == {tid}")
-            lower_neighbors = df[df["ts"] < ts]["ts"]
-            return lower_neighbors.idxmax() if len(lower_neighbors) else None
+        def find_previous_launch(pid, tid):
+            """Correlates the closes CUDA kernel launch to a CUDA Record Event"""
+            comb = (
+                pd.concat([runtime_calls, cuda_record_calls])
+                .sort_values(by="ts", axis=0)
+                .query(f"pid == {pid} and tid == {tid}")
+                .copy()
+            )
+            comb.launch_id.fillna(-1, inplace=True)
+            # previous_launch_id is max of launch ids seen uptill now
+            comb.loc[:, "previous_launch_id"] = comb.launch_id.cummax(skipna=False)
 
-        cuda_record_calls["index_previous_launch"] = cuda_record_calls.apply(
-            lambda x: _previous_launch(x["ts"], x["pid"], x["tid"]), axis=1
+            comb_launches = comb.loc[comb.name != cudaEventRecord_id].copy()
+            comb_cuda_records = comb.loc[comb.name == cudaEventRecord_id].copy()
+            comb_cuda_records.drop(axis=1, columns="launch_id", inplace=True)
+
+            # Now join the previous_launch_id to actual kernel launch events.
+            return pd.merge(
+                comb_cuda_records,
+                comb_launches[["launch_id", "index", "correlation"]],
+                left_on="previous_launch_id",
+                right_on="launch_id",
+                how="left",
+                suffixes=["", "_launch_event"],
+                # multiple CUDA records can have same previous launch ID, but not vice versa
+                validate="many_to_one",
+            )
+
+        pid_tids = (
+            cuda_record_calls[["pid", "tid"]].groupby(["pid", "tid"]).groups.keys()
         )
+
+        cuda_record_dfs = [find_previous_launch(pid, tid) for (pid, tid) in pid_tids]
+        cuda_record_calls = pd.concat(cuda_record_dfs, axis=0).sort_values(
+            by="ts", axis=0
+        )
+
+        # Cleanup temporary columns
+        # PS: you can comment the below if you need to debug any issue
+        cuda_record_calls.drop(
+            axis=1,
+            columns=["launch_id", "previous_launch_id", "correlation_launch_event"],
+            inplace=True,
+        )
+        cuda_record_calls.rename(
+            columns={"index_launch_event": "index_previous_launch"}, inplace=True
+        )
+        cuda_record_calls.index_previous_launch.fillna(-1, inplace=True)
 
         return cuda_record_calls
 
@@ -478,14 +563,30 @@ class CPGraph(nx.DiGraph):
         ):
             return None
 
+        # CUDA launch runtime calls
+        runtime_calls = self._get_cuda_runtime_calls_df()
+        runtime_calls.drop(axis=1, columns=["stream"], inplace=True)
+        runtime_calls.rename(columns={"stream_kernel": "stream"}, inplace=True)
+
         gpu_kernels = self.full_trace_df.query("stream != -1 and index_correlation > 0")
 
-        # CUDA launch runtime calls and associated CUDA stream
-        runtime_calls = (
+        # CUDA stream wait event runtime calls and associated CUDA stream
+        cudaStreamWaitEvent_id = sym_index.get("cudaStreamWaitEvent")
+        cuda_stream_wait_events = (
             (
                 self.full_trace_df.query(
-                    self.symbol_table.get_runtime_launch_events_query()
-                )[["index", "ts", "pid", "tid", "index_correlation"]]
+                    f"name == {cudaStreamWaitEvent_id} and index_correlation > 0"
+                )[
+                    [
+                        "index",
+                        "name",
+                        "ts",
+                        "pid",
+                        "tid",
+                        "correlation",
+                        "index_correlation",
+                    ]
+                ]
                 .copy()
                 .sort_values(by="ts", axis=0)
             )
@@ -498,32 +599,62 @@ class CPGraph(nx.DiGraph):
             .set_index("index")
         )
 
-        # CUDA stream wait event runtime calls and associated CUDA stream
-        cudaStreamWaitEvent_id = sym_index.get("cudaStreamWaitEvent")
-        cuda_stream_wait_events = (
-            self.full_trace_df.query(
-                f"name == {cudaStreamWaitEvent_id} and index_correlation > 0"
-            )[["index", "ts", "pid", "tid", "correlation", "index_correlation"]]
-            .copy()
-            .sort_values(by="ts", axis=0)
-        ).merge(
-            gpu_kernels[["stream", "index"]],
-            left_on="index_correlation",
-            right_on="index",
-            suffixes=["", "_kernel"],
-        )
-
-        def _next_launch(ts: int, pid: int, tid: int, stream: int) -> int:
-            """Find the next CUDA launch on same pid, tid and stream"""
-            df = runtime_calls.query(
-                f"pid == {pid} and tid == {tid} and stream == {stream}"
+        def find_next_launch(pid, tid, stream):
+            """Correlates the closes CUDA kernel launch to a CUDA Stream Wait Event"""
+            # Combine CUDA runtime launch calls and cuda stream wait event calls
+            # on the same pid, tid, stream
+            comb = (
+                pd.concat([runtime_calls, cuda_stream_wait_events])
+                .sort_values(by="ts", axis=0)
+                .query(f"pid == {pid} and tid == {tid} and stream == {stream}")
+                .copy()
             )
-            upper_neighbors = df[df["ts"] > ts]["ts"]
-            return upper_neighbors.idxmin() if len(upper_neighbors) else -1
+            comb.launch_id.fillna(sys.maxsize, inplace=True)
 
-        cuda_stream_wait_events["index_next_launch"] = cuda_stream_wait_events.apply(
-            lambda x: _next_launch(x["ts"], x["pid"], x["tid"], x["stream"]), axis=1
+            # Next launch ID is the next lowest launch ID in the sorted dataframe
+            comb["next_launch_id"] = comb["launch_id"].iloc[::-1].cummin()
+            comb.reset_index(inplace=True)
+
+            comb_launches = comb.loc[comb.name != cudaStreamWaitEvent_id].copy()
+            comb_stream_wait_events = comb.loc[
+                comb.name == cudaStreamWaitEvent_id
+            ].copy()
+            comb_stream_wait_events.drop(axis=1, columns="launch_id", inplace=True)
+
+            # Now join the next_launch_id to actual kernel launch events.
+            return pd.merge(
+                comb_stream_wait_events,
+                comb_launches[["launch_id", "index", "correlation"]],
+                left_on="next_launch_id",
+                right_on="launch_id",
+                how="left",
+                suffixes=["", "_launch_event"],
+            )
+
+        pid_tid_streams = (
+            cuda_stream_wait_events[["pid", "tid", "stream"]]
+            .drop_duplicates()
+            .to_dict("records")
         )
+
+        cuda_stream_wait_events = pd.concat(
+            [
+                find_next_launch(r["pid"], r["tid"], r["stream"])
+                for r in pid_tid_streams
+            ],
+            axis=0,
+        ).sort_values(by="ts", axis=0)
+
+        # Cleanup temporary columns
+        cuda_stream_wait_events.drop(
+            axis=1,
+            columns=["launch_id", "next_launch_id", "correlation_launch_event"],
+            inplace=True,
+        )
+        cuda_stream_wait_events.rename(
+            columns={"index_launch_event": "index_next_launch"}, inplace=True
+        )
+        cuda_stream_wait_events.index_next_launch.fillna(-1, inplace=True)
 
         return cuda_stream_wait_events.set_index("index")
 
@@ -693,9 +824,13 @@ class CPGraph(nx.DiGraph):
                         f" to CPU event index {row['index_correlation']}, corr id ="
                         f"{self.full_trace_df.correlation.loc[row['index_correlation']]}"
                     )
-                    # TODO
                     _, gpu_end_node = self.get_nodes_for_event(src_kernel_index)
-                    self._add_gpu_cpu_sync_edge(gpu_end_node, row["index_correlation"])
+                    if (
+                        gpu_end_node is not None
+                    ):  # boundary case if previous was out of window
+                        self._add_gpu_cpu_sync_edge(
+                            gpu_end_node, row["index_correlation"]
+                        )
                 return
 
             assert name == stream_sync or name == context_sync
@@ -826,7 +961,7 @@ class CPGraph(nx.DiGraph):
             # GPU kernels to start  before their CPU launch counterparts.
             # To prevest this we always add a 0 weight edge for runtime launch -> kernel
             # the launch delay is not in critical path.
-            if not launch_delay_added:
+            if self._add_zero_weight_launch_edges() and not launch_delay_added:
                 # Try adding this if runtime is found
                 self._add_kernel_launch_delay_edge(
                     runtime_index, start_node, zero_weight=True
@@ -844,6 +979,10 @@ class CPGraph(nx.DiGraph):
 
     def critical_path(self) -> bool:
         """Calculates the critical path across nodes"""
+        if not self._validate_graph():
+            raise ValueError(
+                "Graph is not valid, see prints above for help on debugging"
+            )
         try:
             self.critical_path_nodes = nx.dag_longest_path(self, weight="weight")
         except nx.NetworkXUnfeasible as err:
@@ -872,6 +1011,41 @@ class CPGraph(nx.DiGraph):
                 break
 
         assert len(self.critical_path_edges_set) == (len(self.critical_path_nodes) - 1)
+        return True
+
+    def _validate_graph(self) -> bool:
+        """Validate the graph can be trusted for analysis"""
+        # check for negative values
+        negative_weights: bool = False
+        for u, v in self.edges:
+            e = self.edges[u, v]["object"]
+            if e.weight < 0:
+                src, dest = self.node_list[u], self.node_list[v]
+                logger.error(f"Found an edge with negative weight {e}")
+                logger.error(
+                    f" Source node idx {src.ev_idx}, "
+                    f" node name = {self._get_node_name(src.ev_idx)}"
+                )
+                logger.error(
+                    f" Dest node idx {dest.ev_idx}, "
+                    f" node name = {self._get_node_name(dest.ev_idx)}"
+                )
+                negative_weights = True
+        if negative_weights:
+            logger.error(
+                "Negative weights means before-after relationships are not valid"
+            )
+            return False
+
+        # check for cycles
+        has_cycles = not nx.is_directed_acyclic_graph(self)
+        if has_cycles:
+            logger.error("This graph has cycles, you can debug this by running -")
+            logger.error(" import networkx as nx")
+            logger.error(" C = sorted(nx.simple_cycles(cp_graph))")
+            logger.error("and try len(C), C[0] ")
+            return False
+
         return True
 
     def get_critical_path_breakdown(self) -> Optional[pd.DataFrame]:
@@ -1060,12 +1234,8 @@ class CriticalPathAnalysis:
         # and also fiter out 0 duration events as they mess up the
         # event stack generation
         cpu_kernels = trace_df[trace_df["stream"].eq(-1)]
-        cudaEventRecord_id = sym_index.get("cudaEventRecord", -100)
         stream_wait_event_id = sym_index.get("Stream Wait Event", -200)
-        a = cpu_kernels.query(
-            f"(ts >= {start_ts} and ts <= {end_ts}) and "
-            f"(name == {cudaEventRecord_id} or dur > 0)"
-        )
+        a = cpu_kernels.query(f"(ts >= {start_ts} and ts <= {end_ts}) and (dur > 0)")
 
         # Only consider GPU kernels whose runtime events are in the correct
         # time window
@@ -1095,7 +1265,7 @@ class CriticalPathAnalysis:
 
     @staticmethod
     def _show_zero_weight_launch_edges() -> bool:
-        return os.environ.get(CP_LAUNCH_EDGE_ENV, -1) == 0
+        return os.environ.get(CP_LAUNCH_EDGE_SHOW_ENV, -1) == 0
 
     @staticmethod
     def _is_zero_weight_launch_edge(e: CPEdge) -> bool:

@@ -17,6 +17,7 @@ from hta.trace_analysis import TraceAnalysis
 
 class CriticalPathAnalysisTestCase(unittest.TestCase):
     def setUp(self):
+        os.environ["CRITICAL_PATH_ADD_ZERO_WEIGHT_LAUNCH_EDGE"] = "1"
         self.base_data_dir = str(Path(__file__).parent.parent.joinpath("tests/data"))
         critical_path_trace_dir: str = os.path.join(
             self.base_data_dir, "critical_path/simple_add"
@@ -154,6 +155,7 @@ class CriticalPathAnalysisTestCase(unittest.TestCase):
                 type=CPEdgeType.KERNEL_KERNEL_DELAY,
             ),
         )
+
         # also check for 0 duration causal launch edge
         ampere_runtime_idx = trace_df.index_correlation.loc[ampere_kernel_idx]
         r2start, _ = cp_graph.get_nodes_for_event(ampere_runtime_idx)

@@ -5,7 +5,7 @@
 import multiprocessing as mp
 from enum import Enum
 from pathlib import Path
-from typing import List
+from typing import List, Tuple
 
 import pandas as pd
 import psutil
@@ -160,3 +160,27 @@ def get_mp_pool_size(obj_size: int, num_objs: int) -> int:
     # Leave 20% buffer for system and other processes
     max_np = int(0.8 * free_mem / obj_size)
     return min(max_np, num_objs, mp.cpu_count())
+
+
+def get_symbol_column_names(df: pd.DataFrame) -> Tuple[str, str]:
+    """Get the proper column names for the `name` and `cat` attributes of string type in the DataFrame.
+
+    Due to the encoding/decoding operations, it is impossible for a generic HTA routine to known which columns
+    in a trace DataFrame have the symbol values for the events' `name` and `cat` attributes.
+
+    Args:
+        df (pd.DataFrame): A trace DataFrame.
+
+    Returns:
+        (column_name_for_name, column_name_for_cat)
+    """
+    name_column, cat_column = "", ""
+    for column_name in ["name", "s_name"]:
+        if column_name in df.columns and df.dtypes[column_name] == "object":
+            name_column = column_name
+            break
+    for column_name in ["cat", "s_cat"]:
+        if column_name in df.columns and df.dtypes[column_name] == "object":
+            cat_column = column_name
+            break
+    return name_column, cat_column

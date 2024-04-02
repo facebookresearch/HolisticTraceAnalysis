@@ -253,9 +253,12 @@ class BreakdownAnalysis:
                         if u_running not in running_mapping:
                             running_mapping[u_running] = k_t
                         else:
+                            # FIXME linter mismatch between fbcode and git T183519933
+                            # fmt: off
                             running_mapping[u_running] = (
                                 f"{running_mapping[u_running]} overlapping {k_t}"
                             )
+                            # fmt: on
 
         overlap_kernel_type_df["kernel_type"] = ""
         overlap_kernel_type_df = overlap_kernel_type_df[
@@ -296,9 +299,12 @@ class BreakdownAnalysis:
         if gpu_kernel_time.shape[0] > num_kernels:
             gpu_kernel_time["cumsum"] = gpu_kernel_time["sum"].cumsum()
             quantiles = gpu_kernel_time["cumsum"].quantile(duration_ratio)
+            # FIXME linter mismatch between fbcode and git T183519933
+            # fmt: off
             gpu_kernel_time.loc[gpu_kernel_time["cumsum"] > quantiles, "name"] = (
                 "others"
             )
+            # fmt: on
             gpu_kernel_time.loc[gpu_kernel_time.index >= num_kernels, "name"] = "others"
             gpu_kernel_time = gpu_kernel_time.groupby(by=["name"])["sum"].agg(
                 ["sum", "max", "min", "mean", "std"]
@@ -464,9 +470,12 @@ class BreakdownAnalysis:
         is_kernel_kernel_delay = ~is_host_wait & (
             gpu_kernels_s["idle_interval"] < consecutive_kernel_delay
         )
+        # FIXME linter mismatch between fbcode and git T183519933
+        # fmt: off
         gpu_kernels_s.loc[is_kernel_kernel_delay, "idle_category"] = (
             IdleTimeType.KERNEL_WAIT.value
         )
+        # fmt: on
 
         gpu_kernels_groupby = gpu_kernels_s.groupby("idle_category")
         if show_idle_interval_stats:
