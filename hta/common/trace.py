@@ -15,6 +15,8 @@ import time
 import tracemalloc
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
+import numpy as np
+
 import pandas as pd
 
 from hta.common.trace_file import get_trace_files
@@ -302,31 +304,24 @@ def transform_correlation_to_index(df: pd.DataFrame) -> pd.DataFrame:
     Affects:
         This function adds a index_correlation column to df.
     """
+
     if "correlation" not in df.columns:
         return df
+
+    # Initialize the index_correlaion to the fallback value first
+    df["index_correlation"] = np.minimum(df["correlation"], 0)
     corr_df = df.loc[df["correlation"].ne(-1), ["index", "correlation", "stream"]]
+
     on_cpu = corr_df.loc[df["stream"].eq(-1)]
     on_gpu = corr_df.loc[df["stream"].ne(-1)]
-    merged_cpu_idx = on_cpu.merge(on_gpu, on="correlation", how="inner")
-    merged_gpu_idx = on_gpu.merge(on_cpu, on="correlation", how="inner")
-    matched = pd.concat([merged_cpu_idx, merged_gpu_idx], axis=0)[
-        ["index_x", "index_y"]
-    ].set_index("index_x")
 
-    corr_index_map: Dict[int, int] = matched["index_y"].to_dict()
-
-    def _set_corr_index(row):
-        idx = row.name
-        if idx in corr_index_map:
-            return corr_index_map[idx]
-        elif df.loc[idx, "correlation"] == -1:
-            return -1
-        else:
-            return 0
-
-    df["index_correlation"] = df.apply(_set_corr_index, axis=1)
+    # We only need to merge once.
+    # index_x --> index_y will be cpu to gpu mapping
+    # index_y --> index_x will be gpu to cpu mapping
+    merged = on_cpu.merge(on_gpu, on="correlation", how="inner")
+    df.loc[merged["index_x"], "index_correlation"] = merged["index_y"].values
+    df.loc[merged["index_y"], "index_correlation"] = merged["index_x"].values
     df["index_correlation"] = pd.to_numeric(df["index_correlation"], downcast="integer")
-
     return df
 
 
@@ -452,7 +447,8 @@ def parse_trace_dataframe(
         add_fwd_bwd_links(df)
 
         df, local_symbol_table = compress_df(df, cfg)
-        transform_correlation_to_index(df)
+        df = transform_correlation_to_index(df)
+
         add_iteration(df, local_symbol_table)
         df["end"] = df["ts"] + df["dur"]
 
@@ -464,80 +460,54 @@ def parse_trace_dataframe(
 
 
 def add_fwd_bwd_links(df: pd.DataFrame) -> None:
+    t0 = time.perf_counter()
+    # Initialize the fwdbwd columns to -1
+    df["fwdbwd_index"] = -1
+    df["fwdbwd"] = -1
+    df["key"] = list(zip(df["ts"], df["tid"], df["pid"]))
+
+    # Get the fwdbwd events. Only the "id" and "key" columns are needed for merging.
     df_fwdbwd = df.loc[df.cat.eq("fwdbwd")]
-    # Check if fwdbwd events are present
     if df_fwdbwd.empty:
         return
-    df_fwdbwd_start = df_fwdbwd.query("ph == 's'")[["ts", "id", "pid", "tid"]]
-    df_fwdbwd_end = df_fwdbwd.query("ph == 'f' and bp == 'e'")[
-        ["ts", "id", "pid", "tid"]
-    ]
+    df_fwdbwd_start = df_fwdbwd.query("ph == 's'")[["id", "key"]]
+    df_fwdbwd_end = df_fwdbwd.query("ph == 'f' and bp == 'e'")[["id", "key"]]
 
-    df_cpu = df.loc[df.cat.eq("cpu_op")][["index", "ts"]]
-    df_fwdbwd_start_events = df_fwdbwd_start.merge(df_cpu, how="inner", on="ts")
-    df_fwdbwd_start_events.rename(columns={"index": "index_start"}, inplace=True)
+    # The "index" column for the cpu event will be used when merging with the fwdbwd events.
+    # The "key" column will be used for the merge.
+    df_cpu = df.loc[df.cat.eq("cpu_op")][["index", "key"]]
 
-    df_fwdbwd_end_events = df_fwdbwd_end.merge(df_cpu, how="inner", on="ts")
-    df_fwdbwd_end_events.rename(columns={"index": "index_end"}, inplace=True)
-
+    # Merge the fwdbwd events with the cpu events.
+    # We will be using the index of last cpu event when multiple cpu events start from the same ts.
+    df_fwdbwd_start_events = (
+        df_fwdbwd_start.merge(df_cpu, how="inner", on="key")[["index", "id"]]
+        .groupby("id")
+        .max()
+    )
+    df_fwdbwd_end_events = (
+        df_fwdbwd_end.merge(df_cpu, how="inner", on="key")[["index", "id"]]
+        .groupby("id")
+        .max()
+    )
     if df_fwdbwd_start_events.empty or df_fwdbwd_end_events.empty:
         return
 
-    df_fwdbwd_start_events = pd.concat(
-        g.sort_index().tail(1) for _, g in df_fwdbwd_start_events.groupby("id")
-    )
-    df_fwdbwd_end_events = pd.concat(
-        g.sort_index().tail(1) for _, g in df_fwdbwd_end_events.groupby("id")
-    )
-
-    df_fwdbwd_merge = df_fwdbwd_start_events.merge(
+    # Merge the start and end events based on the "id" column.
+    df_fwdbwd_merged = df_fwdbwd_start_events.merge(
         df_fwdbwd_end_events, how="inner", on="id", suffixes=("_start", "_end")
     )
 
-    fwdbwd_start_to_end_map = {}
-    fwdbwd_end_to_start_map = {}
-    for _, entry in df_fwdbwd_merge.iterrows():
-        start_tuple = (
-            entry["ts_start"],
-            entry["pid_start"],
-            entry["tid_start"],
-            entry["index_start"],
-        )
-        end_tuple = (
-            entry["ts_end"],
-            entry["pid_end"],
-            entry["tid_end"],
-            entry["index_end"],
-        )
+    start_indices = df_fwdbwd_merged["index_start"]
+    end_indices = df_fwdbwd_merged["index_end"]
 
-        fwdbwd_start_to_end_map[start_tuple] = entry["index_end"]
-        fwdbwd_end_to_start_map[end_tuple] = entry["index_start"]
-
-    def _set_fwdbwd_index(row):
-        if row.get("cat") != "cpu_op":
-            return -1
-        key = (row.ts, row.pid, row.tid, row.get("index"))
-        # print(key)
-        if key in fwdbwd_start_to_end_map:
-            return fwdbwd_start_to_end_map[key]
-        elif key in fwdbwd_end_to_start_map:
-            return fwdbwd_end_to_start_map[key]
-        else:
-            return -1
-
-    def _set_fwd_or_bwd(row):
-        if row.get("cat") != "cpu_op":
-            return -1
-        key = (row.ts, row.pid, row.tid, row.get("index"))
-        if key in fwdbwd_start_to_end_map:
-            return 0
-        elif key in fwdbwd_end_to_start_map:
-            return 1
-        else:
-            return -1
-
-    df["fwdbwd_index"] = df.apply(_set_fwdbwd_index, axis=1)
-    df["fwdbwd"] = df.apply(_set_fwd_or_bwd, axis=1)
+    # Add the fwdbwd_index and fwdbwd columns to the dataframe.
+    df.loc[start_indices, "fwdbwd_index"] = end_indices.values
+    df.loc[end_indices, "fwdbwd_index"] = start_indices.values
+    df.loc[start_indices, "fwdbwd"] = 0
+    df.loc[end_indices, "fwdbwd"] = 1
+    df.drop(columns=["key"], inplace=True)
+    t1 = time.perf_counter()
+    logger.debug(f"Time taken to add fwd_bwd links: {t1 - t0 :.2f} seconds")
 
 
 def decode_symbol_id_to_symbol_name(
