@@ -1,5 +1,6 @@
 from collections import defaultdict, namedtuple
 from dataclasses import dataclass, field
+from functools import cmp_to_key
 from time import perf_counter
 from typing import Callable, Dict, List, NamedTuple, Optional
 
@@ -102,17 +103,11 @@ def sort_events(a: np.ndarray) -> None:
     Args:
         a (np.ndarray): an array of events.
     """
-    n: int = a.shape[0]
-    h: int = 1
-    while h < int(n / 3):
-        h = 3 * h + 1
-    while h >= 1:
-        for i in range(h, n):
-            j = i
-            while j >= h and _less_than(a[j], a[j - h]):
-                a[[j, j - h]] = a[[j - h, j]]
-                j = j - h
-        h = int(h / 3)
+
+    def _less_than_cmp(x: np.ndarray, y: np.ndarray) -> int:
+        return -1 if _less_than(x, y) else 1
+
+    a[:] = sorted(a.tolist(), key=cmp_to_key(_less_than_cmp))
 
 
 def is_events_sorted(arr: np.ndarray) -> bool:
