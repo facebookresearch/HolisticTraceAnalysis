@@ -31,6 +31,10 @@ class CriticalPathAnalysisTestCase(unittest.TestCase):
             self.base_data_dir, "critical_path/cuda_event_sync"
         )
         self.event_sync_trace = TraceAnalysis(trace_dir=critical_path_trace_dir3)
+        critical_path_trace_dir4: str = os.path.join(
+            self.base_data_dir, "ns_resolution_trace"
+        )
+        self.ns_resolution_trace = TraceAnalysis(trace_dir=critical_path_trace_dir4)
 
     def test_critical_path_analysis(self):
         critical_path_t = self.simple_add_trace
@@ -408,6 +412,19 @@ class CriticalPathAnalysisTestCase(unittest.TestCase):
 
         # Check the boundby column is populated
         self.assertEqual(edf.bound_by.isnull().sum() + edf.bound_by.isna().sum(), 0)
+
+    @unittest.skip("Currently disabled due to ns issues")
+    def test_ns_resolution_trace(self):
+        """New Kineto feature enables sub microsecond timstamp and duration,
+        check that these traces are compatible with Critical Path Analysis"""
+        annotation = "ProfilerStep"
+        instance_id = 1
+
+        critical_path_t = self.ns_resolution_trace
+        cp_graph, success = critical_path_t.critical_path_analysis(
+            rank=0, annotation=annotation, instance_id=instance_id
+        )
+        self.assertTrue(success)
 
 
 if __name__ == "__main__":
