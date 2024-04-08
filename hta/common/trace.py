@@ -443,8 +443,12 @@ def parse_trace_dataframe(
             logger.warning(
                 f"Rounding down ns resolution events due to issue with events overlapping. ts dtype = {df['ts'].dtype}, dur dtype = {df['dur'].dtype}"
             )
+            # Don't floor directly, first find the end
+            df["end"] = df["ts"] + df["dur"]
+
             df["ts"] = df[~df["ts"].isnull()]["ts"].apply(lambda x: math.ceil(x))
-            df["dur"] = df[~df["dur"].isnull()]["dur"].apply(lambda x: math.floor(x))
+            df["end"] = df[~df["end"].isnull()]["end"].apply(lambda x: math.floor(x))
+            df["dur"] = df["end"] - df["ts"]
 
         # assign an index to each event
         df.reset_index(inplace=True)

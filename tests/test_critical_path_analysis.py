@@ -413,7 +413,6 @@ class CriticalPathAnalysisTestCase(unittest.TestCase):
         # Check the boundby column is populated
         self.assertEqual(edf.bound_by.isnull().sum() + edf.bound_by.isna().sum(), 0)
 
-    @unittest.skip("Currently disabled due to ns issues")
     def test_ns_resolution_trace(self):
         """New Kineto feature enables sub microsecond timstamp and duration,
         check that these traces are compatible with Critical Path Analysis"""
