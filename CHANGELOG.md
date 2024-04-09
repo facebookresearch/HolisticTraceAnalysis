@@ -14,6 +14,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 - (Experimental) Added lightweight critical path analysis feature.
 - (Experimental) Critical path analysis features: event attribution and `summary()`
 - (Experimental) Critical path analysis fixes: fixing async memcpy and adding GPU to CPU event based synchronization.
+- Add a workaround for overlapping events when using ns resolution traces (https://github.com/pytorch/pytorch/pull/122425)
 
 #### Changed
 - Change test data path in unittests from relative path to real path to support running test within IDEs.

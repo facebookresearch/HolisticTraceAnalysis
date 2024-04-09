@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import gzip
 import json
+import math
 import multiprocessing as mp
 import os
 import queue
@@ -438,6 +439,18 @@ def parse_trace_dataframe(
     local_symbol_table: TraceSymbolTable = TraceSymbolTable()
     if "traceEvents" in trace_record:
         df = pd.DataFrame(trace_record["traceEvents"])
+        if df["ts"].dtype == np.dtype("float64"):
+            logger.warning(
+                f"Rounding down ns resolution events due to issue with events overlapping."
+                f" ts dtype = {df['ts'].dtype}, dur dtype = {df['dur'].dtype}."
+                f"Please see https://github.com/pytorch/pytorch/pull/122425"
+            )
+            # Don't floor directly, first find the end
+            df["end"] = df["ts"] + df["dur"]
+
+            df["ts"] = df[~df["ts"].isnull()]["ts"].apply(lambda x: math.ceil(x))
+            df["end"] = df[~df["end"].isnull()]["end"].apply(lambda x: math.floor(x))
+            df["dur"] = df["end"] - df["ts"]
 
         # assign an index to each event
         df.reset_index(inplace=True)
@@ -461,6 +474,9 @@ def parse_trace_dataframe(
 
 def add_fwd_bwd_links(df: pd.DataFrame) -> None:
     t0 = time.perf_counter()
+    if df.cat.eq("fwdbwd").sum() == 0:
+        return
+
     # Initialize the fwdbwd columns to -1
     df["fwdbwd_index"] = -1
     df["fwdbwd"] = -1
@@ -468,8 +484,6 @@ def add_fwd_bwd_links(df: pd.DataFrame) -> None:
 
     # Get the fwdbwd events. Only the "id" and "key" columns are needed for merging.
     df_fwdbwd = df.loc[df.cat.eq("fwdbwd")]
-    if df_fwdbwd.empty:
-        return
     df_fwdbwd_start = df_fwdbwd.query("ph == 's'")[["id", "key"]]
     df_fwdbwd_end = df_fwdbwd.query("ph == 'f' and bp == 'e'")[["id", "key"]]
 
