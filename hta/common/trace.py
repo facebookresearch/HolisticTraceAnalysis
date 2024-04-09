@@ -441,7 +441,9 @@ def parse_trace_dataframe(
         df = pd.DataFrame(trace_record["traceEvents"])
         if df["ts"].dtype == np.dtype("float64"):
             logger.warning(
-                f"Rounding down ns resolution events due to issue with events overlapping. ts dtype = {df['ts'].dtype}, dur dtype = {df['dur'].dtype}"
+                f"Rounding down ns resolution events due to issue with events overlapping."
+                f" ts dtype = {df['ts'].dtype}, dur dtype = {df['dur'].dtype}."
+                f"Please see https://github.com/pytorch/pytorch/pull/122425"
             )
             # Don't floor directly, first find the end
             df["end"] = df["ts"] + df["dur"]
