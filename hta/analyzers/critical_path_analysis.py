@@ -526,7 +526,7 @@ class CPGraph(nx.DiGraph):
                 "stream_kernel",
                 "gpu_kernel",
             ]
-        ]
+        ].rename(columns={"stream_kernel": "stream", "gpu_kernel": "gpu"})
 
         # CUDA Event Record Event calls
         cuda_record_calls_ = (
@@ -540,18 +540,25 @@ class CPGraph(nx.DiGraph):
 
         # Use the above to join by correlation, drop rows without a valid event_stream
         #  new columns added are : event_stream, gpu
-        cuda_record_calls = cuda_record_calls_.merge(
-            cuda_record_stream_df, on="correlation", how="left", validate="one_to_one"
-        ).dropna(subset=["event_stream"])[
-            ["pid", "tid", "ts", "name", "correlation", "event_stream", "gpu"]
-        ]
+        cuda_record_calls = (
+            cuda_record_calls_.merge(
+                cuda_record_stream_df,
+                on="correlation",
+                how="left",
+                validate="one_to_one",
+            )
+            .dropna(subset=["event_stream"])[
+                ["pid", "tid", "ts", "name", "correlation", "event_stream", "gpu"]
+            ]
+            .rename(columns={"event_stream": "stream"})
+        )
 
-        def find_previous_launch(pid, tid):
+        def find_previous_launch(gpu, stream):
             """Correlates the closes CUDA kernel launch to a CUDA Record Event"""
             comb = (
                 pd.concat([runtime_calls, cuda_record_calls])
                 .sort_values(by="ts", axis=0)
-                .query(f"pid == {pid} and tid == {tid}")
+                .query(f"gpu == {gpu} and stream == {stream}")
                 .copy()
             )
             comb.launch_id.fillna(-1, inplace=True)
@@ -574,11 +581,18 @@ class CPGraph(nx.DiGraph):
                 validate="many_to_one",
             )
 
-        pid_tids = (
-            cuda_record_calls[["pid", "tid"]].groupby(["pid", "tid"]).groups.keys()
+        gpu_streams = (
+            cuda_record_calls[["gpu", "stream"]]
+            .groupby(["gpu", "stream"])
+            .groups.keys()
         )
 
-        cuda_record_dfs = [find_previous_launch(pid, tid) for (pid, tid) in pid_tids]
+        cuda_record_dfs = [
+            find_previous_launch(gpu, stream) for (gpu, stream) in gpu_streams
+        ]
+        if len(cuda_record_dfs) == 0:
+            return None
+
         cuda_record_calls = pd.concat(cuda_record_dfs, axis=0).sort_values(
             by="ts", axis=0
         )
@@ -587,7 +601,7 @@ class CPGraph(nx.DiGraph):
         # PS: you can comment the below if you need to debug any issue
         cuda_record_calls.drop(
             axis=1,
-            columns=["launch_id", "previous_launch_id", "correlation_launch_event"],
+            columns=["launch_id", "previous_launch_id"],
             inplace=True,
         )
         cuda_record_calls.rename(

@@ -18,7 +18,7 @@ class CorrelationTestCase(unittest.TestCase):
             [2, 12, 16, -1],
             [3, 10, 22, -1],
             [4, 10, -1, -1],
-            [5, 45, 15, -1], # event sync is on GPU but has stream = -1
+            [5, 45, 15, -1],  # event sync is on GPU but has stream = -1
             [6, 42, 16, 7],
             [7, 71, 30, 7],
             [8, 12, -1, 7],
