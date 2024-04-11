@@ -259,7 +259,9 @@ def compress_df(
     return df, local_symbol_table
 
 
-def transform_correlation_to_index(df: pd.DataFrame) -> pd.DataFrame:
+def transform_correlation_to_index(
+    df: pd.DataFrame, event_sync_id: int
+) -> pd.DataFrame:
     """Transform correlation to index_correlation and add a index_correlation column to df.
 
     The correlation in the trace is a reference ID which links a Cuda kernel launch
@@ -298,6 +300,8 @@ def transform_correlation_to_index(df: pd.DataFrame) -> pd.DataFrame:
 
     Args:
         df (pd.DataFrame): the input DataFrame
+        event_sync_id (int): event synchronization events show up as stream == -1 but are also
+            GPU kernels. Use this to catch these GPU kernels.
 
     Returns:
         pd.DataFrame: the transformed DataFrame with a index_correlation column.
@@ -313,8 +317,8 @@ def transform_correlation_to_index(df: pd.DataFrame) -> pd.DataFrame:
     df["index_correlation"] = np.minimum(df["correlation"], 0)
     corr_df = df.loc[df["correlation"].ne(-1), ["index", "correlation", "stream"]]
 
-    on_cpu = corr_df.loc[df["stream"].eq(-1)]
-    on_gpu = corr_df.loc[df["stream"].ne(-1)]
+    on_cpu = corr_df.loc[df["stream"].eq(-1) & ~df["name"].eq(event_sync_id)]
+    on_gpu = corr_df.loc[df["stream"].ne(-1) | df["name"].eq(event_sync_id)]
 
     # We only need to merge once.
     # index_x --> index_y will be cpu to gpu mapping
@@ -460,7 +464,8 @@ def parse_trace_dataframe(
         add_fwd_bwd_links(df)
 
         df, local_symbol_table = compress_df(df, cfg)
-        df = transform_correlation_to_index(df)
+        event_sync_id = local_symbol_table.get_sym_id_map().get("Event Sync", -1)
+        df = transform_correlation_to_index(df, event_sync_id)
 
         add_iteration(df, local_symbol_table)
         df["end"] = df["ts"] + df["dur"]

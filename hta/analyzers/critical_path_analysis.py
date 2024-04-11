@@ -707,12 +707,21 @@ class CPGraph(nx.DiGraph):
 
     def _construct_graph_from_kernels(self) -> None:
         """Create nodes and edges for GPU kernels"""
+        sym_id_map = self.symbol_table.get_sym_id_map()
+        sync_cat = sym_id_map.get("cuda_sync", -1)
+        context_sync = sym_id_map.get("Context Sync", -1)
+        stream_sync = sym_id_map.get("Stream Sync", -1)
+        event_sync = sym_id_map.get("Event Sync", -1)
+        stream_wait_event = sym_id_map.get("Stream Wait Event", -1)
+
         # Note getting queue length on the clipped dataframe was showing errors,
         # it is worthwhile to consider the entire trace instead, hence use t_full
         q = TraceCounters._get_queue_length_time_series_for_rank(self.t_full, self.rank)
 
         gpu_kernels = (
-            self.trace_df.query("stream != -1 and index_correlation >= 0")
+            self.trace_df.query(
+                f"(stream != -1 or name == {event_sync}) and index_correlation >= 0"
+            )
             .join(q[["queue_length"]], on="index_correlation")
             .rename(columns={"queue_length": "queue_length_runtime"})
             .join(q[["queue_length"]], on="index")
@@ -744,13 +753,6 @@ class CPGraph(nx.DiGraph):
             )
             # Note convert NAN to -1 and then turn all records to int
 
-        sym_id_map = self.symbol_table.get_sym_id_map()
-        sync_cat = sym_id_map.get("cuda_sync", -1)
-        context_sync = sym_id_map.get("Context Sync", -1)
-        stream_sync = sym_id_map.get("Stream Sync", -1)
-        event_sync = sym_id_map.get("Event Sync", -1)
-        stream_wait_event = sym_id_map.get("Stream Wait Event", -1)
-
         # Sort kernels by start timestamp but use end time_stamp for sync events.
         # This handles the case where a stream sync event overlaps with an
         # actual kernel or memcpy -
@@ -774,7 +776,7 @@ class CPGraph(nx.DiGraph):
             nonlocal last_node
             nonlocal kernel_sync
             eid = row["index"]
-            logger.debug(
+            logger.info(
                 f"CUDA Sync event name = {self._get_node_name(eid)} corrid = {row['correlation']}"
             )
 
@@ -808,7 +810,7 @@ class CPGraph(nx.DiGraph):
                         dest_kernel_launch_index
                     ]
 
-                    logger.debug(
+                    logger.info(
                         f"Scheduling a Stream Sync on stream {row['stream']} "
                         f" dest kernel index {dest_kernel_index}, corr id = "
                         f"{self.full_trace_df.correlation.loc[dest_kernel_index]}\n "
@@ -817,7 +819,7 @@ class CPGraph(nx.DiGraph):
                     )
                     kernel_sync[dest_kernel_index] = src_kernel_index
                 else:
-                    logger.debug(
+                    logger.info(
                         "Adding cudaEventSynchronize GPU->CPU edge between GPU kernel"
                         f" with index = {src_kernel_index}, corr id = "
                         f"{self.full_trace_df.correlation.loc[src_kernel_index]}"
@@ -1222,11 +1224,16 @@ class CriticalPathAnalysis:
             f"instance(s) of '{annotation}' annotation."
         )
 
-        annotations = trace_df[trace_df.name.isin(annotation_ids)].copy()
-        annotations["end_ts"] = annotations["ts"] + annotations["dur"]
+        if annotation == "":
+            # look up full trace
+            start_ts = trace_df.ts.min()
+            end_ts = trace_df.end.max()
+        else:
+            annotations = trace_df[trace_df.name.isin(annotation_ids)].copy()
+            annotations["end_ts"] = annotations["ts"] + annotations["dur"]
 
-        start_ts = annotations.ts[instance_start : instance_end + 1].min()
-        end_ts = annotations.end_ts[instance_start : instance_end + 1].max()
+            start_ts = annotations.ts[instance_start : instance_end + 1].min()
+            end_ts = annotations.end_ts[instance_start : instance_end + 1].max()
 
         logger.info(f"Looking up events within the window ({start_ts}, {end_ts})")
 
