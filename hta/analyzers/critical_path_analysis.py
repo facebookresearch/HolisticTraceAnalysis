@@ -440,6 +440,7 @@ class CPGraph(nx.DiGraph):
         """Returns a dataframe of CUDA launch runtime calls and associated CUDA stream
         The returned dataframe has addtional columns
         * stream_kernel: for the CUDA stream the runtime event launched on
+        * gpu_kernel: for the GPU ID the runtime event launched on
         * launch id: is a sequential number for each kernel/memx launch. This is useful
                      in CUDA event synchronization algorithms
 
@@ -456,13 +457,13 @@ class CPGraph(nx.DiGraph):
                 .sort_values(by="ts", axis=0)
             )
             .merge(
-                gpu_kernels[["stream", "index"]],
+                gpu_kernels[["stream", "index", "pid"]],
                 left_on="index_correlation",
                 right_on="index",
                 suffixes=["", "_kernel"],
             )
             .set_index("index")
-        )
+        ).rename(columns={"pid_kernel": "gpu_kernel"})
 
         # Give a sequential launch ID for every launch event
         runtime_calls.reset_index(inplace=True)
@@ -471,6 +472,32 @@ class CPGraph(nx.DiGraph):
             runtime_calls.set_index("index", inplace=True)
 
         return runtime_calls
+
+    def _get_cuda_event_to_stream_df(self) -> pd.DataFrame:
+        """
+        Each CUDA Event Record has a specific stream the event was recorded on.
+        Synchronization events in the trace have columns shown below that track
+        the correlation ID of the CUDA Event Record call, and the stream it was
+        recorded on (wait_on_stream).
+
+        Returns a dataframe with 3 columns
+            correlation (index), event_stream, gpu
+
+        This function will warn if we see a single event record to multiple
+        (event_stream, gpu) combination.
+        """
+        temp = self.full_trace_df[self.full_trace_df.wait_on_stream > -1][
+            ["wait_on_cuda_event_record_corr_id", "wait_on_stream", "pid"]
+        ]
+        cuda_record_stream_df = temp.drop_duplicates().rename(
+            columns={
+                "wait_on_cuda_event_record_corr_id": "correlation",
+                "wait_on_stream": "event_stream",
+                "pid": "gpu",
+            }
+        )
+        # Sanity checking to do.
+        return cuda_record_stream_df.set_index("correlation")
 
     def _get_cuda_event_record_df(self) -> Optional[pd.DataFrame]:
         """For Event based synchronization we need to track the last
@@ -487,14 +514,37 @@ class CPGraph(nx.DiGraph):
         cudaEventRecord_id = sym_index.get("cudaEventRecord")
 
         # CUDA launch runtime calls
-        runtime_calls = self._get_cuda_runtime_calls_df(retain_index=False)
+        runtime_calls = self._get_cuda_runtime_calls_df(retain_index=False)[
+            [
+                "pid",
+                "tid",
+                "ts",
+                "index",
+                "name",
+                "correlation",
+                "launch_id",
+                "stream_kernel",
+                "gpu_kernel",
+            ]
+        ]
 
-        # CUDA Record Event calls
-        cuda_record_calls = (
+        # CUDA Event Record Event calls
+        cuda_record_calls_ = (
             self.full_trace_df.query(f"name == {cudaEventRecord_id}")
             .copy()
             .sort_values(by="ts", axis=0)
         )
+
+        # Each CUDA Event Record has a specific stream, gpu the event was recorded on.
+        cuda_record_stream_df = self._get_cuda_event_to_stream_df()
+
+        # Use the above to join by correlation, drop rows without a valid event_stream
+        #  new columns added are : event_stream, gpu
+        cuda_record_calls = cuda_record_calls_.merge(
+            cuda_record_stream_df, on="correlation", how="left", validate="one_to_one"
+        ).dropna(subset=["event_stream"])[
+            ["pid", "tid", "ts", "name", "correlation", "event_stream", "gpu"]
+        ]
 
         def find_previous_launch(pid, tid):
             """Correlates the closes CUDA kernel launch to a CUDA Record Event"""
