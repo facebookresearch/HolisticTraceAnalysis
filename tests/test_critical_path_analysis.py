@@ -32,9 +32,15 @@ class CriticalPathAnalysisTestCase(unittest.TestCase):
         )
         self.event_sync_trace = TraceAnalysis(trace_dir=critical_path_trace_dir3)
         critical_path_trace_dir4: str = os.path.join(
+            self.base_data_dir, "critical_path/cuda_event_sync_multi_stream"
+        )
+        self.event_sync_multi_stream_trace = TraceAnalysis(
+            trace_dir=critical_path_trace_dir4
+        )
+        critical_path_trace_dir5: str = os.path.join(
             self.base_data_dir, "ns_resolution_trace"
         )
-        self.ns_resolution_trace = TraceAnalysis(trace_dir=critical_path_trace_dir4)
+        self.ns_resolution_trace = TraceAnalysis(trace_dir=critical_path_trace_dir5)
 
     def test_critical_path_analysis(self):
         critical_path_t = self.simple_add_trace
@@ -391,6 +397,68 @@ class CriticalPathAnalysisTestCase(unittest.TestCase):
             )
 
         check_sync_edge(cuda_kernel_end.idx, cuda_event_sync_end.idx)
+
+    def test_critical_path_analysis_event_sync_multistream(self):
+        """Checks cuda Stream wait event across multiple stream"""
+        critical_path_t = self.event_sync_multi_stream_trace
+
+        annotation = ""
+        instance_id = None
+        cp_graph, success = critical_path_t.critical_path_analysis(
+            rank=0, annotation=annotation, instance_id=instance_id
+        )
+        self.assertTrue(success)
+
+        # The trace contains the following
+        # 1. GPU kernel 1 (correlation = 27)  stream = 20
+        # 2. GPU kernel 2 (correlation = 57)  stream = 28
+        # 3. Record cuda event on stream 20
+        # 4. Wait event on stream 20
+        # 5. GPU kernel 3 (correlation = zz)  stream = 24
+
+        # For step (3) we want the algorithm to indicate previous launch to
+        # be the last kernel on stream 20 and not stream 24.
+        correlation_kernel1 = 27
+        correlation_event_record = 1385
+
+        event_record_df = cp_graph._get_cuda_event_record_df()
+        event_records = event_record_df[
+            ["correlation", "correlation_launch_event"]
+        ].to_dict(orient="records")
+
+        self.assertEqual(len(event_records), 3)
+        self.assertEqual(event_records[2]["correlation"], correlation_event_record)
+        # The cudaEventRecord should sync back to GPU kernel 1 and not kernel 2
+        self.assertEqual(
+            event_records[2]["correlation_launch_event"], correlation_kernel1
+        )
+
+        # Check that sync edge is added
+        kernel1_idx = 24  # ampere_sgemm_128x64_nn
+        kernel3_idx = 84  # Memset (Device)
+        self.assertEqual(
+            cp_graph._get_node_name(kernel1_idx),
+            "ampere_sgemm_128x64_nn",
+        )
+        self.assertEqual(
+            cp_graph._get_node_name(kernel3_idx),
+            "Memset (Device)",
+        )
+        _, kernel1_end = cp_graph.get_nodes_for_event(kernel1_idx)
+        kernel3_start, _ = cp_graph.get_nodes_for_event(kernel3_idx)
+
+        inter_kernel_sync_edge = cp_graph.edges[kernel1_end.idx, kernel3_start.idx][
+            "object"
+        ]
+        self.assertEqual(
+            inter_kernel_sync_edge,
+            CPEdge(
+                begin=kernel1_end.idx,
+                end=kernel3_start.idx,
+                weight=0,
+                type=CPEdgeType.SYNC_DEPENDENCY,
+            ),
+        )
 
     def test_critical_path_breakdown(self):
         annotation = "[param|pytorch.model.alex_net|0|0|0|measure|forward]"

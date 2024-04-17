@@ -840,7 +840,7 @@ class CPGraph(nx.DiGraph):
             nonlocal last_node
             nonlocal kernel_sync
             eid = row["index"]
-            logger.info(
+            logger.debug(
                 f"CUDA Sync event name = {self._get_node_name(eid)} corrid = {row['correlation']}"
             )
 
@@ -874,7 +874,7 @@ class CPGraph(nx.DiGraph):
                         dest_kernel_launch_index
                     ]
 
-                    logger.info(
+                    logger.debug(
                         f"Scheduling a Stream Sync on stream {row['stream']} "
                         f" dest kernel index {dest_kernel_index}, corr id = "
                         f"{self.full_trace_df.correlation.loc[dest_kernel_index]}\n "
@@ -883,7 +883,7 @@ class CPGraph(nx.DiGraph):
                     )
                     kernel_sync[dest_kernel_index] = src_kernel_index
                 else:
-                    logger.info(
+                    logger.debug(
                         "Adding cudaEventSynchronize GPU->CPU edge between GPU kernel"
                         f" with index = {src_kernel_index}, corr id = "
                         f"{self.full_trace_df.correlation.loc[src_kernel_index]}"
