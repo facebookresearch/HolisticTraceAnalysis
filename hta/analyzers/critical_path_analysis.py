@@ -213,8 +213,8 @@ class CPGraph(nx.DiGraph):
         see the explanation below for more details.
         """
         # Edge attribution is only applicable for edges representing
-        # operator or kernel spans
-        if e.type != CPEdgeType.OPERATOR_KERNEL:
+        # operator or kernel spans or delay spans
+        if e.type not in {CPEdgeType.OPERATOR_KERNEL, CPEdgeType.KERNEL_KERNEL_DELAY}:
             return
 
         """ For nested events consider the following cases
@@ -246,7 +246,10 @@ class CPGraph(nx.DiGraph):
         src, dest = self.node_list[e.begin], self.node_list[e.end]
 
         ev_idx = 0
-        if src.is_start:
+        if e.type == CPEdgeType.KERNEL_KERNEL_DELAY:
+            # arbitrary but assigning the delay to previous kernel
+            ev_idx = src.ev_idx
+        elif src.is_start:
             ev_idx = src.ev_idx  # Case 1 & 2
         elif not dest.is_start:
             ev_idx = dest.ev_idx  # Case 3
@@ -944,9 +947,10 @@ class CPGraph(nx.DiGraph):
             ):
                 # If neither launch nor CUDA event sync occurs it is a kernel-kernel
                 # delay
-                self._add_edge_helper(
+                e = self._add_edge_helper(
                     last_node[stream], start_node, type=CPEdgeType.KERNEL_KERNEL_DELAY
                 )
+                self._attribute_edge(e, -1)
                 edge_added = True
 
             if not edge_added:
@@ -1015,25 +1019,50 @@ class CPGraph(nx.DiGraph):
 
     def _validate_graph(self) -> bool:
         """Validate the graph can be trusted for analysis"""
-        # check for negative values
+        # check for negative values and invalid sync edges
         negative_weights: bool = False
+        sync_on_same_stream: bool = False
+
+        # print heler
+        def show_src_dest(src: CPNode, dest: CPNode) -> None:
+            logger.error(
+                f" Source node idx {src.ev_idx}, "
+                f" node name = {self._get_node_name(src.ev_idx)}"
+            )
+            logger.error(
+                f" Dest node idx {dest.ev_idx}, "
+                f" node name = {self._get_node_name(dest.ev_idx)}"
+            )
+
         for u, v in self.edges:
             e = self.edges[u, v]["object"]
             if e.weight < 0:
                 src, dest = self.node_list[u], self.node_list[v]
                 logger.error(f"Found an edge with negative weight {e}")
-                logger.error(
-                    f" Source node idx {src.ev_idx}, "
-                    f" node name = {self._get_node_name(src.ev_idx)}"
-                )
-                logger.error(
-                    f" Dest node idx {dest.ev_idx}, "
-                    f" node name = {self._get_node_name(dest.ev_idx)}"
-                )
+                show_src_dest(src, dest)
                 negative_weights = True
+
+            if e.type == CPEdgeType.SYNC_DEPENDENCY:
+                src, dest = self.node_list[u], self.node_list[v]
+                stream_src = self.trace_df.stream.loc[src.ev_idx]
+                stream_dest = self.trace_df.stream.loc[dest.ev_idx]
+
+                if stream_src != -1 and stream_src == stream_dest:
+                    logger.error(
+                        f"Seeing a CUDA sync between kernels on same stream {e}"
+                    )
+                    show_src_dest(src, dest)
+                    sync_on_same_stream = True
+
         if negative_weights:
             logger.error(
                 "Negative weights means before-after relationships are not valid"
+            )
+            return False
+
+        if sync_on_same_stream:
+            logger.error(
+                "Synchronization edges should not be between kernels on same stream"
             )
             return False
 
