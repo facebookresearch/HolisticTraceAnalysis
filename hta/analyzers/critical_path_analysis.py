@@ -440,6 +440,7 @@ class CPGraph(nx.DiGraph):
         """Returns a dataframe of CUDA launch runtime calls and associated CUDA stream
         The returned dataframe has addtional columns
         * stream_kernel: for the CUDA stream the runtime event launched on
+        * gpu_kernel: for the GPU ID the runtime event launched on
         * launch id: is a sequential number for each kernel/memx launch. This is useful
                      in CUDA event synchronization algorithms
 
@@ -456,13 +457,13 @@ class CPGraph(nx.DiGraph):
                 .sort_values(by="ts", axis=0)
             )
             .merge(
-                gpu_kernels[["stream", "index"]],
+                gpu_kernels[["stream", "index", "pid"]],
                 left_on="index_correlation",
                 right_on="index",
                 suffixes=["", "_kernel"],
             )
             .set_index("index")
-        )
+        ).rename(columns={"pid_kernel": "gpu_kernel"})
 
         # Give a sequential launch ID for every launch event
         runtime_calls.reset_index(inplace=True)
@@ -471,6 +472,32 @@ class CPGraph(nx.DiGraph):
             runtime_calls.set_index("index", inplace=True)
 
         return runtime_calls
+
+    def _get_cuda_event_to_stream_df(self) -> pd.DataFrame:
+        """
+        Each CUDA Event Record has a specific stream the event was recorded on.
+        Synchronization events in the trace have columns shown below that track
+        the correlation ID of the CUDA Event Record call, and the stream it was
+        recorded on (wait_on_stream).
+
+        Returns a dataframe with 3 columns
+            correlation (index), event_stream, gpu
+
+        This function will warn if we see a single event record to multiple
+        (event_stream, gpu) combination.
+        """
+        temp = self.full_trace_df[self.full_trace_df.wait_on_stream > -1][
+            ["wait_on_cuda_event_record_corr_id", "wait_on_stream", "pid"]
+        ]
+        cuda_record_stream_df = temp.drop_duplicates().rename(
+            columns={
+                "wait_on_cuda_event_record_corr_id": "correlation",
+                "wait_on_stream": "event_stream",
+                "pid": "gpu",
+            }
+        )
+        # Sanity checking to do.
+        return cuda_record_stream_df.set_index("correlation")
 
     def _get_cuda_event_record_df(self) -> Optional[pd.DataFrame]:
         """For Event based synchronization we need to track the last
@@ -487,21 +514,51 @@ class CPGraph(nx.DiGraph):
         cudaEventRecord_id = sym_index.get("cudaEventRecord")
 
         # CUDA launch runtime calls
-        runtime_calls = self._get_cuda_runtime_calls_df(retain_index=False)
+        runtime_calls = self._get_cuda_runtime_calls_df(retain_index=False)[
+            [
+                "pid",
+                "tid",
+                "ts",
+                "index",
+                "name",
+                "correlation",
+                "launch_id",
+                "stream_kernel",
+                "gpu_kernel",
+            ]
+        ].rename(columns={"stream_kernel": "stream", "gpu_kernel": "gpu"})
 
-        # CUDA Record Event calls
-        cuda_record_calls = (
+        # CUDA Event Record Event calls
+        cuda_record_calls_ = (
             self.full_trace_df.query(f"name == {cudaEventRecord_id}")
             .copy()
             .sort_values(by="ts", axis=0)
         )
 
-        def find_previous_launch(pid, tid):
+        # Each CUDA Event Record has a specific stream, gpu the event was recorded on.
+        cuda_record_stream_df = self._get_cuda_event_to_stream_df()
+
+        # Use the above to join by correlation, drop rows without a valid event_stream
+        #  new columns added are : event_stream, gpu
+        cuda_record_calls = (
+            cuda_record_calls_.merge(
+                cuda_record_stream_df,
+                on="correlation",
+                how="left",
+                validate="one_to_one",
+            )
+            .dropna(subset=["event_stream"])[
+                ["pid", "tid", "ts", "name", "correlation", "event_stream", "gpu"]
+            ]
+            .rename(columns={"event_stream": "stream"})
+        )
+
+        def find_previous_launch(gpu, stream):
             """Correlates the closes CUDA kernel launch to a CUDA Record Event"""
             comb = (
                 pd.concat([runtime_calls, cuda_record_calls])
                 .sort_values(by="ts", axis=0)
-                .query(f"pid == {pid} and tid == {tid}")
+                .query(f"gpu == {gpu} and stream == {stream}")
                 .copy()
             )
             comb.launch_id.fillna(-1, inplace=True)
@@ -524,11 +581,18 @@ class CPGraph(nx.DiGraph):
                 validate="many_to_one",
             )
 
-        pid_tids = (
-            cuda_record_calls[["pid", "tid"]].groupby(["pid", "tid"]).groups.keys()
+        gpu_streams = (
+            cuda_record_calls[["gpu", "stream"]]
+            .groupby(["gpu", "stream"])
+            .groups.keys()
         )
 
-        cuda_record_dfs = [find_previous_launch(pid, tid) for (pid, tid) in pid_tids]
+        cuda_record_dfs = [
+            find_previous_launch(gpu, stream) for (gpu, stream) in gpu_streams
+        ]
+        if len(cuda_record_dfs) == 0:
+            return None
+
         cuda_record_calls = pd.concat(cuda_record_dfs, axis=0).sort_values(
             by="ts", axis=0
         )
@@ -537,7 +601,7 @@ class CPGraph(nx.DiGraph):
         # PS: you can comment the below if you need to debug any issue
         cuda_record_calls.drop(
             axis=1,
-            columns=["launch_id", "previous_launch_id", "correlation_launch_event"],
+            columns=["launch_id", "previous_launch_id"],
             inplace=True,
         )
         cuda_record_calls.rename(
@@ -707,12 +771,21 @@ class CPGraph(nx.DiGraph):
 
     def _construct_graph_from_kernels(self) -> None:
         """Create nodes and edges for GPU kernels"""
+        sym_id_map = self.symbol_table.get_sym_id_map()
+        sync_cat = sym_id_map.get("cuda_sync", -1)
+        context_sync = sym_id_map.get("Context Sync", -1)
+        stream_sync = sym_id_map.get("Stream Sync", -1)
+        event_sync = sym_id_map.get("Event Sync", -1)
+        stream_wait_event = sym_id_map.get("Stream Wait Event", -1)
+
         # Note getting queue length on the clipped dataframe was showing errors,
         # it is worthwhile to consider the entire trace instead, hence use t_full
         q = TraceCounters._get_queue_length_time_series_for_rank(self.t_full, self.rank)
 
         gpu_kernels = (
-            self.trace_df.query("stream != -1 and index_correlation >= 0")
+            self.trace_df.query(
+                f"(stream != -1 or name == {event_sync}) and index_correlation >= 0"
+            )
             .join(q[["queue_length"]], on="index_correlation")
             .rename(columns={"queue_length": "queue_length_runtime"})
             .join(q[["queue_length"]], on="index")
@@ -743,13 +816,6 @@ class CPGraph(nx.DiGraph):
                 .astype(int)
             )
             # Note convert NAN to -1 and then turn all records to int
-
-        sym_id_map = self.symbol_table.get_sym_id_map()
-        sync_cat = sym_id_map.get("cuda_sync", -1)
-        context_sync = sym_id_map.get("Context Sync", -1)
-        stream_sync = sym_id_map.get("Stream Sync", -1)
-        event_sync = sym_id_map.get("Event Sync", -1)
-        stream_wait_event = sym_id_map.get("Stream Wait Event", -1)
 
         # Sort kernels by start timestamp but use end time_stamp for sync events.
         # This handles the case where a stream sync event overlaps with an
@@ -1222,11 +1288,16 @@ class CriticalPathAnalysis:
             f"instance(s) of '{annotation}' annotation."
         )
 
-        annotations = trace_df[trace_df.name.isin(annotation_ids)].copy()
-        annotations["end_ts"] = annotations["ts"] + annotations["dur"]
+        if annotation == "":
+            # look up full trace
+            start_ts = trace_df.ts.min()
+            end_ts = trace_df.end.max()
+        else:
+            annotations = trace_df[trace_df.name.isin(annotation_ids)].copy()
+            annotations["end_ts"] = annotations["ts"] + annotations["dur"]
 
-        start_ts = annotations.ts[instance_start : instance_end + 1].min()
-        end_ts = annotations.end_ts[instance_start : instance_end + 1].max()
+            start_ts = annotations.ts[instance_start : instance_end + 1].min()
+            end_ts = annotations.end_ts[instance_start : instance_end + 1].max()
 
         logger.info(f"Looking up events within the window ({start_ts}, {end_ts})")
 
