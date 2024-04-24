@@ -3,6 +3,18 @@ from enum import Enum
 from typing import Dict, List, NamedTuple, Optional, Set, Union
 
 
+class ParserBackend(str, Enum):
+    """Tracer parser and laoder backend
+    See https://github.com/facebookresearch/HolisticTraceAnalysis/pull/125
+    for details on performance and memory usage.
+    """
+
+    JSON = "json"
+    IJSON = "ijson"
+    IJSON_BATCHED = "ijson_batched"
+    IJSON_BATCH_AND_COMPRESS = "ijson_batch_and_compress"
+
+
 class ValueType(Enum):
     """ValueType enumerates the possible data types for the attribute values."""
 
@@ -92,7 +104,17 @@ AVAILABLE_ARGS: Dict[str, AttributeSpec] = {
 class ParserConfig:
     """TraceParserConfig specifies how to parse a json trace file.
 
-    The current implementation only supports customization on `args` parsing.
+    +args (List[AttributeSpec]): Supports customization on `args` parsing.
+        Please see the `AttributeSpec` class for details.
+    +trace_memory (bool): Measures the peak memory usage during parsing with `tracemalloc`.
+        This is off by default as it adds performance overhead.
+    +parser_backend (Optional[ParserBackend]): HTA supports simple 'JSON' as well as iterative 'IJSON'
+        backend for loading large traces in a batched/memory efficient manner.
+        Default is "JSON" as the ijson backend is under development.
+        See supported modes for in the enum ParserBackend.
+        Note: Use ParserBackend.IJSON_BATCH_AND_COMPRESS for best results.
+        Please see https://github.com/facebookresearch/HolisticTraceAnalysis/pull/125
+
     This class can be extended to support other customizations.
     """
 
@@ -120,6 +142,8 @@ class ParserConfig:
 
     def __init__(self, args: Optional[List[AttributeSpec]] = None):
         self.args: List[AttributeSpec] = args if args else self.get_default_args()
+        self.parser_backend: Optional[ParserBackend] = None
+        self.trace_memory: bool = False
 
     @classmethod
     def get_default_cfg(cls) -> "ParserConfig":
@@ -151,6 +175,9 @@ class ParserConfig:
             if arg.name not in arg_set:
                 self.args.append(arg)
                 arg_set.add(arg.name)
+
+    def set_parser_backend(self, parser_backend: ParserBackend) -> None:
+        self.parser_backend = parser_backend
 
 
 # Define a global ParserConfig variable for internal use. To access this variable,

@@ -63,6 +63,12 @@ install_repo: &install_repo
       command: |
         pip install .
 
+install_ijson: &install_ijson
+  - run:
+      name: Install ijson
+      command: |
+        pip install ijson==3.2.3
+
 install_dev_requirements: &install_dev_requirements
   - run:
       name: Install development packages
@@ -99,6 +105,7 @@ jobs:
       - <<: *init_submodules
       - <<: *setup_venv
       - <<: *install_repo
+      - <<: *install_ijson
       - <<: *install_dev_requirements
 
       # Cache the venv directory that contains dependencies
@@ -125,6 +132,7 @@ jobs:
       - <<: *init_submodules
       - <<: *setup_venv
       - <<: *install_repo
+      - <<: *install_ijson
 
       # Cache the venv directory that contains dependencies
       - restore_cache:
@@ -140,7 +148,7 @@ jobs:
       - store_test_results:
           path: test-results
 
-
+# -- note ijson parser tests run on py3.8 version.
   cpu_tests_py39:
     <<: *cpu_py39
 

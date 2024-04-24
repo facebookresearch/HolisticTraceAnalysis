@@ -3,8 +3,9 @@ from typing import Dict, Generator, List, Optional
 
 import pandas as pd
 
-from hta.common.trace import get_cpu_gpu_correlation, Trace, TraceSymbolTable
+from hta.common.trace import get_cpu_gpu_correlation, Trace
 from hta.common.trace_call_stack import CallStackGraph, CallStackIdentity, CallStackNode
+from hta.common.trace_symbol_table import TraceSymbolTable
 from hta.common.types import DeviceType, infer_device_type
 from hta.configs.config import logger
 

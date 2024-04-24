@@ -3,7 +3,8 @@ from typing import List, Optional, Tuple, Union
 
 import pandas as pd
 
-from hta.common.trace import logger, TraceSymbolTable
+from hta.common.trace import logger
+from hta.common.trace_symbol_table import TraceSymbolTable
 from hta.utils.utils import get_symbol_column_names
 
 

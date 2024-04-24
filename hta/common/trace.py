@@ -6,257 +6,33 @@ from __future__ import annotations
 
 import gzip
 import json
-import math
 import multiprocessing as mp
 import os
-import queue
 import re
 import sys
 import time
 import tracemalloc
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
 import pandas as pd
 
 from hta.common.trace_file import get_trace_files
+from hta.common.trace_parser import parse_trace_dataframe, parse_trace_dict
+from hta.common.trace_symbol_table import (
+    decode_symbol_id_to_symbol_name,
+    TraceSymbolTable,
+)
 from hta.configs.config import logger
 from hta.configs.default_values import DEFAULT_TRACE_DIR
-from hta.configs.parser_config import AttributeSpec, ParserConfig, ValueType
-from hta.utils.utils import get_mp_pool_size, normalize_path, shorten_name
+from hta.configs.parser_config import ParserConfig
+from hta.utils.utils import get_mp_pool_size, normalize_path
 
 MetaData = Dict[str, Any]
 PHASE_COUNTER: str = "C"
 PHASE_FLOW_START: str = "s"
 PHASE_FLOW_END: str = "f"
-
-
-class _SymbolCollector:
-    """
-    To support a multiprocessing version of symbol table update, we use _SymbolCollector to a shared queue
-    to collect all the symbols and then use a single process to merge the results. A _SymbolCollector object
-    implements a function object so that it allow the multiple processes to share the data.
-    """
-
-    def __init__(self, q: queue.Queue[Any]):
-        self.queue = q
-
-    def __call__(self, symbols: Iterable[str]) -> None:
-        for s in symbols:
-            self.queue.put(s)
-
-
-# We use a TraceSymbolTable to store the bidirectional symbol<-->id mapping for each Trace object.
-# This table will be shared among all the ranks to encode/decode the symbols in their data frames.
-class TraceSymbolTable:
-    """
-    TraceSymbolTable stores the bidirectional symbol<-->id mapping for all traces.
-    Because of potential races caused by multiprocessing, we serialize updates to the
-    TraceSymbolTable using a synchronize.lock.
-
-    We assume all read operations to this table by a Trace object occur after it adds all its symbols.
-    Therefore, there is no need to lock the read access.
-
-    Attributes:
-        sym_table (List[str]) : a list of symbols.
-        sym_index (Dict[str, int]) : a map from symbol to ID.
-    """
-
-    def __init__(self):
-        self.sym_table: List[str] = []
-        self.sym_index: Dict[str, int] = {}
-
-    def add_symbols(self, symbols: Iterable[str]) -> None:
-        for s in symbols:
-            if s not in self.sym_index:
-                idx = len(self.sym_table)
-                self.sym_table.append(s)
-                self.sym_index[s] = idx
-
-    def add_symbols_mp(self, symbols_list: List[Iterable[str]]) -> None:
-        m = mp.Manager()
-        shared_queue: queue.Queue[Any] = m.Queue()
-        collector = _SymbolCollector(shared_queue)
-
-        with mp.get_context("spawn").Pool(
-            min(mp.cpu_count(), len(symbols_list))
-        ) as pool:
-            pool.map(collector, symbols_list)
-            pool.close()
-            pool.join()
-
-        all_symbols = []
-        while not shared_queue.empty():
-            all_symbols.append(shared_queue.get())
-        self.add_symbols(all_symbols)
-
-    def get_sym_id_map(self) -> Dict[str, int]:
-        return self.sym_index
-
-    def get_sym_table(self) -> List[str]:
-        return self.sym_table
-
-    def add_symbols_to_trace_df(self, trace_df: pd.DataFrame, col: str) -> None:
-        """
-        Take a trace dataframe and expand symbols in one of its columns.
-        Args:
-            trace_df (pd.DataFrame): Dataframe for trace from one rank.
-            col (str): column to expand symbols on.
-
-        Returns:
-            None
-        """
-        trace_df[col] = trace_df[col].apply(
-            lambda i: self.sym_table[i] if (0 <= i < len(self.sym_table)) else ""
-        )
-
-    @staticmethod
-    def create_symbol_table_from_df(df: pd.DataFrame) -> TraceSymbolTable:
-        """Create a symbol table from a DataFrame's cat and name columns.
-
-        Args:
-            df (pd.DataFrame): an input DataFrame.
-
-        Returns:
-            TraceSymbolTable: a symbol table containing all unique `name` and `cat` symbols in df.
-
-        Raise:
-            ValueError: when one of the follow two conditions happens:
-                (1) `df` doesn't have the `name` and `cat` columns; or
-                (2) they are not string type.
-        """
-        if (
-            ("name" in df.columns)
-            and (df.dtypes["name"] == "object")
-            and ("cat" in df.columns)
-            and (df.dtypes["cat"] == "object")
-        ):
-            symbols = set(df["cat"].unique()).union(set(df["name"].unique()))
-            symbol_table = TraceSymbolTable()
-            symbol_table.add_symbols(symbols)
-            return symbol_table
-        raise ValueError(
-            "Expect both name and cat columns of string types to be present in the dataframe"
-        )
-
-    def is_cuda_runtime(self, trace_df: pd.DataFrame, idx: int) -> bool:
-        """Check if an event is a CUDA runtime event"""
-        return trace_df["cat"].loc[idx] == self.sym_index["cuda_runtime"] or (
-            "cuda_driver" in self.sym_index.keys()
-            and (trace_df["cat"].loc[idx] == self.sym_index["cuda_driver"])
-        )
-
-    def is_operator(self, trace_df: pd.DataFrame, idx: int) -> bool:
-        """Check if an event is a CPU operator"""
-        return trace_df["cat"].loc[idx] == self.sym_index["cpu_op"]
-
-    def get_runtime_launch_events_query(self) -> str:
-        """Returns a SQL query you can pass to trace dataframe query()
-        to filter events that are CUDA runtime kernel and memcpy launches."""
-        cudaLaunchKernel_id = self.sym_index.get("cudaLaunchKernel", -128)
-        cudaLaunchKernelExC_id = self.sym_index.get("cudaLaunchKernelExC", -128)
-        cuLaunchKernel_id = self.sym_index.get("cuLaunchKernel", -128)
-        cudaMemcpyAsync_id = self.sym_index.get("cudaMemcpyAsync", -128)
-        cudaMemsetAsync_id = self.sym_index.get("cudaMemsetAsync", -128)
-
-        return (
-            f"((name == {cudaMemsetAsync_id}) or (name == {cudaMemcpyAsync_id}) or "
-            f" (name == {cudaLaunchKernel_id}) or (name == {cudaLaunchKernelExC_id})"
-            f" or (name == {cuLaunchKernel_id})) and (index_correlation > 0)"
-        )
-
-
-def parse_trace_dict(trace_file_path: str) -> Dict[str, Any]:
-    """
-    Parse a raw trace file into a dictionary.
-
-    Args:
-        trace_file_path (str) : the path to a trace file.
-
-    Returns:
-        A dictionary representation of the trace.
-    """
-    t_start = time.perf_counter()
-    trace_record: Dict[str, Any] = {}
-    if trace_file_path.endswith(".gz"):
-        with gzip.open(trace_file_path, "rb") as fh:
-            trace_record = json.loads(fh.read())
-    elif trace_file_path.endswith(".json"):
-        with open(trace_file_path, "r") as fh2:
-            trace_record = json.loads(fh2.read())
-    else:
-        raise ValueError(
-            f"expect the value of trace_file ({trace_file_path}) ends with '.gz' or 'json'"
-        )
-    t_end = time.perf_counter()
-    logger.info(f"Parsed {trace_file_path} time = {(t_end - t_start):.2f} seconds ")
-    return trace_record
-
-
-def compress_df(
-    df: pd.DataFrame, cfg: Optional[ParserConfig] = None
-) -> Tuple[pd.DataFrame, TraceSymbolTable]:
-    """
-    Compress a Dataframe to reduce its memory footprint.
-
-    Args:
-        df (pd.DataFrame): the input DataFrame
-        cfg (Optional[ParserConfig]): an object to customize how to parse/compress the trace.
-
-    Returns:
-        Tuple[pd.DataFrame, TraceSymbolTable]
-            The first item is the compressed dataframe.
-            The second item is the local symbol table specific to this dataframe.
-    """
-    cfg = cfg or ParserConfig.get_default_cfg()
-
-    # drop rows with null values
-    df.dropna(axis=0, subset=["dur", "cat"], inplace=True)
-    df.drop(df[df["cat"] == "Trace"].index, inplace=True)
-
-    # drop columns
-    columns_to_drop = {"ph", "id", "bp", "s"}.intersection(set(df.columns))
-    df.drop(list(columns_to_drop), axis=1, inplace=True)
-
-    # performance counters appear as args
-    if "cuda_profiler_range" in df.cat.unique():
-        counter_names = set.union(
-            *[set(d.keys()) for d in df[df.cat == "cuda_profiler_range"]["args"].values]
-        )
-        # args_to_keep = args_to_keep.union(counter_names)
-        cfg.add_args(
-            [AttributeSpec(name, name, ValueType.Int, -1) for name in counter_names]
-        )
-        logger.info(f"counter_names={counter_names}")
-        logger.info(f"args={cfg.get_args()}")
-
-    args_to_keep = cfg.get_args()
-    for arg in args_to_keep:
-        df[arg.name] = df["args"].apply(
-            lambda row: (
-                row.get(arg.raw_name, arg.default_value)
-                if isinstance(row, dict)
-                else arg.default_value
-            )
-        )
-    df.drop(["args"], axis=1, inplace=True)
-
-    # create a local symbol table
-    local_symbol_table = TraceSymbolTable()
-    symbols = set(df["cat"].unique()).union(set(df["name"].unique()))
-    local_symbol_table.add_symbols(symbols)
-
-    sym_index = local_symbol_table.get_sym_id_map()
-    for col in ["cat", "name"]:
-        df[col] = df[col].apply(lambda s: sym_index[s])
-
-    # data type downcast
-    for col in df.columns:
-        if df[col].dtype.kind == "i":
-            df[col] = pd.to_numeric(df[col], errors="coerce", downcast="integer")
-
-    return df, local_symbol_table
 
 
 def transform_correlation_to_index(
@@ -415,8 +191,9 @@ def add_iteration(df: pd.DataFrame, symbol_table: TraceSymbolTable) -> pd.DataFr
     return profiler_steps
 
 
-def parse_trace_dataframe(
-    trace_file_path: str, cfg: Optional[ParserConfig] = None
+def parse_trace_file(
+    trace_file_path: str,
+    cfg: Optional[ParserConfig] = None,
 ) -> Tuple[MetaData, pd.DataFrame, TraceSymbolTable]:
     """parse a single trace file into a meat test_data dictionary and a dataframe of events.
     Args:
@@ -429,50 +206,34 @@ def parse_trace_dataframe(
             The second item is the dataframe representation of the trace's events.
             The third item is the symbol table to encode the symbols of the trace.
 
-
     Raises:
         OSError when the trace file doesn't exist or current process has no permission to access it.
         JSONDecodeError when the trace file is not a valid JSON document.
         ValueError when the trace_file doesn't end with ".gz" or "json".
+        ValueError if parser config passes invalid parser backend.
     """
+    if not (trace_file_path.endswith(".gz") or trace_file_path.endswith(".json")):
+        raise ValueError(
+            f"expect the value of trace_file ({trace_file_path}) ends with '.gz' or 'json'"
+        )
+
     t_start = time.perf_counter()
-    trace_record = parse_trace_dict(trace_file_path)
+    cfg = cfg or ParserConfig.get_default_cfg()
 
-    meta: Dict[str, Any] = {k: v for k, v in trace_record.items() if k != "traceEvents"}
-    df: pd.DataFrame = pd.DataFrame()
-    local_symbol_table: TraceSymbolTable = TraceSymbolTable()
-    if "traceEvents" in trace_record:
-        df = pd.DataFrame(trace_record["traceEvents"])
-        if df["ts"].dtype == np.dtype("float64"):
-            logger.warning(
-                f"Rounding down ns resolution events due to issue with events overlapping."
-                f" ts dtype = {df['ts'].dtype}, dur dtype = {df['dur'].dtype}."
-                f"Please see https://github.com/pytorch/pytorch/pull/122425"
-            )
-            # Don't floor directly, first find the end
-            df["end"] = df["ts"] + df["dur"]
+    meta, df, local_symbol_table = parse_trace_dataframe(trace_file_path, cfg)
 
-            df["ts"] = df[~df["ts"].isnull()]["ts"].apply(lambda x: math.ceil(x))
-            df["end"] = df[~df["end"].isnull()]["end"].apply(lambda x: math.floor(x))
-            df["dur"] = df["end"] - df["ts"]
+    # add fwd bwd links between CPU ops
+    add_fwd_bwd_links(df)
 
-        # assign an index to each event
-        df.reset_index(inplace=True)
-        df["index"] = pd.to_numeric(df["index"], downcast="integer")
+    event_sync_id = local_symbol_table.get_sym_id_map().get("Event Sync", -1)
+    df = transform_correlation_to_index(df, event_sync_id)
 
-        # add fwd bwd links between CPU ops
-        add_fwd_bwd_links(df)
-
-        df, local_symbol_table = compress_df(df, cfg)
-        event_sync_id = local_symbol_table.get_sym_id_map().get("Event Sync", -1)
-        df = transform_correlation_to_index(df, event_sync_id)
-
-        add_iteration(df, local_symbol_table)
-        df["end"] = df["ts"] + df["dur"]
+    add_iteration(df, local_symbol_table)
+    df["end"] = df["ts"] + df["dur"]
 
     t_end = time.perf_counter()
-    logger.debug(
-        f"Parsed {trace_file_path} in {(t_end - t_start):.2f} seconds; current PID:{os. getpid()}"
+    logger.warning(
+        f"Overall parsing of {trace_file_path} in {(t_end - t_start):.2f} seconds; current PID:{os. getpid()}"
     )
     return meta, df, local_symbol_table
 
@@ -527,19 +288,6 @@ def add_fwd_bwd_links(df: pd.DataFrame) -> None:
     df.drop(columns=["key"], inplace=True)
     t1 = time.perf_counter()
     logger.debug(f"Time taken to add fwd_bwd links: {t1 - t0 :.2f} seconds")
-
-
-def decode_symbol_id_to_symbol_name(
-    df: pd.DataFrame, symbol_table: TraceSymbolTable, use_shorten_name: bool
-) -> None:
-    """Decode symbol ids into symbol names and write the decoded data into s_name and s_cat columns."""
-    s_tab: List[str] = symbol_table.sym_table
-    if use_shorten_name:
-        s_tab = [shorten_name(s) for s in s_tab]
-    if "name" in df.columns and df["name"].dtype.kind == "i":
-        df["s_name"] = df["name"].apply(lambda idx: s_tab[idx])
-    if "cat" in df.columns and df["cat"].dtype.kind == "i":
-        df["s_cat"] = df["cat"].apply(lambda idx: s_tab[idx])
 
 
 class Trace:
@@ -621,7 +369,7 @@ class Trace:
                 self.meta_data[rank],
                 self.traces[rank],
                 local_symbol_table,
-            ) = parse_trace_dataframe(trace_filepath)
+            ) = parse_trace_file(trace_filepath)
             # update the global symbol table
             self.symbol_table.add_symbols(local_symbol_table.get_sym_table())
             # fix the encoding of the data frame
@@ -652,7 +400,7 @@ class Trace:
         if not use_multiprocessing:
             for rank in ranks:
                 logger.debug(f"parsing trace for rank-{rank}")
-                result = parse_trace_dataframe(self.trace_files[rank])
+                result = parse_trace_file(self.trace_files[rank])
                 self.meta_data[rank], self.traces[rank], local_symbol_tables[rank] = (
                     result[0],
                     result[1],
@@ -666,14 +414,14 @@ class Trace:
                 num_procs = min(len(ranks), mp.cpu_count())
             else:
                 tracemalloc.start()
-                parse_trace_dataframe(trace_paths[0])
+                parse_trace_file(trace_paths[0])
                 current, peak = tracemalloc.get_traced_memory()
                 tracemalloc.stop()
                 num_procs = get_mp_pool_size(peak, len(ranks))
             logger.debug(f"using {num_procs} processes for parsing.")
 
             with mp.get_context("fork").Pool(num_procs) as pool:
-                results = pool.map(parse_trace_dataframe, trace_paths)
+                results = pool.map(parse_trace_file, trace_paths)
                 pool.close()
                 pool.join()
             logger.debug(f"finished parallel parsing using {num_procs} processes.")
@@ -697,7 +445,7 @@ class Trace:
                 )
 
         t1 = time.perf_counter()
-        logger.debug(
+        logger.warning(
             f"leaving {sys._getframe().f_code.co_name} duration={t1 - t0:.2f} seconds"
         )
 
@@ -731,7 +479,7 @@ class Trace:
             logger.error("The list of ranks to be parsed is empty.")
             self.is_parsed = False
         t1 = time.perf_counter()
-        logger.debug(
+        logger.warning(
             f"leaving {sys._getframe().f_code.co_name} duration={t1 - t0:.2f} seconds"
         )
 
