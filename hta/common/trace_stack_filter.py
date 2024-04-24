@@ -2,10 +2,10 @@ from enum import Enum
 from typing import List, Optional
 
 import pandas as pd
-
-from hta.common.trace import TraceSymbolTable
 from hta.common.trace_df import find_op_occurrence
 from hta.common.trace_filter import Filter, FirstIterationFilter
+
+from hta.common.trace_symbol_table import TraceSymbolTable
 from hta.configs.config import logger
 from hta.utils.utils import get_symbol_column_names
 

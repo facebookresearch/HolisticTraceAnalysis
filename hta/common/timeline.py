@@ -5,13 +5,13 @@ from typing import List, Optional, Set
 
 import pandas as pd
 import plotly.express as px
-
-from hta.common.trace import TraceSymbolTable
 from hta.common.trace_df import (
     find_events_by_name_patterns_using_decoded_names,
     find_events_by_name_patterns_using_symbol_table,
 )
 from hta.common.trace_filter import Filter
+
+from hta.common.trace_symbol_table import TraceSymbolTable
 from hta.configs.config import logger
 from plotly.io import to_html
 

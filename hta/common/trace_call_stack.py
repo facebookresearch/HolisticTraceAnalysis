@@ -7,7 +7,7 @@ from typing import Callable, Dict, List, NamedTuple, Optional
 import numpy as np
 import pandas as pd
 
-from hta.common.trace import TraceSymbolTable
+from hta.common.trace_symbol_table import TraceSymbolTable
 from hta.common.types import DeviceType, infer_device_type
 from hta.configs.config import logger
 

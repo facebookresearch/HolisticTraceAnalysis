@@ -5,9 +5,38 @@
 import os
 import unittest
 
-import pandas as pd
+from typing import Dict
 
+# import unittest.mock as mock
+
+import pandas as pd
 from hta.common.trace import parse_trace_dict, Trace
+from hta.common.trace_parser import (
+    _auto_detect_parser_backend,
+    get_default_trace_parsing_backend,
+    ParserBackend,
+    set_default_trace_parsing_backend,
+)
+
+GROUND_TRUTH_CACHE: Dict[str, pd.DataFrame] = {}
+
+
+def prepare_ground_truth_df(trace_dir, rank_0_file) -> pd.DataFrame:
+    global GROUND_TRUTH_CACHE
+    filep = os.path.join(trace_dir, rank_0_file)
+    if str(filep) in GROUND_TRUTH_CACHE:
+        df = GROUND_TRUTH_CACHE[str(filep)].copy()
+    else:
+        df = pd.DataFrame(parse_trace_dict(filep)["traceEvents"])
+        GROUND_TRUTH_CACHE[str(filep)] = df.copy()
+
+    # perform some manipulations on raw df
+    df.dropna(axis=0, subset=["dur", "cat"], inplace=True)
+    to_drop_cats = ["Trace"]
+    if get_default_trace_parsing_backend() != ParserBackend.JSON:
+        to_drop_cats.append("python_function")
+    df.drop(df[df["cat"].isin(to_drop_cats)].index, inplace=True)
+    return df
 
 
 class TraceParseTestCase(unittest.TestCase):
@@ -30,24 +59,15 @@ class TraceParseTestCase(unittest.TestCase):
         cls.vision_transformer_t.parse_traces(
             max_ranks=max_ranks, use_multiprocessing=True
         )
-        cls.vision_transformer_raw_df = cls.prepare_ground_truth_df(
+        cls.vision_transformer_raw_df = prepare_ground_truth_df(
             vision_transformer_trace_dir, vision_transformer_rank_0_file
         )
         # Trace parser for inference
         cls.inference_t: Trace = Trace(trace_dir=inference_trace_dir)
         cls.inference_t.parse_traces(max_ranks=max_ranks, use_multiprocessing=True)
-        cls.inference_raw_df = cls.prepare_ground_truth_df(
+        cls.inference_raw_df = prepare_ground_truth_df(
             inference_trace_dir, inference_rank_0_file
         )
-
-    @classmethod
-    def prepare_ground_truth_df(cls, trace_dir, rank_0_file) -> pd.DataFrame:
-        df = pd.DataFrame(
-            parse_trace_dict(os.path.join(trace_dir, rank_0_file))["traceEvents"]
-        )
-        df.dropna(axis=0, subset=["dur", "cat"], inplace=True)
-        df.drop(df[df["cat"] == "Trace"].index, inplace=True)
-        return df
 
     def setUp(self) -> None:
         self.traces = [self.vision_transformer_t, self.inference_t]
@@ -115,6 +135,71 @@ class TraceParseTestCase(unittest.TestCase):
             self.assertDictEqual(
                 gpu_kernels_per_iteration, correlated_cpu_ops_per_iteration
             )
+
+
+@unittest.skipIf(
+    #    _auto_detect_parser_backend() == ParserBackend.JSON,
+    # Tests are timing out the CI so have to disable this
+    1,
+    "Skipping ijson based trace load tests",
+)
+class TraceParseIjsonBatchCompressTestCase(TraceParseTestCase):
+    @classmethod
+    def setUpClass(cls):
+        set_default_trace_parsing_backend(ParserBackend.IJSON_BATCH_AND_COMPRESS)
+        super(TraceParseIjsonBatchCompressTestCase, cls).setUpClass()
+
+    @classmethod
+    def tearDownClass(cls):
+        set_default_trace_parsing_backend(ParserBackend.JSON)
+
+
+@unittest.skipIf(
+    _auto_detect_parser_backend() == ParserBackend.JSON,
+    "Skipping ijson based trace load tests",
+)
+class TraceParseIjsonOthersTestCase(unittest.TestCase):
+    """Additional test for coverage of 2 other backends"""
+
+    inference_trace_dir: str
+
+    @classmethod
+    def setUpClass(cls):
+        cls.inference_trace_dir: str = "tests/data//critical_path/alexnet"
+
+    def test_ijson_parser(self):
+        set_default_trace_parsing_backend(ParserBackend.IJSON)
+
+        inference_t: Trace = Trace(trace_dir=self.inference_trace_dir)
+        inference_t.parse_traces(max_ranks=1)
+
+        self.assertEqual(len(inference_t.traces), 1)
+        set_default_trace_parsing_backend(ParserBackend.JSON)
+
+    def test_ijson_batched_parser(self):
+        set_default_trace_parsing_backend(ParserBackend.IJSON_BATCHED)
+
+        inference_t: Trace = Trace(trace_dir=self.inference_trace_dir)
+        inference_t.parse_traces(max_ranks=1)
+
+        self.assertEqual(len(inference_t.traces), 1)
+        set_default_trace_parsing_backend(ParserBackend.JSON)
+
+    def test_ijson_batch_and_compress_parser(self):
+        set_default_trace_parsing_backend(ParserBackend.IJSON_BATCH_AND_COMPRESS)
+
+        inference_t: Trace = Trace(trace_dir=self.inference_trace_dir)
+        inference_t.parse_traces(max_ranks=1)
+
+        self.assertEqual(len(inference_t.traces), 1)
+        set_default_trace_parsing_backend(ParserBackend.JSON)
+
+    # @mock.patch('ijson.backend')
+    # def test_optimal_backend_detection(self, mock_backend) -> None:
+    #     mock_backend = "xxx"
+    #     self.assertEqual(_auto_detect_parser_backend(), "json")
+    #     mock_backend = "yajl_2c"
+    #     self.assertEqual(_auto_detect_parser_backend(), "ijson_batch_and_compress")
 
 
 if __name__ == "__main__":  # pragma: no cover

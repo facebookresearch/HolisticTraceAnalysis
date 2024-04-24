@@ -23,7 +23,8 @@ from hta.analyzers.trace_counters import TraceCounters
 # from hta.common.trace_call_graph import CallGraph, CallStackGraph, DeviceType
 from hta.common.call_stack import CallGraph, CallStackGraph, DeviceType
 
-from hta.common.trace import decode_symbol_id_to_symbol_name, Trace
+from hta.common.trace import Trace
+from hta.common.trace_symbol_table import decode_symbol_id_to_symbol_name
 from hta.configs.config import logger
 from hta.utils.utils import is_comm_kernel
 

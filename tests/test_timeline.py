@@ -21,9 +21,10 @@ from hta.common.timeline import (
     Timeline,
     TimelinePlotSetting,
 )
-from hta.common.trace import Trace, TraceSymbolTable
+from hta.common.trace import Trace
 from hta.common.trace_call_graph import CallGraph
 from hta.common.trace_filter import CPUOperatorFilter, GPUKernelFilter
+from hta.common.trace_symbol_table import TraceSymbolTable
 
 _MODULE = "hta.common.timeline"
 
