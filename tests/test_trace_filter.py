@@ -297,3 +297,59 @@ class TestTraceFilters(unittest.TestCase):
         df = FirstIterationFilter()(self.htaTrace.traces[0])
         f = UnderOperatorFilter(op_name=op_name, position=0, include_gpu_kernels=True)
         self.assertEqual(f(df).shape[0], 146)
+
+
+class TestTraceFiltersSyncEvents(unittest.TestCase):
+    """This test checks for corner cases where cuda_sync events are present.
+    The "Context Sync" and "Event Sync" events are on stream = -1 but are
+    also on the GPU and running device events.
+    """
+
+    base_data_dir = str(Path(hta.__file__).parent.parent.joinpath("tests/data"))
+    trace_dir: str = os.path.join(base_data_dir, "critical_path/cuda_event_sync")
+    htaTrace: Trace = Trace(trace_dir=trace_dir)
+    htaTrace.parse_traces()
+
+    def setUp(self):
+        self.htaTrace = TestTraceFiltersSyncEvents.htaTrace
+        self.df = self.htaTrace.get_trace(0)
+
+    def testGPUKernelFilter(self) -> None:
+        f = GPUKernelFilter()
+        filtered_df = f(
+            self.htaTrace.traces[0], symbol_table=self.htaTrace.symbol_table
+        )
+
+        # GPU kernel is present
+        self.assertGreater(filtered_df[(filtered_df["stream"] > 0)].size, 0)
+
+        # We will also see 3 sync events that are with stream == -1
+        self.assertEqual(len(filtered_df[(filtered_df["stream"] < 0)]), 3)
+        # print(filtered_df[filtered_df.stream == -1])
+
+    def testCPUOperatorFilter(self) -> None:
+        f = CPUOperatorFilter()
+        filtered_df = f(
+            self.htaTrace.traces[0], symbol_table=self.htaTrace.symbol_table
+        )
+
+        # CPU operator is present
+        self.assertTrue(filtered_df[(filtered_df["stream"] < 0)].size > 0)
+
+        # GPU kernels are not present
+        self.assertTrue(filtered_df[(filtered_df["stream"] > 0)].size == 0)
+
+        # CUDA sync events (with stream == -1) are also not present
+        sym_id_map = self.htaTrace.symbol_table.get_sym_id_map()
+        event_sync_id = sym_id_map.get("Event Sync", -1)
+        context_sync_id = sym_id_map.get("Context Sync", -1)
+        self.assertEqual(
+            filtered_df.query(
+                f"stream == -1 and (name == {event_sync_id} or name == {context_sync_id})"
+            ).size,
+            0
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()
