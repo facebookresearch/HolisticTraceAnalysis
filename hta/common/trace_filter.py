@@ -2,9 +2,9 @@ from abc import ABC, abstractmethod
 from typing import List, Optional, Tuple, Union
 
 import pandas as pd
-
-from hta.common.trace import logger
 from hta.common.trace_symbol_table import TraceSymbolTable
+
+from hta.configs.config import logger
 from hta.utils.utils import get_symbol_column_names
 
 
@@ -311,7 +311,20 @@ class GPUKernelFilter(Filter):
             logger.warning("DataFrame does not contain a 'stream' column.")
             return df
 
-        return df.loc[df["stream"] > 0]
+        if symbol_table is None:
+            logger.warning(
+                "GPUKernelFilter needs symbol table to identify synchrnoization events"
+            )
+            return df.loc[df["stream"] > 0]
+
+        # Device level Synchronization events are on stream = -1 but still
+        # run on GPU
+        event_sync_id = symbol_table.get_sym_id_map().get("Event Sync", -1)
+        context_sync_id = symbol_table.get_sym_id_map().get("Context Sync", -1)
+
+        return df.loc[
+            (df["stream"] > 0) | df["name"].isin([event_sync_id, context_sync_id])
+        ]
 
 
 class CPUOperatorFilter(Filter):
@@ -326,7 +339,17 @@ class CPUOperatorFilter(Filter):
             logger.warning("DataFrame does not contain a 'stream' column.")
             return df
 
-        return df.loc[df["stream"] == -1]
+        if symbol_table is None:
+            return df.loc[df["stream"] == -1]
+
+        # Device level Synchronization events are on stream = -1 but still
+        # run on GPU
+        event_sync_id = symbol_table.get_sym_id_map().get("Event Sync", -1)
+        context_sync_id = symbol_table.get_sym_id_map().get("Context Sync", -1)
+
+        return df.loc[
+            (df["stream"] == -1) & ~(df["name"].isin([event_sync_id, context_sync_id]))
+        ]
 
 
 class CompositeFilter(Filter):

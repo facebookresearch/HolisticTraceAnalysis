@@ -111,7 +111,7 @@ class TestTraceFilters(unittest.TestCase):
         f = GPUKernelFilter()
         filtered_df = f(self.htaTrace.traces[0])
 
-        # GPU kernel is present
+        # GPU kernel is present, note we are not reading CUDA sync events.
         self.assertTrue(filtered_df[(filtered_df["stream"] > 0)].size > 0)
 
         # others are not present
