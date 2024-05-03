@@ -347,7 +347,7 @@ class TestTraceFiltersSyncEvents(unittest.TestCase):
             filtered_df.query(
                 f"stream == -1 and (name == {event_sync_id} or name == {context_sync_id})"
             ).size,
-            0
+            0,
         )
 
 

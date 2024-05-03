@@ -788,7 +788,7 @@ class CPGraph(nx.DiGraph):
 
         gpu_kernels = (
             self.trace_df.query(
-                f"(stream != -1 or name == {event_sync}) and index_correlation >= 0"
+                f"(stream != -1 or (name == {event_sync} or name == {context_sync})) and index_correlation >= 0"
             )
             .join(q[["queue_length"]], on="index_correlation")
             .rename(columns={"queue_length": "queue_length_runtime"})
