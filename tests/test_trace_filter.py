@@ -349,7 +349,3 @@ class TestTraceFiltersSyncEvents(unittest.TestCase):
             ).size,
             0,
         )
-
-
-if __name__ == "__main__":
-    unittest.main()
