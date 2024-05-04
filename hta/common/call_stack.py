@@ -218,9 +218,10 @@ class CallStackGraph:
         events = []
         df = df[["index", "ts", "dur"]].copy()
         df["end"] = df["ts"] + df["dur"]
-        for _, row in df.iterrows():
-            events.append(Event(row["index"], row["ts"], row["dur"], EVENT_START))
-            events.append(Event(row["index"], row["end"], row["dur"], EVENT_END))
+
+        for row in df.itertuples():
+            events.append(Event(row.index, row.ts, row.dur, EVENT_START))
+            events.append(Event(row.index, row.end, row.dur, EVENT_END))
         events.sort(key=functools.cmp_to_key(compare_events))
 
         stack: List[Event] = []
@@ -443,13 +444,11 @@ class CallGraph:
         # construct a call stack graph for each thread/stream
         for rank in ranks:
             df = self.trace_data.get_trace(rank)
-            for pid, pid_group in df.groupby(by="pid"):
-                for tid, tid_group in pid_group.groupby(by="tid"):
-                    csi = CallStackIdentity(rank, pid, tid)
-                    csg = CallStackGraph(tid_group, csi)
-                    self.call_stacks.append(csg)
-                    call_stack_ids.append(csi)
-
+            for (pid, tid), df_thread in df.groupby(["pid", "tid"]):
+                csi = CallStackIdentity(rank, pid, tid)
+                csg = CallStackGraph(df_thread, csi)
+                self.call_stacks.append(csg)
+                call_stack_ids.append(csi)
         t1 = perf_counter()
         logging.debug(
             f"Completed constructing call stack graph for in {t1 - t0:.3} seconds"
