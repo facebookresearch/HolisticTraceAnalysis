@@ -299,6 +299,19 @@ class NameFilter(Filter):
             return NameIdColumnFilter(self.name_pattern)(df, _symbol_table)
 
 
+def _filter_gpu_kernels_with_cuda_sync(
+    df: pd.DataFrame, symbol_table: TraceSymbolTable
+):
+    """Helper function that finds rows in the dataframe that are either
+    GPU kernels or CUDA synchronization events."""
+
+    # Device level Synchronization events are on stream = -1 but still
+    # run on GPU
+    event_sync_id = symbol_table.get_sym_id_map().get("Event Sync", -1)
+    context_sync_id = symbol_table.get_sym_id_map().get("Context Sync", -1)
+    return (df["stream"] > 0) | df["name"].isin([event_sync_id, context_sync_id])
+
+
 class GPUKernelFilter(Filter):
     """
     A trace event filter class that extracts GPU kernel events from a DataFrame.
@@ -313,18 +326,11 @@ class GPUKernelFilter(Filter):
 
         if symbol_table is None:
             logger.warning(
-                "GPUKernelFilter needs symbol table to identify synchrnoization events"
+                "GPUKernelFilter needs symbol table to identify GPU synchronization events"
             )
             return df.loc[df["stream"] > 0]
 
-        # Device level Synchronization events are on stream = -1 but still
-        # run on GPU
-        event_sync_id = symbol_table.get_sym_id_map().get("Event Sync", -1)
-        context_sync_id = symbol_table.get_sym_id_map().get("Context Sync", -1)
-
-        return df.loc[
-            (df["stream"] > 0) | df["name"].isin([event_sync_id, context_sync_id])
-        ]
+        return df.loc[_filter_gpu_kernels_with_cuda_sync(df, symbol_table)]
 
 
 class CPUOperatorFilter(Filter):
@@ -340,16 +346,12 @@ class CPUOperatorFilter(Filter):
             return df
 
         if symbol_table is None:
+            logger.warning(
+                "CPUOperatorFilter needs symbol table to exclude GPU synchronization events"
+            )
             return df.loc[df["stream"] == -1]
 
-        # Device level Synchronization events are on stream = -1 but still
-        # run on GPU
-        event_sync_id = symbol_table.get_sym_id_map().get("Event Sync", -1)
-        context_sync_id = symbol_table.get_sym_id_map().get("Context Sync", -1)
-
-        return df.loc[
-            (df["stream"] == -1) & ~(df["name"].isin([event_sync_id, context_sync_id]))
-        ]
+        return df.loc[~_filter_gpu_kernels_with_cuda_sync(df, symbol_table)]
 
 
 class CompositeFilter(Filter):
