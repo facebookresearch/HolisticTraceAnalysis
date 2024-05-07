@@ -17,7 +17,7 @@ from hta.common.trace import Trace
 from hta.configs.config import logger
 from hta.utils.utils import normalize_path
 
-from param_bench.train.compute.python.tools.execution_trace import ExecutionTrace
+from param_bench.et_replay.lib.execution_trace import ExecutionTrace
 
 # PyTorch Events types that are correlated in the Execution Trace
 EXECUTION_TRACE_SUPPORTED_EVENTS: List[str] = ["cpu_op", "user_annotation"]
