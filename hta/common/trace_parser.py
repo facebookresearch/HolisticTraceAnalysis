@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import gzip
+import io
 import json
 import math
 import os
@@ -106,6 +107,14 @@ def parse_trace_dict(trace_file_path: str) -> Dict[str, Any]:
     return trace_record
 
 
+def _open_trace_file(trace_file_path: str) -> io.BufferedIOBase:
+    return (
+        gzip.open(trace_file_path, "rb")
+        if trace_file_path.endswith(".gz")
+        else open(trace_file_path, "rb")
+    )
+
+
 # @profile
 def _parse_trace_events_ijson(trace_file_path: str) -> pd.DataFrame:
     """
@@ -122,11 +131,7 @@ def _parse_trace_events_ijson(trace_file_path: str) -> pd.DataFrame:
     logger.info(f"Parsing using ijson (ijson backend = {ijson.backend})")
 
     t_start = time.perf_counter()
-    with (
-        gzip.open(trace_file_path, "rb")
-        if trace_file_path.endswith(".gz")
-        else open(trace_file_path, "rb")
-    ) as fh:
+    with _open_trace_file(trace_file_path) as fh:
 
         iterator = ijson.items(fh, "traceEvents.item", use_float=True)
 
@@ -176,11 +181,7 @@ def _parse_trace_events_ijson_batched(
     df = pd.DataFrame()
 
     t_start = time.perf_counter()
-    with (
-        gzip.open(trace_file_path, "rb")
-        if trace_file_path.endswith(".gz")
-        else open(trace_file_path, "rb")
-    ) as fh:
+    with _open_trace_file(trace_file_path) as fh:
         # TODO make events to skip configurable in ParserConfig
         iterator = (
             e
@@ -428,3 +429,102 @@ def parse_trace_dataframe(
             f"Parser Memory usage peak = {(peak/1024/1024):.2f} MB, current = {(current/1024/1024):.2f} MB"
         )
     return meta, df, local_symbol_table
+
+
+# --- Trace metadata reader ---
+def parse_metadata_ijson(fh) -> MetaData:
+    """
+    Parses a trace file using the `ijson` library and extracts certain high-level key-value pairs.
+    Args:
+        fh (file-like object): The trace file to parse.
+    Returns:
+        A dictionary containing the extracted metadata.
+
+    Note: We use the ijson low level API to read all dictionary
+    elements in the json upto "traceEvents", at which point we just terminate.
+    This leads to some blazingly fast metadata parsing!
+
+    https://pypi.org/project/ijson/#toc-entry-4
+
+    The ijson low-level API has a series of (prefix, event, value). The
+    prefix shows the path in the json object, while event can signify
+    the start of a map, array or a key. Following is an excerpt of events for a trace file
+
+    ```
+     start_map None
+     map_key schemaVersion
+    schemaVersion number 1
+     map_key distributedInfo
+    distributedInfo start_map None
+    distributedInfo map_key backend
+    distributedInfo.backend string nccl
+    distributedInfo map_key rank
+    distributedInfo.rank number 0
+    distributedInfo map_key world_size
+    distributedInfo.world_size number 64
+    distributedInfo end_map None
+     map_key deviceProperties
+    deviceProperties start_array None
+    deviceProperties.item start_map None
+    deviceProperties.item map_key id
+    deviceProperties.item.id number 0
+    ```
+    """
+    import ijson
+
+    meta: MetaData = {}
+    trace_parser = ijson.parse(fh)
+
+    def handle_nested_map(iterator, key: str, meta_so_far: MetaData) -> MetaData:
+        """
+        Recursively handles events for a nested map like distributedInfo.
+        """
+        prefix, event, value = next(iterator)
+        logger.debug(" -> ", prefix, event, value)
+        if event == "end_map":
+            return meta_so_far
+        elif event == "map_key":
+            key = value
+            return handle_nested_map(iterator, key, meta_so_far)
+        else:
+            assert key is not None
+            meta_so_far[key] = value
+            return handle_nested_map(iterator, "", meta_so_far)
+
+    cur_key = None
+    nested_map: MetaData = {}
+
+    for prefix, event, value in trace_parser:
+        logger.debug(prefix, event, value)
+        if event == "map_key" and value == "traceEvents":
+            # done ok bye!
+            return meta
+
+        # Handle a nested map like "distributedInfo"
+        if prefix == cur_key and event == "start_map":
+            nested_map = {}
+            meta[cur_key] = handle_nested_map(trace_parser, "", nested_map)
+            continue
+
+        # Handle a nested array map like "deviceProperties"
+        if prefix == cur_key and event == "start_array":
+            meta[cur_key] = []
+            # this should be start_map
+            _, _event_, _ = next(trace_parser)
+            assert _event_ == "start_map"
+            while _event_ != "end_array":
+                nested_map = {}
+                nested_map = handle_nested_map(trace_parser, "", nested_map)
+                meta[cur_key].append(nested_map)
+                _, _event_, _ = next(trace_parser)
+            continue
+
+        # Handle top level simple key values
+        #  map_key schemaVersion
+        # schemaVersion number 1
+        if event == "map_key" and prefix == "":
+            cur_key = value
+        if prefix == cur_key:
+            meta[cur_key] = value
+
+    return meta
