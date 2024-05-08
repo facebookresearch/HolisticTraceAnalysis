@@ -162,7 +162,6 @@ class TraceParseTestCase(unittest.TestCase):
             )
 
     def test_trace_metadata(self) -> None:
-        return
         trace_meta = self.vision_transformer_t.meta_data[0]
         exp_meta = EXPECTED_META_VISION_TRANFORMER
         self.assertEqual(trace_meta["schemaVersion"], exp_meta["schemaVersion"])
@@ -170,10 +169,11 @@ class TraceParseTestCase(unittest.TestCase):
         self.assertEqual(
             trace_meta["deviceProperties"][0], exp_meta["deviceProperties"][0]
         )
+        # print(trace_meta)
 
 
 @unittest.skipIf(
-    #    _auto_detect_parser_backend() == ParserBackend.JSON,
+    # _auto_detect_parser_backend() == ParserBackend.JSON,
     # Tests are timing out the CI so have to disable this
     1,
     "Skipping ijson based trace load tests",
@@ -236,7 +236,8 @@ class TraceParseIjsonOthersTestCase(unittest.TestCase):
         trace_meta = {}
         with _open_trace_file(trace_file_path) as fh:
             trace_meta = parse_metadata_ijson(fh)
-        
+        # print(trace_meta)
+
         exp_meta = EXPECTED_META_VISION_TRANFORMER
         self.assertEqual(trace_meta["schemaVersion"], exp_meta["schemaVersion"])
         self.assertEqual(trace_meta["distributedInfo"], exp_meta["distributedInfo"])

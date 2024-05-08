@@ -352,9 +352,16 @@ def _parse_trace_dataframe_ijson(
     Returns:
         pd.DataFrame: parsed trace dataframe.
     """
-    meta: Dict[str, Any] = {}
-    # XXX handle adding metadata
-    # k: v for k, v in trace_record.items() if k != "traceEvents"}
+    # Parse trace metadata swiftly
+    meta: MetaData = {}
+    with _open_trace_file(trace_file_path) as fh:
+        t_start = time.perf_counter_ns()
+        meta = parse_metadata_ijson(fh)
+        t_end = time.perf_counter_ns()
+        logger.warning(
+            f"Parsed {trace_file_path} metadata in "
+            f"{(t_end - t_start)/1000000:.2f} milli seconds"
+        )
 
     if batched:
         df = _parse_trace_events_ijson_batched(trace_file_path, cfg, compress_on_fly)
