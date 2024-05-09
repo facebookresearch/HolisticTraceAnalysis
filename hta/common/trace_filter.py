@@ -2,9 +2,9 @@ from abc import ABC, abstractmethod
 from typing import List, Optional, Tuple, Union
 
 import pandas as pd
-
-from hta.common.trace import logger
 from hta.common.trace_symbol_table import TraceSymbolTable
+
+from hta.configs.config import logger
 from hta.utils.utils import get_symbol_column_names
 
 
@@ -299,6 +299,19 @@ class NameFilter(Filter):
             return NameIdColumnFilter(self.name_pattern)(df, _symbol_table)
 
 
+def _filter_gpu_kernels_with_cuda_sync(
+    df: pd.DataFrame, symbol_table: TraceSymbolTable
+):
+    """Helper function that finds rows in the dataframe that are either
+    GPU kernels or CUDA synchronization events."""
+
+    # Device level Synchronization events are on stream = -1 but still
+    # run on GPU
+    event_sync_id = symbol_table.get_sym_id_map().get("Event Sync", -1)
+    context_sync_id = symbol_table.get_sym_id_map().get("Context Sync", -1)
+    return (df["stream"] > 0) | df["name"].isin([event_sync_id, context_sync_id])
+
+
 class GPUKernelFilter(Filter):
     """
     A trace event filter class that extracts GPU kernel events from a DataFrame.
@@ -311,7 +324,13 @@ class GPUKernelFilter(Filter):
             logger.warning("DataFrame does not contain a 'stream' column.")
             return df
 
-        return df.loc[df["stream"] > 0]
+        if symbol_table is None:
+            logger.warning(
+                "GPUKernelFilter needs symbol table to identify GPU synchronization events"
+            )
+            return df.loc[df["stream"] > 0]
+
+        return df.loc[_filter_gpu_kernels_with_cuda_sync(df, symbol_table)]
 
 
 class CPUOperatorFilter(Filter):
@@ -326,7 +345,13 @@ class CPUOperatorFilter(Filter):
             logger.warning("DataFrame does not contain a 'stream' column.")
             return df
 
-        return df.loc[df["stream"] == -1]
+        if symbol_table is None:
+            logger.warning(
+                "CPUOperatorFilter needs symbol table to exclude GPU synchronization events"
+            )
+            return df.loc[df["stream"] == -1]
+
+        return df.loc[~_filter_gpu_kernels_with_cuda_sync(df, symbol_table)]
 
 
 class CompositeFilter(Filter):

@@ -370,6 +370,7 @@ class CriticalPathAnalysisTestCase(unittest.TestCase):
         cuda_kernel_idx = 33
         cuda_event_sync_idx = 41
         cuda_event_query_idx = 45
+        cuda_device_sync_idx = 51
 
         self.assertEqual(
             get_node_name(cuda_kernel_idx),
@@ -377,12 +378,14 @@ class CriticalPathAnalysisTestCase(unittest.TestCase):
         )
         self.assertEqual(get_node_name(cuda_event_sync_idx), "cudaEventSynchronize")
         self.assertEqual(get_node_name(cuda_event_query_idx), "cudaEventQuery")
+        self.assertEqual(get_node_name(cuda_device_sync_idx), "cudaDeviceSynchronize")
 
         # There are two GPU -> CPU dependencies in this trace
         # both start at a CUDA kernel that precedes the CUDA event and ends in trace.
         _, cuda_kernel_end = cp_graph.get_nodes_for_event(cuda_kernel_idx)
         _, cuda_event_sync_end = cp_graph.get_nodes_for_event(cuda_event_sync_idx)
         _, cuda_event_query_end = cp_graph.get_nodes_for_event(cuda_event_query_idx)
+        _, cuda_device_sync_end = cp_graph.get_nodes_for_event(cuda_device_sync_idx)
 
         def check_sync_edge(start_node_idx: int, end_node_idx: int) -> None:
             gpu_cpu_sync_edge = cp_graph.edges[start_node_idx, end_node_idx]["object"]
@@ -397,6 +400,7 @@ class CriticalPathAnalysisTestCase(unittest.TestCase):
             )
 
         check_sync_edge(cuda_kernel_end.idx, cuda_event_sync_end.idx)
+        check_sync_edge(cuda_kernel_end.idx, cuda_device_sync_end.idx)
 
     def test_critical_path_analysis_event_sync_multistream(self):
         """Checks cuda Stream wait event across multiple stream"""

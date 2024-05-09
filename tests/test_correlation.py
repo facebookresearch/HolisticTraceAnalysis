@@ -7,19 +7,19 @@ import unittest
 import pandas as pd
 
 from hta.common.trace import transform_correlation_to_index
+from hta.common.trace_symbol_table import TraceSymbolTable
 
 
 class CorrelationTestCase(unittest.TestCase):
     def test_something(self):
         # index, name, correlation, stream
-        name_event_sync = 45
         data = [
             [1, 22, 15, -1],
             [2, 12, 16, -1],
             [3, 10, 22, -1],
             [4, 10, -1, -1],
             [5, 45, 15, -1],  # event sync is on GPU but has stream = -1
-            [6, 42, 16, 7],
+            [6, 42, 16, -1],  # context sync is on GPU but has stream = -1
             [7, 71, 30, 7],
             [8, 12, -1, 7],
         ]
@@ -28,8 +28,14 @@ class CorrelationTestCase(unittest.TestCase):
             columns=["index", "name", "correlation", "stream"],
             index=[1, 2, 3, 4, 5, 6, 7, 8],
         )
+        sym_index = {
+            "Event Sync": 45,
+            "Context Sync": 42,
+        }
+        mock_symbol_table = TraceSymbolTable()
+        mock_symbol_table.sym_index = sym_index
         expected_index_correlation = [5, 6, 0, -1, 1, 2, 0, -1]
-        df2 = transform_correlation_to_index(df, name_event_sync)
+        df2 = transform_correlation_to_index(df, mock_symbol_table)
         self.assertListEqual(
             expected_index_correlation, df2["index_correlation"].tolist()
         )
