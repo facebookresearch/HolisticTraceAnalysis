@@ -499,6 +499,19 @@ class CallGraph:
             depth = pd.concat(
                 [self.call_stacks[idx].get_depth() for idx in call_stack_indices]
             )
+            parents: Dict[int, int] = {}
+            for idx in call_stack_indices:
+                parents.update(
+                    {
+                        node_id: node.parent
+                        for node_id, node in self.call_stacks[idx].get_nodes().items()
+                        if node_id >= 0
+                    }
+                )
             df = self.trace_data.get_trace(rank)
             df["depth"] = depth
+            index_correlation = df[df["stream"].ne(-1)]["index_correlation"]
+            parents.update(index_correlation.to_dict())
+            df["parent"] = pd.Series(parents)
+
         self.mapping.set_index(["rank", "pid", "tid"], inplace=True)
