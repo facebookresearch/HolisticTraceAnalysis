@@ -73,7 +73,8 @@ def compare_events(x: Event, y: Event) -> int:
         > 0     y should go first than x
 
     Note:
-        There are six cases:
+        There are the following cases:
+        0. Start and End of the same event, Start precedes End.
         1. different time:
             Event(idx=1, time=0, dur=10, type=1)
             Event(idx=2, time=2, dur=5, type=1)
@@ -102,6 +103,13 @@ def compare_events(x: Event, y: Event) -> int:
         6. same time, same event type, same duration, same index
             The ordering doesn't matter.
     """
+
+    # Fast Path when seeing START and END of same event.
+    # Note: This case is explicitly needed for events with duration 0.
+    # The remaining conditions in the functions can not handle this case.
+    if x.idx == y.idx:
+        return -1 if x.type == EVENT_START else 1
+
     result = x.time - y.time
     if result == 0:
         if x.type == y.type:
@@ -116,7 +124,22 @@ def compare_events(x: Event, y: Event) -> int:
                 else:
                     result = -1 if x.dur < y.dur else 1
         else:
-            result = 1 if x.type == EVENT_START else -1
+            # Different event types, same time
+            if x.dur > 0 and y.dur > 0:
+                result = 1 if x.type == EVENT_START else -1
+            elif x.dur == 0 and y.dur == 0:
+                result = x.idx - y.idx
+            else:
+                """
+                Special case of (4).
+                y_start < (x_start == x_end) < y_end
+                x_start < (y_start == y_end) < x_end
+                x_start always comes before y_end
+                x_end always comes after y_start.
+                Since x.type != y.type for this branch,
+                The return condition evaluates to the same condition.
+                """
+                result = -1 if x.type == EVENT_START else 1
     return result
 
 
@@ -217,6 +240,7 @@ class CallStackGraph:
         self.nodes[NULL_NODE_INDEX] = CallStackNode(NULL_NODE_INDEX, -1, [])
         events = []
         df = df[["index", "ts", "dur"]].copy()
+        df["dur"] = np.maximum(df["dur"], 0)
         df["end"] = df["ts"] + df["dur"]
 
         for row in df.itertuples():
@@ -224,6 +248,7 @@ class CallStackGraph:
             events.append(Event(row.index, row.end, row.dur, EVENT_END))
         events.sort(key=functools.cmp_to_key(compare_events))
 
+        seen_nodes = set()
         stack: List[Event] = []
         for e in events:
             if e.type == EVENT_START:
@@ -233,9 +258,11 @@ class CallStackGraph:
                     parent_index = NULL_NODE_INDEX
                 self._add_edge(parent_index, e.idx)
                 stack.append(e)
+                seen_nodes.add(e.idx)
             else:  # e.type == EVENT_END
                 if len(stack) > 0:
-                    stack.pop(-1)
+                    ev = stack.pop(-1)
+                    assert ev.idx in seen_nodes
 
     def _add_edge(self, parent_index: int, child_index: int) -> None:
         """Add an edge (parent->child) to the graph.
