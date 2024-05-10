@@ -81,6 +81,21 @@ class CPEdge:
     type: CPEdgeType = CPEdgeType.OPERATOR_KERNEL
 
 
+@dataclass(frozen=True)
+class _CPGraphData:
+    """Contains data members of CPGraph that we can save and
+    restore from a file. This excludes the graph itself and the
+    clipped dataframe that are saved separately.
+    """
+
+    node_list: List[CPNode]
+    critical_path_nodes: List[int]
+    critical_path_events_set: Set[int]
+    critical_path_edges_set: Set[CPEdge]
+    event_to_node_map: Dict[int, Tuple[int, int]]
+    edge_to_event_map: Dict[Tuple[int, int], int]
+
+
 class CPGraph(nx.DiGraph):
     """Critical path analysis graph representation for trace from one rank.
     This object constructs a graph that can be analyzed using networkx library.
@@ -118,19 +133,41 @@ class CPGraph(nx.DiGraph):
             return False
         return env == "1"
 
-    def __init__(self, t: "Trace", t_full: "Trace", rank: int) -> None:
-        self.cg = CallGraph(t, ranks=[rank])
+    def __init__(
+        self, t: Optional["Trace"], t_full: "Trace", rank: int, G=None
+    ) -> None:
+        """Initialize a critical path graph object. This can be done in two
+        ways
+            1) Generate critical path analysis graph from scatch.
+            2) Restore a serialized CPGraph object.
+
+        For (2) the networkx.DiGraph object G is utilized, see restore_cpgraph() function in this file.
+
+        Args:
+            t (Trace): Clipped trace object focussing on region of interest.
+            t_full (Trace): Full Trace object.
+            rank (int): Rank to perform analysis on.
+            G (networkx.DiGraph): An optional DiGraph object.
+        """
+        self.rank: int = rank
+        self.t = t
+        self.t_full = t_full
+        self.full_trace_df: pd.DataFrame = self.t_full.get_trace(rank)
+        self.sym_table = t_full.symbol_table.get_sym_table()
+        self.symbol_table = t_full.symbol_table
+
+        # init networkx DiGraph
+        super(CPGraph, self).__init__(G)
+
+        if t is None:
+            return
+
         self.trace_df: pd.DataFrame = t.get_trace(rank)
-        self.t_full: pd.DataFrame = t_full
-        self.full_trace_df = self.t_full.get_trace(rank)
-        self.sym_table = t.symbol_table.get_sym_table()
-        self.symbol_table = t.symbol_table
+
         self.critical_path_nodes: List[int] = []
         self.critical_path_events_set: Set[int] = set()
         self.critical_path_edges_set: Set[CPEdge] = set()
 
-        self.t = t
-        self.rank: int = rank
         self.node_list: List[CPNode] = []
 
         # map from event id in trace dataframe -> node_id pair
@@ -140,10 +177,8 @@ class CPGraph(nx.DiGraph):
         # this is the attributed event for an edge
         self.edge_to_event_map: Dict[Tuple[int, int], int] = {}
 
-        # init networkx DiGraph
-        super(CPGraph, self).__init__()
-
-        self._construct_graph()
+        cg = CallGraph(t, ranks=[rank])
+        self._construct_graph(cg)
 
     def _add_node(self, node: CPNode) -> int:
         """Adds a node to the graph.
@@ -328,13 +363,13 @@ class CPGraph(nx.DiGraph):
         """
         return self._event_to_attributed_edges_map.get(ev_idx, [])
 
-    def _construct_graph(self) -> None:
+    def _construct_graph(self, cg: CallGraph) -> None:
         if self._add_zero_weight_launch_edges():
             logger.warning(
                 "Adding zero weight launch edges to retain causality in subsequent simulations."
             )
         cpu_call_stacks = (
-            csg for csg in self.cg.call_stacks if csg.device_type == DeviceType.CPU
+            csg for csg in cg.call_stacks if csg.device_type == DeviceType.CPU
         )
         for csg in cpu_call_stacks:
             self._construct_graph_from_call_stack(csg)
@@ -1220,6 +1255,115 @@ class CPGraph(nx.DiGraph):
                 f"Critical {node}, ev_id = {node.ev_idx} "
                 f"ev_name = {self._get_node_name(node.ev_idx)}"
             )
+
+    def save(self, out_dir: str) -> str:
+        """Saves the critical path graph object to a zip file.
+        Note that this save() operation can only be done after
+        the graph has been constructed!
+
+        Args:
+             out_dir(str) is the directory used to first dump a
+                collection of files used to save the state of CPGraph object.
+                The directory is then compressed into a zipfile with the same name.
+        Returns:
+            trace_zip_file (str): path to the zip file containing the object.
+
+        Note:
+            Internally it saves the data into 3 files that are zipped up.
+            1. Is the trace_data saved as a csv.
+            2. The networkx graph is serialized using python pickle.
+            2. Other object data is serialized using python pickle.
+        """
+        import pickle
+        from zipfile import ZipFile
+
+        # XXX check if graph has been constructed
+
+        # Data members that can be saved as pickle
+        pickle_obj = _CPGraphData(
+            node_list=self.node_list,
+            critical_path_nodes=self.critical_path_nodes,
+            critical_path_events_set=self.critical_path_events_set,
+            critical_path_edges_set=self.critical_path_edges_set,
+            event_to_node_map=self.event_to_node_map,
+            edge_to_event_map=self.edge_to_event_map,
+        )
+
+        if not os.path.exists(out_dir):
+            os.makedirs(out_dir)
+
+        trace_csv_path = os.path.join(out_dir, "trace_data.csv")
+        self.trace_df.to_csv(trace_csv_path, index=True, index_label="_index_")
+
+        graph_pkl_path = os.path.join(out_dir, "cp_graph.pkl")
+        # first convert the data in node link format
+        d = nx.node_link_data(self)
+        # we cannot use json as CPEdge needs to be serialized and de-serialized
+        with open(graph_pkl_path, "wb") as f:
+            pickle.dump(d, f)
+
+        data_pkl_path = os.path.join(out_dir, "cp_data.pkl")
+        with open(data_pkl_path, "wb") as f:
+            pickle.dump(pickle_obj, f)
+
+        zip_filename = f"{out_dir}.zip"
+        with ZipFile(zip_filename, "w") as zipf:
+            zipf.write(trace_csv_path)
+            zipf.write(graph_pkl_path)
+            zipf.write(data_pkl_path)
+
+        logger.warning(f"Saved files to {zip_filename}")
+
+        return zip_filename
+
+
+def restore_cpgraph(zip_filename: str, t_full: "Trace", rank: int) -> CPGraph:
+    """Restores the critical path graph object from a zip file.
+    The graph will already be constructed in this case. You can
+    however run critical_path() again and modify the graph etc.
+
+    Returns:
+        trace_zip_file (str): path to the zip file containing the object.
+    Returns:
+        CPGraph object restored from the file.
+    """
+    import pickle
+    from zipfile import ZipFile
+
+    with ZipFile(zip_filename, "r") as zipf:
+        # namelist ex tmp/my_saved_cp_graph/trace_data.csv/trace_data.csv
+        out_dir = "/".join(zipf.namelist()[0].split("/")[:-1])
+        zipf.extractall(path="/tmp/")  # data will be extracted to /tmp/
+    out_dir = os.path.join("/tmp", out_dir)
+    logger.warning(f"Extracted zip archive to {out_dir}")
+
+    graph_pkl_path = os.path.join(out_dir, "cp_graph.pkl")
+    logger.warning(f"Restoring graph from {graph_pkl_path}")
+    with open(graph_pkl_path, "rb") as f:
+        pickled_graph = pickle.load(f)
+    G = nx.node_link_graph(pickled_graph)
+
+    # Use restored Graph to initialize CPGraph
+    restored_instance = CPGraph(None, t_full, rank, G)
+
+    logger.warning(f"Loading cp_graph from {out_dir}")
+    trace_csv_path = os.path.join(out_dir, "trace_data.csv")
+
+    # there is a default _index_ column we can use
+    restored_instance.trace_df = pd.read_csv(trace_csv_path).set_index("_index_")
+
+    data_pkl_path = os.path.join(out_dir, "cp_data.pkl")
+    with open(data_pkl_path, "rb") as f:
+        pickled_obj = pickle.load(f)
+
+    restored_instance.node_list = pickled_obj.node_list
+    restored_instance.critical_path_nodes = pickled_obj.critical_path_nodes
+    restored_instance.critical_path_events_set = pickled_obj.critical_path_events_set
+    restored_instance.critical_path_edges_set = pickled_obj.critical_path_edges_set
+    restored_instance.event_to_node_map = pickled_obj.event_to_node_map
+    restored_instance.edge_to_event_map = pickled_obj.edge_to_event_map
+
+    return restored_instance
 
 
 def bound_by(row: Dict[str, Any]) -> str:

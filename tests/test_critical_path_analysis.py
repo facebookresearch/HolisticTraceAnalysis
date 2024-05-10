@@ -11,6 +11,7 @@ from hta.analyzers.critical_path_analysis import (
     CPEdge,
     CPEdgeType,
     CriticalPathAnalysis,
+    restore_cpgraph,
 )
 from hta.trace_analysis import TraceAnalysis
 
@@ -464,13 +465,14 @@ class CriticalPathAnalysisTestCase(unittest.TestCase):
             ),
         )
 
-    def test_critical_path_breakdown(self):
+    def test_critical_path_breakdown_and_save_restore(self):
         annotation = "[param|pytorch.model.alex_net|0|0|0|measure|forward]"
         instance_id = 1
+        rank = 0
 
         critical_path_t = self.alexnet_trace
         cp_graph, success = critical_path_t.critical_path_analysis(
-            rank=0, annotation=annotation, instance_id=instance_id
+            rank=rank, annotation=annotation, instance_id=instance_id
         )
         self.assertTrue(success)
 
@@ -481,9 +483,37 @@ class CriticalPathAnalysisTestCase(unittest.TestCase):
         # Check full path breakdown
         edf = cp_graph.get_critical_path_breakdown()
         self.assertEqual(len(edf), len(cp_graph.critical_path_edges_set))
+        orig_num_critical_edges = len(cp_graph.critical_path_edges_set)
 
         # Check the boundby column is populated
         self.assertEqual(edf.bound_by.isnull().sum() + edf.bound_by.isna().sum(), 0)
+
+        # Check Save and Restore functionality
+        zip_file = cp_graph.save(out_dir="/tmp/my_saved_cp_graph")
+
+        rest_graph = restore_cpgraph(
+            zip_filename=zip_file, t_full=critical_path_t.t, rank=rank
+        )
+        self.assertEqual(len(rest_graph.nodes), len(cp_graph.nodes))
+
+        # check restored cp_graph
+        summary_df = rest_graph.summary()
+        self.assertEqual(len(summary_df), 5)
+
+        edf = rest_graph.get_critical_path_breakdown()
+        self.assertEqual(len(edf), orig_num_critical_edges)
+        self.assertEqual(
+            len(rest_graph.critical_path_edges_set), orig_num_critical_edges
+        )
+
+        # run critical path algorithm again
+        rest_graph.critical_path()
+
+        edf = rest_graph.get_critical_path_breakdown()
+        self.assertEqual(len(edf), orig_num_critical_edges)
+        self.assertEqual(
+            len(rest_graph.critical_path_edges_set), orig_num_critical_edges
+        )
 
     def test_ns_resolution_trace(self):
         """New Kineto feature enables sub microsecond timstamp and duration,
