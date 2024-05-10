@@ -16,6 +16,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 - (Experimental) Critical path analysis fixes: fixing async memcpy and adding GPU to CPU event based synchronization.
 - Add a workaround for overlapping events when using ns resolution traces (https://github.com/pytorch/pytorch/pull/122425)
 - Better handling of CUDA sync events with steam = -1
+- (Experimental) Added save and restore feature for critical path graph.
 
 #### Changed
 - Change test data path in unittests from relative path to real path to support running test within IDEs.

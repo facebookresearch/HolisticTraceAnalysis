@@ -12,6 +12,11 @@ from hta.configs.config import HtaConfig
 from hta.trace_analysis import TraceAnalysis
 
 
+unittest.skip(
+    "Execution trace repo is undergoing changes and this code will be deprecated"
+)
+
+
 class TraceAnalysisTestCase(unittest.TestCase):
     def setUp(self):
         self.execution_trace_dir: str = HtaConfig.get_test_data_path("execution_trace")
