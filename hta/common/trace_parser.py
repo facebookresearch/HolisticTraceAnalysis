@@ -11,6 +11,7 @@ import math
 import os
 import time
 import tracemalloc
+from collections.abc import Generator
 from typing import Any, Dict, Optional, Tuple
 
 import numpy as np
@@ -133,11 +134,11 @@ def _parse_trace_events_ijson(trace_file_path: str) -> pd.DataFrame:
     t_start = time.perf_counter()
     with _open_trace_file(trace_file_path) as fh:
 
-        iterator = ijson.items(fh, "traceEvents.item", use_float=True)
+        generator = ijson.items(fh, "traceEvents.item", use_float=True)
 
         # Ignore python function tracer
         # TODO make this filter configuration in ParserConfig
-        df = pd.DataFrame(e for e in iterator if e.get("cat") != "python_function")
+        df = pd.DataFrame(e for e in generator if e.get("cat") != "python_function")
 
     t_end = time.perf_counter()
     logger.warning(
@@ -183,13 +184,13 @@ def _parse_trace_events_ijson_batched(
     t_start = time.perf_counter()
     with _open_trace_file(trace_file_path) as fh:
         # TODO make events to skip configurable in ParserConfig
-        iterator = (
+        generator = (
             e
             for e in ijson.items(fh, "traceEvents.item", use_float=True)
             if e.get("cat") != "python_function"
         )
         if compress_on_fly:
-            iterator = (trim_event(e) for e in iterator)
+            generator = (trim_event(e) for e in generator)
 
         # XXX Currently using 1000 as batch size.
         batch_size = 1000
@@ -197,7 +198,7 @@ def _parse_trace_events_ijson_batched(
         dfs = []
 
         # Iterate over filtered dictionaries and append to DataFrame in batches
-        for item in iterator:
+        for item in generator:
             batch.append(item)
             if len(batch) == batch_size:
                 dfs.append(pd.DataFrame(batch))
@@ -358,7 +359,7 @@ def _parse_trace_dataframe_ijson(
         t_start = time.perf_counter_ns()
         meta = parse_metadata_ijson(fh)
         t_end = time.perf_counter_ns()
-        logger.warning(
+        logger.info(
             f"Parsed {trace_file_path} metadata in "
             f"{(t_end - t_start)/1000000:.2f} milli seconds"
         )
@@ -439,7 +440,7 @@ def parse_trace_dataframe(
 
 
 # --- Trace metadata reader ---
-def parse_metadata_ijson(fh) -> MetaData:
+def parse_metadata_ijson(fh: io.BufferedIOBase) -> MetaData:
     """
     Parses a trace file using the `ijson` library and extracts certain high-level key-value pairs.
     Args:
@@ -448,17 +449,17 @@ def parse_metadata_ijson(fh) -> MetaData:
         A dictionary containing the extracted metadata.
 
     Note: We use the ijson low level API to read all dictionary
-    elements in the json upto "traceEvents", at which point we just terminate.
+    elements in the json up to "traceEvents", at which point we just terminate.
     This leads to some blazingly fast metadata parsing!
 
     https://pypi.org/project/ijson/#toc-entry-4
 
-    The ijson low-level API has a series of (prefix, event, value). The
+    The ijson low-level parse API returns a series of (prefix, event, value). The
     prefix shows the path in the json object, while event can signify
     the start of a map, array or a key. Following is an excerpt of events for a trace file
 
     ```
-     start_map None
+     start_map None         # prefix = ''
      map_key schemaVersion
     schemaVersion number 1
      map_key distributedInfo
@@ -482,21 +483,25 @@ def parse_metadata_ijson(fh) -> MetaData:
     meta: MetaData = {}
     trace_parser = ijson.parse(fh)
 
-    def handle_nested_map(iterator, key: str, meta_so_far: MetaData) -> MetaData:
+    def handle_nested_map(
+        generator: Generator, key: str, meta_so_far: MetaData
+    ) -> MetaData:
         """
         Recursively handles events for a nested map like distributedInfo.
         """
-        prefix, event, value = next(iterator)
+        prefix, event, value = next(generator)
         logger.debug(" -> ", prefix, event, value)
         if event == "end_map":
             return meta_so_far
         elif event == "map_key":
             key = value
-            return handle_nested_map(iterator, key, meta_so_far)
+            return handle_nested_map(generator, key, meta_so_far)
         else:
-            assert key is not None
+            assert (
+                key is not None
+            ), f"map_key event was missed? (prefix, event, value) = ({prefix}, {event}, {value})"
             meta_so_far[key] = value
-            return handle_nested_map(iterator, "", meta_so_far)
+            return handle_nested_map(generator, "", meta_so_far)
 
     cur_key = None
     nested_map: MetaData = {}
@@ -518,7 +523,9 @@ def parse_metadata_ijson(fh) -> MetaData:
             meta[cur_key] = []
             # this should be start_map
             _, _event_, _ = next(trace_parser)
-            assert _event_ == "start_map"
+            assert (
+                _event_ == "start_map"
+            ), f"We only support an array with map elements like deviceProperties, (prefix, event, value) = ({prefix}, {event}, {value})"
             while _event_ != "end_array":
                 nested_map = {}
                 nested_map = handle_nested_map(trace_parser, "", nested_map)
@@ -532,6 +539,9 @@ def parse_metadata_ijson(fh) -> MetaData:
         if event == "map_key" and prefix == "":
             cur_key = value
         if prefix == cur_key:
+            assert (
+                cur_key is not None
+            ), f"map_key event was missed?(prefix, event, value) = ({prefix}, {event}, {value})"
             meta[cur_key] = value
 
     return meta
