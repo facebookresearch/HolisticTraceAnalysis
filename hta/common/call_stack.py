@@ -518,3 +518,42 @@ class CallGraph:
             df["parent"] = pd.Series(parents)
 
         self.mapping.set_index(["rank", "pid", "tid"], inplace=True)
+
+    def get_stack_of_node(
+        self, node_id: int, rank: int, skip_ancestors: bool = False
+    ) -> pd.DataFrame:
+        """Get the stack with node <index> as the parent.
+
+        Args:
+            index (int): the index of a given event.
+            rank (int): the rank of the trace.
+            skip_ancestors (bool): whether to skip ancestor nodes in the subtree.
+
+        Returns:
+            A DataFrame that consists of the node <index>, its descendants,
+            and its ancestors (when skip_ancestors == False).
+
+        Raises:
+            ValueError when the index is not in the DataFrame.
+        """
+        df = self.trace_data.get_trace(rank)
+
+        # If it is a GPU kernel, get the stack from the launch event.
+        if df.loc[node_id]["stream"] > -1:
+            return self.get_stack_of_node(
+                df.loc[node_id]["index_correlation"], rank, skip_ancestors
+            )
+
+        pid = df.loc[node_id]["pid"]
+        tid = df.loc[node_id]["tid"]
+        stack_idx = self.mapping.loc[(rank, pid, tid)]["csg_index"]
+        leaf_nodes = self.call_stacks[stack_idx].get_leaf_nodes(node_id)
+        if skip_ancestors:
+            parent_nodes = []
+        else:
+            parent_nodes = self.call_stacks[stack_idx].get_path_to_root(node_id)
+        index_correlation = df.loc[leaf_nodes]["index_correlation"]
+        kernel_nodes = index_correlation[index_correlation > 0].values.tolist()
+        stack_nodes = np.array(leaf_nodes + parent_nodes + kernel_nodes)
+        df_stack = df.reindex(stack_nodes)
+        return df_stack
