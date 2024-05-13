@@ -45,8 +45,8 @@ the code using the following API:
 #. `get_memory_bw_time_series
    <../api/trace_analysis_api.html#hta.trace_analysis.TraceAnalysis.get_memory_bw_time_series>`_
 
-#. `get_queue_length_series
-   <../api/trace_analysis_api.html#hta.trace_analysis.TraceAnalysis.get_queue_length_series>`_
+#. `get_queue_length_time_series
+   <../api/trace_analysis_api.html#hta.trace_analysis.TraceAnalysis.get_queue_length_time_series>`_
 
 To view the summary and time series use:
 
@@ -58,7 +58,7 @@ To view the summary and time series use:
 
   # get time series
   mem_bw_series = analyzer.get_memory_bw_time_series()
-  queue_len_series = analyzer.get_queue_length_series()
+  queue_len_series = analyzer.get_queue_length_time_series()
 
 The summary contains the count, min, max, mean, standard deviation, 25th, 50th,
 and 75th percentile.
