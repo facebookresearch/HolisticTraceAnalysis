@@ -241,7 +241,7 @@ class CallStackGraph:
         events = []
         df = df[["index", "ts", "dur"]].copy()
         df["dur"] = np.maximum(df["dur"], 0)
-        df["end"] = df["ts"] + df["dur"]
+        df["end"] = df["ts"] + df["dur"].astype(int)
 
         for row in df.itertuples():
             events.append(Event(row.index, row.ts, row.dur, EVENT_START))
@@ -472,6 +472,9 @@ class CallGraph:
         for rank in ranks:
             df = self.trace_data.get_trace(rank)
             for (pid, tid), df_thread in df.groupby(["pid", "tid"]):
+                if df_thread.stream.gt(0).any():
+                    # Filter out gpu annotations and sync events
+                    df_thread = df_thread[df_thread["stream"].gt(0)]
                 csi = CallStackIdentity(rank, pid, tid)
                 csg = CallStackGraph(df_thread, csi)
                 self.call_stacks.append(csg)
