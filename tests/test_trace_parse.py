@@ -5,7 +5,7 @@
 import os
 import unittest
 
-from typing import Dict
+from typing import Any, Dict
 
 # import unittest.mock as mock
 
@@ -13,10 +13,35 @@ import pandas as pd
 from hta.common.trace import parse_trace_dict, Trace
 from hta.common.trace_parser import (
     _auto_detect_parser_backend,
+    _open_trace_file,
     get_default_trace_parsing_backend,
+    parse_metadata_ijson,
     ParserBackend,
     set_default_trace_parsing_backend,
 )
+
+EXPECTED_META_VISION_TRANFORMER: Dict[str, Any] = {
+    "schemaVersion": 1,
+    "distributedInfo": {"backend": "nccl", "rank": 0, "world_size": 64},
+    "deviceProperties": [
+        {
+            "id": 0,
+            "name": "Tesla V100-SXM2-32GB",
+            "totalGlobalMem": 34089730048,
+            "computeMajor": 7,
+            "computeMinor": 0,
+            "maxThreadsPerBlock": 1024,
+            "maxThreadsPerMultiprocessor": 2048,
+            "regsPerBlock": 65536,
+            "regsPerMultiprocessor": 65536,
+            "warpSize": 32,
+            "sharedMemPerBlock": 49152,
+            "sharedMemPerMultiprocessor": 98304,
+            "numSms": 80,
+            "sharedMemPerBlockOptin": 98304,
+        },
+    ],
+}
 
 GROUND_TRUTH_CACHE: Dict[str, pd.DataFrame] = {}
 
@@ -136,9 +161,19 @@ class TraceParseTestCase(unittest.TestCase):
                 gpu_kernels_per_iteration, correlated_cpu_ops_per_iteration
             )
 
+    def test_trace_metadata(self) -> None:
+        trace_meta = self.vision_transformer_t.meta_data[0]
+        exp_meta = EXPECTED_META_VISION_TRANFORMER
+        self.assertEqual(trace_meta["schemaVersion"], exp_meta["schemaVersion"])
+        self.assertEqual(trace_meta["distributedInfo"], exp_meta["distributedInfo"])
+        self.assertEqual(
+            trace_meta["deviceProperties"][0], exp_meta["deviceProperties"][0]
+        )
+        # print(trace_meta)
+
 
 @unittest.skipIf(
-    #    _auto_detect_parser_backend() == ParserBackend.JSON,
+    # _auto_detect_parser_backend() == ParserBackend.JSON,
     # Tests are timing out the CI so have to disable this
     1,
     "Skipping ijson based trace load tests",
@@ -162,10 +197,12 @@ class TraceParseIjsonOthersTestCase(unittest.TestCase):
     """Additional test for coverage of 2 other backends"""
 
     inference_trace_dir: str
+    vision_transformer_trace_dir: str
 
     @classmethod
     def setUpClass(cls):
-        cls.inference_trace_dir: str = "tests/data//critical_path/alexnet"
+        cls.inference_trace_dir: str = "tests/data/critical_path/alexnet"
+        cls.vision_transformer_trace_dir: str = "tests/data/vision_transformer"
 
     def test_ijson_parser(self):
         set_default_trace_parsing_backend(ParserBackend.IJSON)
@@ -193,6 +230,20 @@ class TraceParseIjsonOthersTestCase(unittest.TestCase):
 
         self.assertEqual(len(inference_t.traces), 1)
         set_default_trace_parsing_backend(ParserBackend.JSON)
+
+    def test_ijson_metadata_reader(self):
+        trace_file_path = self.vision_transformer_trace_dir + "/rank-0.json.gz"
+        trace_meta = {}
+        with _open_trace_file(trace_file_path) as fh:
+            trace_meta = parse_metadata_ijson(fh)
+        # print(trace_meta)
+
+        exp_meta = EXPECTED_META_VISION_TRANFORMER
+        self.assertEqual(trace_meta["schemaVersion"], exp_meta["schemaVersion"])
+        self.assertEqual(trace_meta["distributedInfo"], exp_meta["distributedInfo"])
+        self.assertEqual(
+            trace_meta["deviceProperties"][0], exp_meta["deviceProperties"][0]
+        )
 
     # @mock.patch('ijson.backend')
     # def test_optimal_backend_detection(self, mock_backend) -> None:
