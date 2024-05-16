@@ -1138,7 +1138,13 @@ class CPGraph(nx.DiGraph):
 
         for u, v in self.edges:
             e = self.edges[u, v]["object"]
-            if e.weight < 0:
+            if e.weight == -1:
+                # Nanosecond precision is causing some of the parent events
+                # to end before child in stack. This is a separate issue that
+                # needs fixing in the trace itself.
+                # Please see https://github.com/pytorch/pytorch/pull/122425"
+                e.weight = 0
+            elif e.weight < -1:
                 src, dest = self.node_list[u], self.node_list[v]
                 logger.error(f"Found an edge with negative weight {e}")
                 show_src_dest(src, dest)
@@ -1559,9 +1565,8 @@ class CriticalPathAnalysis:
 
         path = Path(output_dir).expanduser()
         if not path.exists():
-            logger.error(f"The path {str(path)} does not exist.")
-            return ""
-        if not path.is_dir():
+            os.makedirs(path)
+        elif not path.is_dir():
             logger.error(f"{output_dir} is not a directory.")
             return ""
 
