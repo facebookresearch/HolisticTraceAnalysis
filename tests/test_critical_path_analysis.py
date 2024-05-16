@@ -307,6 +307,19 @@ class CriticalPathAnalysisTestCase(unittest.TestCase):
                     trace_edge_counts["critical"], sum(trace_edge_counts.values())
                 )
 
+        # is it resilient to missing overlaid path?
+        tmpdir = "/tmp/path_does_not_exist"
+        overlaid_trace = critical_path_t.overlay_critical_path_analysis(
+            0,
+            cp_graph,
+            output_dir=tmpdir,
+            only_show_critical_events=False,
+            show_all_edges=True,
+        )
+        self.assertTrue(os.path.exists(tmpdir))
+        os.remove(overlaid_trace)
+        os.removedirs(tmpdir)
+
         # AlexNet has inter-stream synchronization using CUDA Events
         critical_path_t = self.alexnet_trace
 
