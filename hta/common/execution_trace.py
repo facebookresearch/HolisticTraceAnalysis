@@ -19,7 +19,7 @@ from hta.utils.utils import normalize_path
 
 try:
     # Import path in github due to submodule
-    from param_bench.train.compute.python.tools.execution_trace import ExecutionTrace
+    from et_replay.lib.execution_trace import ExecutionTrace
 except ImportError:
     # Import path in fbcode
     from param_bench.et_replay.lib.execution_trace import ExecutionTrace
