@@ -629,10 +629,15 @@ class Trace:
             last_profiler_start = cpu_kernels[cpu_kernels["name"].isin(profiler_steps)][
                 "ts"
             ].max()
-            if include_last_profiler_step:
-                cpu_kernels = cpu_kernels[cpu_kernels["ts"] <= last_profiler_start]
-            else:
-                cpu_kernels = cpu_kernels[cpu_kernels["ts"] < last_profiler_start]
+            last_profiler_end = cpu_kernels[cpu_kernels["name"].isin(profiler_steps)][
+                "end"
+            ].max()
+
+            cpu_kernels = (
+                cpu_kernels[cpu_kernels["ts"] <= last_profiler_end]
+                if include_last_profiler_step
+                else cpu_kernels[cpu_kernels["ts"] < last_profiler_start]
+            )
             filtered_gpu_kernels = gpu_kernels.merge(
                 cpu_kernels["correlation"], on="correlation", how="inner"
             )
