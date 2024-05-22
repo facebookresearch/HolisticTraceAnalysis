@@ -1168,7 +1168,8 @@ class CPGraph(nx.DiGraph):
                 # to end before child in stack. This is a separate issue that
                 # needs fixing in the trace itself.
                 # Please see https://github.com/pytorch/pytorch/pull/122425"
-                e.weight = 0
+                logger.warning(f"Ignoring negative weight of -1 for {e}")
+                self.edges[u, v]["weight"] = 0
             elif e.weight < -1:
                 src, dest = self.node_list[u], self.node_list[v]
                 logger.error(f"Found an edge with negative weight {e}")
