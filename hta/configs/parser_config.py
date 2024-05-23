@@ -98,6 +98,32 @@ AVAILABLE_ARGS: Dict[str, AttributeSpec] = {
     "info::name": AttributeSpec("name", "name", ValueType.Int, -1),
     "info::op_count": AttributeSpec("op_count", "Op count", ValueType.Int, -1),
     "info::sort_index": AttributeSpec("sort_index", "sort_index", ValueType.Int, -1),
+    "nccl::collective_name": AttributeSpec(
+        "collective_name", "Collective name", ValueType.String, ""
+    ),
+    "nccl::in_msg_nelems": AttributeSpec(
+        "in_msg_nelems", "In msg nelems", ValueType.Int, -1
+    ),
+    "nccl::out_msg_nelems": AttributeSpec(
+        "out_msg_nelems", "Out msg nelems", ValueType.Int, -1
+    ),
+    "nccl::group_size": AttributeSpec("group_size", "Group size", ValueType.Int, -1),
+    "nccl::dtype": AttributeSpec("dtype", "dtype", ValueType.String, ""),
+    "nccl::in_split_size": AttributeSpec(
+        "in_split_size", "In split size", ValueType.Object, "[]"
+    ),
+    "nccl::out_split_size": AttributeSpec(
+        "out_split_size", "Out split size", ValueType.Object, "[]"
+    ),
+    "nccl::process_group_name": AttributeSpec(
+        "process_group_name", "Process Group Name", ValueType.String, ""
+    ),
+    "nccl::process_group_desc": AttributeSpec(
+        "process_group_desc", "Process Group Description", ValueType.String, ""
+    ),
+    "nccl::process_group_ranks": AttributeSpec(
+        "process_group_ranks", "Process Group Ranks", ValueType.Object, "[]"
+    ),
 }
 
 

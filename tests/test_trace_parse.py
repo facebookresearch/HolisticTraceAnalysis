@@ -19,6 +19,7 @@ from hta.common.trace_parser import (
     ParserBackend,
     set_default_trace_parsing_backend,
 )
+from hta.configs.parser_config import AVAILABLE_ARGS, ParserConfig
 
 EXPECTED_META_VISION_TRANFORMER: Dict[str, Any] = {
     "schemaVersion": 1,
@@ -251,6 +252,49 @@ class TraceParseIjsonOthersTestCase(unittest.TestCase):
     #     self.assertEqual(_auto_detect_parser_backend(), "json")
     #     mock_backend = "yajl_2c"
     #     self.assertEqual(_auto_detect_parser_backend(), "ijson_batch_and_compress")
+
+
+class TraceParseConfigTestCase(unittest.TestCase):
+    def setUp(self) -> None:
+        resnet_nccl_trace: str = "tests/data/nccl_parser_config"
+        # Trace parser for nccl fields
+        self.resnet_nccl_t: Trace = Trace(trace_dir=resnet_nccl_trace)
+
+        # Parse all nccl fields in the test
+        custom_cfg = ParserConfig(ParserConfig.get_minimum_args())
+        custom_cfg.add_args(
+            [spec for (arg, spec) in AVAILABLE_ARGS.items() if arg.startswith("nccl")]
+        )
+        ParserConfig.set_default_cfg(custom_cfg)
+
+    def tearDown(self) -> None:
+        ParserConfig.set_default_cfg(ParserConfig(ParserConfig.get_minimum_args()))
+
+    def test_nccl_parser_config(self) -> None:
+        "Tests if nccl metadata is parsed correctly"
+        self.resnet_nccl_t.parse_traces(max_ranks=1, use_multiprocessing=False)
+        self.resnet_nccl_t.decode_symbol_ids(use_shorten_name=False)
+
+        trace_df = self.resnet_nccl_t.get_trace(0)
+        self.assertGreater(len(trace_df), 0)
+
+        nccl_kernels = trace_df.query(
+            "s_cat == 'kernel' and s_name.str.contains('ncclKernel')"
+        ).sort_values("dur", ascending=False)
+
+        self.assertEqual(len(nccl_kernels), 21)
+
+        # check first allreaduce kernel
+        nccl_data = nccl_kernels.iloc[0].to_dict()
+        print(nccl_data)
+        self.assertEqual(nccl_data["collective_name"], "allreduce")
+        self.assertEqual(nccl_data["in_msg_nelems"], 2049000)
+        self.assertEqual(nccl_data["out_msg_nelems"], 2049000)
+        self.assertEqual(nccl_data["in_split_size"], "[]")
+        self.assertEqual(nccl_data["out_split_size"], "[]")
+        self.assertEqual(nccl_data["process_group_name"], "0")
+        self.assertEqual(nccl_data["process_group_desc"], "default_pg")
+        self.assertEqual(nccl_data["process_group_ranks"], "[0, 1]")
 
 
 if __name__ == "__main__":  # pragma: no cover
