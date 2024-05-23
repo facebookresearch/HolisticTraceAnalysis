@@ -260,14 +260,18 @@ class TraceParseConfigTestCase(unittest.TestCase):
         # Trace parser for nccl fields
         self.resnet_nccl_t: Trace = Trace(trace_dir=resnet_nccl_trace)
 
-    def test_nccl_parser_config(self) -> None:
-        "Tests if nccl metadata is parsed correctly"
+        # Parse all nccl fields in the test
         custom_cfg = ParserConfig(ParserConfig.get_minimum_args())
         custom_cfg.add_args(
             [spec for (arg, spec) in AVAILABLE_ARGS.items() if arg.startswith("nccl")]
         )
         ParserConfig.set_default_cfg(custom_cfg)
 
+    def tearDown(self) -> None:
+        ParserConfig.set_default_cfg(ParserConfig(ParserConfig.get_minimum_args()))
+
+    def test_nccl_parser_config(self) -> None:
+        "Tests if nccl metadata is parsed correctly"
         self.resnet_nccl_t.parse_traces(max_ranks=1, use_multiprocessing=False)
         self.resnet_nccl_t.decode_symbol_ids(use_shorten_name=False)
 

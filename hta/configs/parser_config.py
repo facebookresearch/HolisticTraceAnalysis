@@ -110,10 +110,10 @@ AVAILABLE_ARGS: Dict[str, AttributeSpec] = {
     "nccl::group_size": AttributeSpec("group_size", "Group size", ValueType.Int, -1),
     "nccl::dtype": AttributeSpec("dtype", "dtype", ValueType.String, ""),
     "nccl::in_split_size": AttributeSpec(
-        "in_split_size", "In split size", ValueType.Object, []
+        "in_split_size", "In split size", ValueType.Object, "[]"
     ),
     "nccl::out_split_size": AttributeSpec(
-        "out_split_size", "Out split size", ValueType.Object, []
+        "out_split_size", "Out split size", ValueType.Object, "[]"
     ),
     "nccl::process_group_name": AttributeSpec(
         "process_group_name", "Process Group Name", ValueType.String, ""
@@ -122,7 +122,7 @@ AVAILABLE_ARGS: Dict[str, AttributeSpec] = {
         "process_group_desc", "Process Group Description", ValueType.String, ""
     ),
     "nccl::process_group_ranks": AttributeSpec(
-        "process_group_ranks", "Process Group Ranks", ValueType.Object, []
+        "process_group_ranks", "Process Group Ranks", ValueType.Object, "[]"
     ),
 }
 
