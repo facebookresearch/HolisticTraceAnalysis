@@ -3,6 +3,7 @@ from typing import List, Optional, Tuple, Union
 
 import pandas as pd
 from hta.common.trace_symbol_table import TraceSymbolTable
+from hta.common.types import MemcpyType
 
 from hta.configs.config import logger
 from hta.utils.utils import get_symbol_column_names
@@ -387,3 +388,44 @@ class CompositeFilter(Filter):
         for f in self.filters:
             df = f(df, symbol_table)
         return df
+
+
+class MemCopyEventFilter(Filter):
+    """
+    A trace event filter class to select memory copy events
+
+    This filter matches rows where its category is "gpu_memcpy" and its name is the specified memory copy category.
+
+    Attributes:
+        memory_copy_category (MemcpyType): The category of memory copy events to select.
+    """
+
+    def __init__(
+        self,
+        memory_copy_type: MemcpyType,
+        symbol_table: Optional[TraceSymbolTable] = None,
+    ) -> None:
+        memcpy_event_map = {
+            MemcpyType.DTOD: "Memcpy DtoD (Device -> Device)",
+            MemcpyType.DTOH: "Memcpy DtoH (Device -> Pageable)",
+            MemcpyType.HTOD: "Memcpy HtoD (Pinned -> Device)",
+        }
+        self.memory_copy_category: str = memcpy_event_map[memory_copy_type]
+        self.symbol_table: Optional[TraceSymbolTable] = symbol_table
+
+    def __call__(
+        self, df: pd.DataFrame, symbol_table: Optional[TraceSymbolTable] = None
+    ) -> pd.DataFrame:
+        if df.empty:
+            logger.warning("The DataFrame is empty.")
+            return df
+        if symbol_table:
+            _symbol_table = symbol_table
+        elif self.symbol_table:
+            _symbol_table = self.symbol_table
+        else:
+            _symbol_table = TraceSymbolTable()
+
+        name_id = _symbol_table.sym_index[self.memory_copy_category]
+        cat_id = _symbol_table.sym_index["gpu_memcpy"]
+        return df.loc[df["name"].eq(name_id) & df["cat"].eq(cat_id)]

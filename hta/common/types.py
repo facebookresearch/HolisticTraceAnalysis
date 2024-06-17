@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
+from typing import Dict
 
 import pandas as pd
 
@@ -39,3 +40,18 @@ def infer_device_type(df: pd.DataFrame) -> DeviceType:
         elif (df.stream.unique() == -1).all():
             return DeviceType.CPU
     return DeviceType.UNKNOWN
+
+
+class MemcpyType(Enum):
+    DTOD = 0
+    DTOH = 1
+    HTOD = 2
+    UNKNOWN = 3
+
+
+MEMCPY_TYPE_TO_STR: Dict[MemcpyType, str] = {
+    MemcpyType.DTOD: "memcpy_dtod",
+    MemcpyType.DTOH: "memcpy_dtoh",
+    MemcpyType.HTOD: "memcpy_htod",
+    MemcpyType.UNKNOWN: "memcpy_type_unknown",
+}
