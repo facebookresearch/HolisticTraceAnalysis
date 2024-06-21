@@ -243,11 +243,9 @@ class CallStackGraph:
 
         self.correlations: pd.DataFrame = cpu_gpu_correlation
 
+        if "end" not in full_df.columns:
+            full_df.loc[:, "end"] = full_df["ts"] + full_df["dur"]
         self.full_df = full_df
-        if "end" not in self.full_df.columns:
-            self.full_df.loc[self.full_df.index, "end"] = (
-                self.full_df["ts"] + self.full_df["dur"]
-            )
 
         self.symbol_table = symbol_table
 
