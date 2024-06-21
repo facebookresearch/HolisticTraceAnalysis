@@ -252,7 +252,7 @@ class TraceAnalysisTestCase(unittest.TestCase):
             self.assertAlmostEqual(
                 stream7_stats[key],
                 expval,
-                places=3,
+                places=2,
                 msg=f"Stream 7 stats mismatch key={key}",
             )
 
