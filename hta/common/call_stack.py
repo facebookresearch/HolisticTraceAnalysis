@@ -4,6 +4,7 @@
 
 import functools
 import logging
+import os
 from collections import namedtuple
 from enum import Enum
 from time import perf_counter
@@ -18,6 +19,7 @@ NON_EXISTENT_NODE_INDEX = -2
 NULL_NODE_INDEX = -1
 EVENT_START = 1
 EVENT_END = -1
+HTA_DISABLE_CG_DEPTH_ENV = "HTA_DISABLE_CG_DEPTH"
 
 
 class DeviceType(Enum):
@@ -494,14 +496,11 @@ class CallGraph:
             }
         )
 
-        # add depth information to the data frame
+        # add depth and parent information to the data frame
         for rank in ranks:
             call_stack_indices = self.mapping[self.mapping["rank"].eq(rank)][
                 "csg_index"
             ]
-            depth = pd.concat(
-                [self.call_stacks[idx].get_depth() for idx in call_stack_indices]
-            )
             parents: Dict[int, int] = {}
             for idx in call_stack_indices:
                 parents.update(
@@ -512,7 +511,11 @@ class CallGraph:
                     }
                 )
             df = self.trace_data.get_trace(rank)
-            df["depth"] = depth
+            if os.environ.get(HTA_DISABLE_CG_DEPTH_ENV, None) is None:
+                depth = pd.concat(
+                    [self.call_stacks[idx].get_depth() for idx in call_stack_indices]
+                )
+                df["depth"] = depth
             index_correlation = df[df["stream"].ne(-1)]["index_correlation"]
             parents.update(index_correlation.to_dict())
             df["parent"] = pd.Series(parents)
