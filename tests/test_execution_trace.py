@@ -6,18 +6,18 @@ import os
 import unittest
 
 import pandas as pd
+import pytest
 
 from hta.common import execution_trace
 from hta.configs.config import HtaConfig
 from hta.trace_analysis import TraceAnalysis
-
 
 unittest.skip(
     "Execution trace repo is undergoing changes and this code will be deprecated"
 )
 
 
-class TraceAnalysisTestCase(unittest.TestCase):
+class ExecutionTraceTestCase(unittest.TestCase):
     def setUp(self):
         self.execution_trace_dir: str = HtaConfig.get_test_data_path("execution_trace")
         self.analyzer_t = TraceAnalysis(trace_dir=self.execution_trace_dir)
@@ -25,6 +25,14 @@ class TraceAnalysisTestCase(unittest.TestCase):
             self.execution_trace_dir, "benchmark_simple_add_et.json.gz"
         )
 
+    @pytest.mark.skipif(
+        not execution_trace.IMPORT_EXECUTION_TRACE_SUCCESSFULLY,
+        reason="Cannot import param_bench",
+    )
+    @unittest.skipUnless(
+        execution_trace.IMPORT_EXECUTION_TRACE_SUCCESSFULLY,
+        reason="Cannot import param_bench",
+    )
     def test_execution_trace_load(self):
         et = execution_trace.load_execution_trace(self.execution_trace_file)
         self.assertIsNotNone(et)
@@ -62,9 +70,17 @@ class TraceAnalysisTestCase(unittest.TestCase):
             compare_names.all(),
             msg="Trace event names and ET node names"
             " are not a perfect match, see series =\n"
-            f"{correlated_rows[['name', 'et_node_name']]}",
+            f"{correlated_rows[ [ 'name', 'et_node_name' ] ]}",
         )
 
+    @pytest.mark.skipif(
+        not execution_trace.IMPORT_EXECUTION_TRACE_SUCCESSFULLY,
+        reason="Cannot import param_bench",
+    )
+    @unittest.skipUnless(
+        execution_trace.IMPORT_EXECUTION_TRACE_SUCCESSFULLY,
+        reason="Cannot import param_bench",
+    )
     def test_correlate_execution_trace_with_overlap(self):
         et = execution_trace.load_execution_trace(self.execution_trace_file)
         self.assertIsNotNone(et)
