@@ -102,12 +102,12 @@ AVAILABLE_ARGS: Dict[str, AttributeSpec] = {
         "collective_name", "Collective name", ValueType.String, ""
     ),
     "nccl::in_msg_nelems": AttributeSpec(
-        "in_msg_nelems", "In msg nelems", ValueType.Int, -1
+        "in_msg_nelems", "In msg nelems", ValueType.Int, 0
     ),
     "nccl::out_msg_nelems": AttributeSpec(
-        "out_msg_nelems", "Out msg nelems", ValueType.Int, -1
+        "out_msg_nelems", "Out msg nelems", ValueType.Int, 0
     ),
-    "nccl::group_size": AttributeSpec("group_size", "Group size", ValueType.Int, -1),
+    "nccl::group_size": AttributeSpec("group_size", "Group size", ValueType.Int, 0),
     "nccl::dtype": AttributeSpec("dtype", "dtype", ValueType.String, ""),
     "nccl::in_split_size": AttributeSpec(
         "in_split_size", "In split size", ValueType.Object, "[]"
