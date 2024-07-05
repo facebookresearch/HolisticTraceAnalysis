@@ -37,6 +37,7 @@ def create_rank_to_trace_dict(trace_dir: str) -> Tuple[bool, Dict]:
         return False, {}
 
     rank_to_trace_dict: Dict[int, str] = {}
+    rank_re = re.compile(r'"rank":\s+(\d+)')
     for file in file_list:
         file_path = os.path.join(trace_dir, file)
 
@@ -45,13 +46,13 @@ def create_rank_to_trace_dict(trace_dir: str) -> Tuple[bool, Dict]:
         ) as f:
             for line in f:
                 data = line.decode() if isinstance(line, bytes) else line
-                if "rank" in data:
+                if rank_re.search(data):
                     break
 
             # match is like "rank": 6,
-            match = re.search(r'"rank": \d+', data)
+            match = rank_re.search(data)
             if match:
-                rank = int(match.group().split(": ")[1])
+                rank = int(match.group(1))
                 if rank in rank_to_trace_dict:
                     logger.error(
                         f"File {rank_to_trace_dict[rank]} and file {file_path} has the same rank. Will use {file_path} as the path to rank: {rank}."
