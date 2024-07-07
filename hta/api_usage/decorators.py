@@ -5,8 +5,15 @@ import logging
 from time import perf_counter
 from typing import Callable, TypeVar
 
-from hta.api_usage.call_identity import get_caller_identity, get_project_name
-from hta.api_usage.log_to_db import log_to_db
+try:
+    from ads_training.p9e.open_hta.meta.api_usage.call_identity import (
+        get_caller_identity,
+        get_project_name,
+    )
+    from ads_training.p9e.open_hta.meta.api_usage.log_to_db import log_to_db
+except ImportError:
+    from hta.api_usage.call_identity import get_caller_identity, get_project_name
+    from hta.api_usage.log_to_db import log_to_db
 
 R = TypeVar("R")
 

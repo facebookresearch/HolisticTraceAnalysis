@@ -2,14 +2,14 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
-from hta.log_usage.call_identity import (
+from hta.api_usage.call_identity import (
     get_caller_identity,
     get_project_name,
     reset_caller_identity,
 )
 
 
-_MODULE_NAME = "hta.log_usage.call_identity"
+_MODULE_NAME = "hta.api_usage.call_identity"
 
 
 class TestLogUsageCallIdentity(unittest.TestCase):
