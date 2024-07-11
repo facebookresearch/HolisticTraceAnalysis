@@ -518,8 +518,23 @@ class BreakdownAnalysis:
            the idleness category (default = False).
         """
         trace_df: pd.DataFrame = t.get_trace(rank)
+
+        # Need to filter out events with `cuda_sync` category
+        kernel_cats = [
+            "kernel",
+            "Kernel",
+            "gpu_memset",
+            "Memset",
+            "gpu_memcpy",
+            "Memcpy",
+        ]
+        sym_id_map = t.symbol_table.get_sym_id_map()
+        kernel_cat_ids = [sym_id_map.get(cat, -1000) for cat in kernel_cats]
+
         gpu_kernels_pre = (
-            trace_df[trace_df["stream"].ne(-1)].copy().set_index("index_correlation")
+            trace_df[trace_df["stream"].ne(-1) & trace_df["cat"].isin(kernel_cat_ids)]
+            .copy()
+            .set_index("index_correlation")
         )
 
         # correlate with the runtime event whenever possible
