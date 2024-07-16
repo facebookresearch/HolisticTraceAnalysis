@@ -21,11 +21,11 @@ IMPORT_EXECUTION_TRACE_SUCCESSFULLY = True
 
 try:
     # Import path in github due to submodule
-    from et_replay.lib.execution_trace import ExecutionTrace
+    from et_replay.execution_trace import ExecutionTrace
 except ImportError:
     try:
         # Import path in fbcode
-        from param_bench.et_replay.lib.execution_trace import ExecutionTrace
+        from param_bench.et_replay.execution_trace import ExecutionTrace
     except ImportError:
         IMPORT_EXECUTION_TRACE_SUCCESSFULLY = False
         pass
