@@ -166,9 +166,15 @@ class ParserConfig:
         + [AVAILABLE_ARGS["index::external_id"]]
     )
 
-    def __init__(self, args: Optional[List[AttributeSpec]] = None):
+    def __init__(
+        self,
+        args: Optional[List[AttributeSpec]] = None,
+        parser_backend: Optional[ParserBackend] = None,
+    ):
         self.args: List[AttributeSpec] = args if args else self.get_default_args()
-        self.parser_backend: Optional[ParserBackend] = None
+        self.parser_backend: ParserBackend = (
+            parser_backend if parser_backend is not None else ParserBackend.JSON
+        )
         self.trace_memory: bool = False
 
     @classmethod
@@ -178,6 +184,7 @@ class ParserConfig:
     @classmethod
     def set_default_cfg(cls, cfg: "ParserConfig") -> None:
         _DEFAULT_PARSER_CONFIG.set_args(cfg.get_args())
+        _DEFAULT_PARSER_CONFIG.set_parser_backend(cfg.get_parser_backend())
 
     @classmethod
     def get_minimum_args(cls) -> List[AttributeSpec]:
@@ -201,6 +208,9 @@ class ParserConfig:
             if arg.name not in arg_set:
                 self.args.append(arg)
                 arg_set.add(arg.name)
+
+    def get_parser_backend(self) -> ParserBackend:
+        return self.parser_backend
 
     def set_parser_backend(self, parser_backend: ParserBackend) -> None:
         self.parser_backend = parser_backend
