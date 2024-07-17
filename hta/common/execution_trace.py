@@ -29,7 +29,7 @@ except ImportError:
     except ImportError:
         IMPORT_EXECUTION_TRACE_SUCCESSFULLY = False
 
-        class ExecutionTrace: # type: ignore
+        class ExecutionTrace:  # type: ignore
             pass
 
         pass
