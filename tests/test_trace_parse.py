@@ -61,7 +61,6 @@ EXPECTED_META_CPU_ONLY_TRACE: JSON = {
         "rank": 34,
         "world_size": 300,
     },
-    "host_name": "twshared16453.15.atn5.facebook.com",
     "schemaVersion": 1,
 }
 
