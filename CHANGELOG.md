@@ -18,6 +18,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 - Better handling of CUDA sync events with steam = -1
 - (Experimental) Added save and restore feature for critical path graph.
 - Add nccl collective fields to parser config
+- Fix ijson metadata parser for some corner cases
 
 #### Changed
 - Change test data path in unittests from relative path to real path to support running test within IDEs.

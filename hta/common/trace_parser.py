@@ -490,12 +490,22 @@ def parse_metadata_ijson(fh: io.BufferedIOBase) -> MetaData:
         Recursively handles events for a nested map like distributedInfo.
         """
         prefix, event, value = next(generator)
-        logger.debug(" -> ", prefix, event, value)
+        logger.debug(" -> ", prefix, event, value, key, meta_so_far)
         if event == "end_map":
             return meta_so_far
         elif event == "map_key":
             key = value
             return handle_nested_map(generator, key, meta_so_far)
+        elif event == "start_map" or event == "start_array":
+            # Currently we do not supported nesting of maps/arrays in the nested map
+            # skip to end of this section
+            meta_so_far[key] = None
+
+            end_prefix = prefix
+            while not (prefix == end_prefix and event in ["end_map", "end_array"]):
+                logger.debug("  skipping ", prefix, event, value)
+                prefix, event, _ = next(trace_parser)
+            return handle_nested_map(generator, "", meta_so_far)
         else:
             assert (
                 key is not None
@@ -524,7 +534,7 @@ def parse_metadata_ijson(fh: io.BufferedIOBase) -> MetaData:
             # this should be start_map
             _, _event_, _ = next(trace_parser)
             assert (
-                _event_ == "start_map"
+                _event_ == "start_map" or _event_ == "end_array"
             ), f"We only support an array with map elements like deviceProperties, (prefix, event, value) = ({prefix}, {event}, {value})"
             while _event_ != "end_array":
                 nested_map = {}
