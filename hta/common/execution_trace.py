@@ -28,6 +28,10 @@ except ImportError:
         from param_bench.et_replay.execution_trace import ExecutionTrace
     except ImportError:
         IMPORT_EXECUTION_TRACE_SUCCESSFULLY = False
+
+        class ExecutionTrace:  # type: ignore
+            pass
+
         pass
 
 # PyTorch Events types that are correlated in the Execution Trace

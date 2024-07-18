@@ -21,7 +21,8 @@ from hta.common.trace_parser import (
 )
 from hta.configs.parser_config import AVAILABLE_ARGS, ParserConfig
 
-EXPECTED_META_VISION_TRANFORMER: Dict[str, Any] = {
+JSON = Dict[str, Any]
+EXPECTED_META_VISION_TRANFORMER: JSON = {
     "schemaVersion": 1,
     "distributedInfo": {"backend": "nccl", "rank": 0, "world_size": 64},
     "deviceProperties": [
@@ -41,7 +42,26 @@ EXPECTED_META_VISION_TRANFORMER: Dict[str, Any] = {
             "numSms": 80,
             "sharedMemPerBlockOptin": 98304,
         },
+        {},  # omitting the actual device property for brevity.
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
     ],
+}
+
+EXPECTED_META_CPU_ONLY_TRACE: JSON = {
+    "deviceProperties": [],
+    "distributedInfo": {
+        "backend": "gloo",
+        "pg_config": None,
+        "pg_count": 10,
+        "rank": 34,
+        "world_size": 300,
+    },
+    "schemaVersion": 1,
 }
 
 GROUND_TRUTH_CACHE: Dict[str, pd.DataFrame] = {}
@@ -168,6 +188,9 @@ class TraceParseTestCase(unittest.TestCase):
         self.assertEqual(trace_meta["schemaVersion"], exp_meta["schemaVersion"])
         self.assertEqual(trace_meta["distributedInfo"], exp_meta["distributedInfo"])
         self.assertEqual(
+            len(trace_meta["deviceProperties"]), len(exp_meta["deviceProperties"])
+        )
+        self.assertEqual(
             trace_meta["deviceProperties"][0], exp_meta["deviceProperties"][0]
         )
         # print(trace_meta)
@@ -204,6 +227,9 @@ class TraceParseIjsonOthersTestCase(unittest.TestCase):
     def setUpClass(cls):
         cls.inference_trace_dir: str = "tests/data/critical_path/alexnet"
         cls.vision_transformer_trace_dir: str = "tests/data/vision_transformer"
+        cls.cpu_only_trace_path: str = (
+            "tests/data/cpu_only/rank-34.Jul_15_10_52_41.1074.pt.trace.json.gz"
+        )
 
     def test_ijson_parser(self):
         set_default_trace_parsing_backend(ParserBackend.IJSON)
@@ -232,19 +258,33 @@ class TraceParseIjsonOthersTestCase(unittest.TestCase):
         self.assertEqual(len(inference_t.traces), 1)
         set_default_trace_parsing_backend(ParserBackend.JSON)
 
-    def test_ijson_metadata_reader(self):
-        trace_file_path = self.vision_transformer_trace_dir + "/rank-0.json.gz"
+    def _ijson_metadata_test_common(self, trace_file_path: str, exp_meta: JSON):
         trace_meta = {}
         with _open_trace_file(trace_file_path) as fh:
             trace_meta = parse_metadata_ijson(fh)
         # print(trace_meta)
 
-        exp_meta = EXPECTED_META_VISION_TRANFORMER
         self.assertEqual(trace_meta["schemaVersion"], exp_meta["schemaVersion"])
         self.assertEqual(trace_meta["distributedInfo"], exp_meta["distributedInfo"])
         self.assertEqual(
-            trace_meta["deviceProperties"][0], exp_meta["deviceProperties"][0]
+            len(trace_meta["deviceProperties"]), len(exp_meta["deviceProperties"])
         )
+        if len(trace_meta["deviceProperties"]) > 0:
+            self.assertEqual(
+                trace_meta["deviceProperties"][0], exp_meta["deviceProperties"][0]
+            )
+
+    def test_ijson_metadata_reader_basic(self):
+        trace_file_path = self.vision_transformer_trace_dir + "/rank-0.json.gz"
+        self._ijson_metadata_test_common(
+            trace_file_path, EXPECTED_META_VISION_TRANFORMER
+        )
+
+    def test_ijson_metadata_reader_corner_cases(self):
+        # This trace has an empty deviceProperties [] array as it runs on CPU.
+        # It also has a large pg_config array in distributedInfo.
+        trace_file_path = self.cpu_only_trace_path
+        self._ijson_metadata_test_common(trace_file_path, EXPECTED_META_CPU_ONLY_TRACE)
 
     # @mock.patch('ijson.backend')
     # def test_optimal_backend_detection(self, mock_backend) -> None:
