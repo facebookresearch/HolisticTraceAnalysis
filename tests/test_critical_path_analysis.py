@@ -13,6 +13,12 @@ from hta.analyzers.critical_path_analysis import (
     CriticalPathAnalysis,
     restore_cpgraph,
 )
+from hta.common.trace_parser import (
+    _auto_detect_parser_backend,
+    get_default_trace_parsing_backend,
+    ParserBackend,
+    set_default_trace_parsing_backend,
+)
 from hta.trace_analysis import TraceAnalysis
 
 
@@ -41,6 +47,7 @@ class CriticalPathAnalysisTestCase(unittest.TestCase):
         critical_path_trace_dir5: str = os.path.join(
             self.base_data_dir, "ns_resolution_trace"
         )
+        self.ns_resolution_trace_dir = critical_path_trace_dir5
         self.ns_resolution_trace = TraceAnalysis(trace_dir=critical_path_trace_dir5)
 
     def test_critical_path_analysis(self):
@@ -534,11 +541,23 @@ class CriticalPathAnalysisTestCase(unittest.TestCase):
         annotation = "ProfilerStep"
         instance_id = 1
 
+        def test():
+            cp_graph, success = critical_path_t.critical_path_analysis(
+                rank=0, annotation=annotation, instance_id=instance_id
+            )
+            self.assertTrue(success)
+
         critical_path_t = self.ns_resolution_trace
-        cp_graph, success = critical_path_t.critical_path_analysis(
-            rank=0, annotation=annotation, instance_id=instance_id
-        )
-        self.assertTrue(success)
+        test()
+
+        if _auto_detect_parser_backend() != ParserBackend.JSON:
+            old_backend = get_default_trace_parsing_backend()
+            set_default_trace_parsing_backend(ParserBackend.IJSON_BATCH_AND_COMPRESS)
+
+            critical_path_t = TraceAnalysis(trace_dir=self.ns_resolution_trace_dir)
+            test()
+
+            set_default_trace_parsing_backend(old_backend)
 
 
 if __name__ == "__main__":
