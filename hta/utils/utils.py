@@ -78,7 +78,7 @@ def is_memory_kernel(name: str) -> bool:
     return "Memcpy" in name or "Memset" in name
 
 
-def is_computer_kernel(name: str) -> bool:
+def is_compute_kernel(name: str) -> bool:
     """
     Check if a given GPU kernel is a computation kernel.
     Args:
@@ -86,8 +86,15 @@ def is_computer_kernel(name: str) -> bool:
     Returns:
         A boolean indicating if the kernel is a computation kernel.
     """
-    non_computer_kernel_re = re.compile(r"(^ncclKernel)|(.*(Memcpy)|(Memset))|(.*Sync)")
-    return not non_computer_kernel_re.match(name)
+    non_compute_kernel_re = re.compile(r"(^ncclKernel)|(.*(Memcpy)|(Memset))|(.*Sync)")
+    return not non_compute_kernel_re.match(name)
+
+
+def is_computer_kernel(name: str) -> bool:
+    """
+    Will depracate soon. Use is_compute_kernel() instead.
+    """
+    return is_compute_kernel(name)
 
 
 def get_kernel_type(name: str) -> str:
@@ -95,7 +102,7 @@ def get_kernel_type(name: str) -> str:
         return KernelType.COMMUNICATION.name
     elif is_memory_kernel(name):
         return KernelType.MEMORY.name
-    elif is_computer_kernel(name):
+    elif is_compute_kernel(name):
         return KernelType.COMPUTATION.name
     else:
         return KernelType.OTHER.name
