@@ -533,9 +533,10 @@ def parse_metadata_ijson(fh: io.BufferedIOBase) -> MetaData:
             meta[cur_key] = []
             # For deviceProperties this should be start_map or end_array
             _, _event_, _ = next(trace_parser)
-            assert (
-                _event_ in ["start_map", "end_array"]
-            ), f"We only support an array with map elements like deviceProperties, (prefix, event, value) = ({prefix}, {event}, {value})"
+            assert _event_ in [
+                "start_map",
+                "end_array",
+            ], f"We only support an array with map elements like deviceProperties, (prefix, event, value) = ({prefix}, {event}, {value})"
             while _event_ != "end_array":
                 nested_map = {}
                 nested_map = handle_nested_map(trace_parser, "", nested_map)
