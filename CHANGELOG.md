@@ -19,6 +19,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 - (Experimental) Added save and restore feature for critical path graph.
 - Add nccl collective fields to parser config
 - Fix ijson metadata parser for some corner cases
+- Add an option for ns rounding and cover ijson loading with it.
 
 #### Changed
 - Change test data path in unittests from relative path to real path to support running test within IDEs.

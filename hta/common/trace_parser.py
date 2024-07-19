@@ -29,6 +29,13 @@ from hta.configs.parser_config import (
 
 # from memory_profiler import profile
 
+# Disables the rounding out of nanosecond precision traces.
+# The rounding was added due to the events overlapping when
+# the precision of events was increased.
+# To use this set HTA_DISABLE_NS_ROUNDING=1 or
+#  os.environ["HTA_DISABLE_NS_ROUNDING"] = "1" before initializing HTA
+HTA_DISABLE_NS_ROUNDING_ENV = "HTA_DISABLE_NS_ROUNDING"
+
 MetaData = Dict[str, Any]
 _TRACE_PARSING_BACKEND: Optional[ParserBackend] = None
 
@@ -294,6 +301,26 @@ def _compress_df(
     return df, local_symbol_table
 
 
+def round_down_time_stamps(df: pd.DataFrame) -> None:
+    if df["ts"].dtype != np.dtype("float64"):
+        return
+    if os.environ.get(HTA_DISABLE_NS_ROUNDING_ENV, "-1") == "1":
+        logger.warning("Rounding down ns resolution traces disabled")
+        return
+
+    logger.warning(
+        f"Rounding down ns resolution events due to issue with events overlapping."
+        f" ts dtype = {df['ts'].dtype}, dur dtype = {df['dur'].dtype}."
+        f"Please see https://github.com/pytorch/pytorch/pull/122425"
+    )
+    # Don't floor directly, first find the end
+    df["end"] = df["ts"] + df["dur"]
+
+    df["ts"] = df[~df["ts"].isnull()]["ts"].apply(lambda x: math.ceil(x))
+    df["end"] = df[~df["end"].isnull()]["end"].apply(lambda x: math.floor(x))
+    df["dur"] = df["end"] - df["ts"]
+
+
 # @profile
 def _parse_trace_dataframe_json(
     trace_file_path: str, cfg: ParserConfig
@@ -313,18 +340,7 @@ def _parse_trace_dataframe_json(
     local_symbol_table: TraceSymbolTable = TraceSymbolTable()
     if "traceEvents" in trace_record:
         df = pd.DataFrame(trace_record["traceEvents"])
-        if df["ts"].dtype == np.dtype("float64"):
-            logger.warning(
-                f"Rounding down ns resolution events due to issue with events overlapping."
-                f" ts dtype = {df['ts'].dtype}, dur dtype = {df['dur'].dtype}."
-                f"Please see https://github.com/pytorch/pytorch/pull/122425"
-            )
-            # Don't floor directly, first find the end
-            df["end"] = df["ts"] + df["dur"]
-
-            df["ts"] = df[~df["ts"].isnull()]["ts"].apply(lambda x: math.ceil(x))
-            df["end"] = df[~df["end"].isnull()]["end"].apply(lambda x: math.floor(x))
-            df["dur"] = df["end"] - df["ts"]
+        round_down_time_stamps(df)
 
         # assign an index to each event
         df.reset_index(inplace=True)
@@ -368,6 +384,8 @@ def _parse_trace_dataframe_ijson(
         df = _parse_trace_events_ijson_batched(trace_file_path, cfg, compress_on_fly)
     else:
         df = _parse_trace_events_ijson(trace_file_path)
+
+    round_down_time_stamps(df)
 
     # assign an index to each event
     df.reset_index(inplace=True)
