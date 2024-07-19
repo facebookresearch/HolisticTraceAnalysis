@@ -345,11 +345,19 @@ class Trace:
             logger.debug(f"trace_files[{rank}] = {trace_file}")
         self.is_parsed = False
 
-    def load_traces(self, include_last_profiler_step: Optional[bool] = False) -> None:
+    def load_traces(
+        self,
+        include_last_profiler_step: Optional[bool] = False,
+        use_multiprocessing: bool = True,
+        use_memory_profiling: bool = True,
+    ) -> None:
         if self.is_parsed:
             logger.warning("Traces are already parsed and loaded!")
             return
-        self.parse_traces()
+        self.parse_traces(
+            use_multiprocessing=use_multiprocessing,
+            use_memory_profiling=use_memory_profiling,
+        )
         self.align_and_filter_trace(include_last_profiler_step)
         for rank, df in self.traces.items():
             df = self.traces[rank].set_index("index", drop=False)
@@ -382,7 +390,10 @@ class Trace:
                 )
 
     def parse_multiple_ranks(
-        self, ranks: List[int], use_multiprocessing: bool = True
+        self,
+        ranks: List[int],
+        use_multiprocessing: bool = True,
+        use_memory_profiling: bool = True,
     ) -> None:
         """
         Parse the trace for a given rank.
@@ -390,6 +401,7 @@ class Trace:
         Args:
             ranks (List[int]) : a list of integers representing the ranks of multiple trainers.
             use_multiprocessing (bool) : whether the parser using multiprocessing or not.
+            use_memory_profiling (bool): whether the parser memory profiles or not.
         """
         logger.debug(
             f"entering {sys._getframe().f_code.co_name}(ranks={ranks}, use_multiprocessing={use_multiprocessing})"
@@ -413,13 +425,13 @@ class Trace:
             num_procs = min(mp.cpu_count(), len(ranks))
             if len(ranks) <= 8:
                 num_procs = min(len(ranks), mp.cpu_count())
-            else:
+            elif use_memory_profiling:
                 tracemalloc.start()
                 parse_trace_file(trace_paths[0])
                 current, peak = tracemalloc.get_traced_memory()
                 tracemalloc.stop()
                 num_procs = get_mp_pool_size(peak, len(ranks))
-            logger.debug(f"using {num_procs} processes for parsing.")
+            logger.info(f"using {num_procs} processes for parsing.")
 
             with mp.get_context("fork").Pool(num_procs) as pool:
                 results = pool.map(parse_trace_file, trace_paths)
@@ -454,6 +466,7 @@ class Trace:
         self,
         max_ranks: int = -1,
         use_multiprocessing: bool = True,
+        use_memory_profiling: bool = True,
     ) -> None:
         """
         Parse up to <max_rank> traces.
@@ -461,7 +474,7 @@ class Trace:
         Args:
             max_ranks (int): how many rank's traces to parse. Default value `-1` implies parsing all ranks.
             use_multiprocessing (bool) : whether the parser using multiprocessing or not.
-
+            use_memory_profiling (bool): whether the parser memory profiles or not.
         Effects:
             This function will parse the traces and save the parsed data into `self.traces`.
         """
@@ -474,7 +487,10 @@ class Trace:
         logger.info(f"ranks={ranks}")
 
         if len(ranks) > 0:
-            self.parse_multiple_ranks(ranks, use_multiprocessing and len(ranks) > 1)
+            self.parse_multiple_ranks(
+                ranks, use_multiprocessing and len(ranks) > 1, use_memory_profiling
+            )
+
             self.is_parsed = True
         else:
             logger.error("The list of ranks to be parsed is empty.")
