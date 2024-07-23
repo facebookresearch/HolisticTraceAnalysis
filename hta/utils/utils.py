@@ -6,10 +6,11 @@ import multiprocessing as mp
 import re
 from enum import Enum
 from pathlib import Path
-from typing import List, Tuple
+from typing import Any, List, Tuple
 
 import pandas as pd
 import psutil
+from hta.configs.config import logger
 
 
 class KernelType(Enum):
@@ -207,3 +208,24 @@ def get_symbol_column_names(df: pd.DataFrame) -> Tuple[str, str]:
             cat_column = column_name
             break
     return name_column, cat_column
+
+
+def normalize_gpu_stream_numbers(df: pd.DataFrame) -> None:
+    """
+    Normalize the GPU stream numbers to be integers.
+    If an event's stream number can't be converted to an int, we set it to -1.
+    """
+    if "stream" not in df.columns:
+        logger.error("No stream column found in the trace.")
+        return
+
+    def _normalize_stream_number(stream_number: Any) -> int:
+        try:
+            return int(stream_number)
+        except ValueError:
+            return -1
+
+    df["stream"] = df.apply(
+        lambda r: _normalize_stream_number(r["stream"]),
+        axis=1,
+    )
