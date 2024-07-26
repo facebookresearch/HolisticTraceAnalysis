@@ -94,7 +94,8 @@ class _CPGraphData:
     critical_path_nodes: List[int]
     critical_path_events_set: Set[int]
     critical_path_edges_set: Set[CPEdge]
-    event_to_node_map: Dict[int, Tuple[int, int]]
+    event_to_start_node_map: Dict[int, int]
+    event_to_end_node_map: Dict[int, int]
     edge_to_event_map: Dict[Tuple[int, int], int]
 
 
@@ -172,8 +173,9 @@ class CPGraph(nx.DiGraph):
 
         self.node_list: List[CPNode] = []
 
-        # map from event id in trace dataframe -> node_id pair
-        self.event_to_node_map: Dict[int, Tuple[int, int]] = {}
+        # map from event id in trace dataframe -> CPGraph node_id
+        self.event_to_start_node_map: Dict[int, int] = {}
+        self.event_to_end_node_map: Dict[int, int] = {}
 
         # map from edge (u, v) -> event id in trace dataframe
         # this is the attributed event for an edge
@@ -227,23 +229,6 @@ class CPGraph(nx.DiGraph):
         e = CPEdge(begin=src.idx, end=dest.idx, weight=weight, type=type)
         self._add_edge(e)
         return e
-
-    def _add_event(self, ev_id: int) -> Tuple[CPNode, CPNode]:
-        """Takes an event from the trace and generates two critical path nodes,
-        one for start and one for the end.
-        Args: ev_id (int): index of the event in trace dataframe.
-        Returns: pair of CPNodes aka start and end CPNode
-        """
-        start_ts = self.trace_df["ts"].loc[ev_id]
-        end_ts = start_ts + self.trace_df["dur"].loc[ev_id]
-        nodes = [
-            CPNode(ev_idx=ev_id, ts=start_ts, is_start=True),
-            CPNode(ev_idx=ev_id, ts=end_ts, is_start=False),
-        ]
-        node_ids = [self._add_node(n) for n in nodes]
-        assert len(node_ids) == 2
-        self.event_to_node_map[ev_id] = (node_ids[0], node_ids[1])
-        return (nodes[0], nodes[1])
 
     def _attribute_edge(self, e: CPEdge, src_parent: int) -> None:
         """Attribute an edge to nearest matching event idx.
@@ -332,7 +317,8 @@ class CPGraph(nx.DiGraph):
             Tuple[Optional[CPNode], Optional[CPNode]]
                 Pair of CPNodes aka start and end CPNode for the event.
         """
-        start_node, end_node = self.event_to_node_map.get(ev_id, (-1, -1))
+        start_node = self.event_to_start_node_map.get(ev_id, -1)
+        end_node = self.event_to_end_node_map.get(ev_id, -1)
         return (
             self.node_list[start_node] if start_node >= 0 else None,
             self.node_list[end_node] if end_node >= 0 else None,
@@ -376,12 +362,67 @@ class CPGraph(nx.DiGraph):
             logger.info(
                 "Adding zero weight launch edges to retain causality in subsequent simulations."
             )
+
+        self._create_event_nodes()
+
         cpu_call_stacks = (
             csg for csg in cg.call_stacks if csg.device_type == DeviceType.CPU
         )
         for csg in cpu_call_stacks:
             self._construct_graph_from_call_stack(csg)
         self._construct_graph_from_kernels()
+
+    def _create_event_nodes(self) -> None:
+        """Generates a start and end node for every event we would like
+        to represent in our graph"""
+
+        # XXX TODO move these to symbol table
+        sym_index = self.symbol_table.get_sym_id_map()
+        cpu_op_id = sym_index.get("cpu_op")
+        cuda_runtime_id = sym_index.get("cuda_driver", -1000)
+        cuda_driver_id = sym_index.get("cuda_runtime", -1000)
+
+        events_df = (
+            self.trace_df.query(
+                f"cat == {cpu_op_id} or cat == {cuda_runtime_id} or cat == {cuda_driver_id}"
+                "or (stream != -1 and index_correlation >= 0)"
+            )[["index", "ts", "dur"]]
+        ).rename(columns={"index": "ev_idx"})
+
+        ops_df_start = events_df.copy()
+        ops_df_end = events_df.copy()
+
+        ops_df_start.drop(axis=1, columns=["dur"], inplace=True)
+        ops_df_start["is_start"] = True
+
+        ops_df_end["end"] = ops_df_end["ts"] + ops_df_end["dur"]
+        ops_df_end.drop(axis=1, columns=["dur", "ts"], inplace=True)
+        ops_df_end.rename(columns={"end": "ts"}, inplace=True)
+        ops_df_end["is_start"] = False
+
+        nodes_df = (
+            pd.concat([ops_df_start, ops_df_end])
+            .sort_values(by="ts", axis=0)
+            .reset_index(drop=True)
+            .reset_index(names="idx")
+        )
+
+        # Create nodes
+        def create_cpnode(row):
+            return CPNode(
+                idx=row["idx"],
+                ev_idx=row["ev_idx"],
+                ts=row["ts"],
+                is_start=row["is_start"],
+            )
+
+        self.node_list = nodes_df.apply(create_cpnode, axis=1).tolist()
+
+        _df = nodes_df[nodes_df.is_start]
+        self.event_to_start_node_map = dict(zip(_df["ev_idx"], _df["idx"]))
+        _df = nodes_df[~nodes_df.is_start]
+        self.event_to_end_node_map = dict(zip(_df["ev_idx"], _df["idx"]))
+        assert len(self.event_to_start_node_map) == len(self.event_to_end_node_map)
 
     def _construct_graph_from_call_stack(
         self, csg: CallStackGraph, link_operators: bool = True
@@ -428,7 +469,7 @@ class CPGraph(nx.DiGraph):
             if not is_op_or_runtime(ev_id):
                 return
 
-            start_node, end_node = self._add_event(ev_id)
+            start_node, end_node = self.get_nodes_for_event(ev_id)
 
             if link_operators and op_depth == 0 and last_highlevel_op is not None:
                 self._add_edge_helper(
@@ -993,7 +1034,7 @@ class CPGraph(nx.DiGraph):
                     f"name = {self._get_node_name(eid)}, correlation = {row['correlation']}"
                 )
 
-            start_node, end_node = self._add_event(eid)
+            start_node, end_node = self.get_nodes_for_event(eid)
             e = self._add_edge_helper(start_node, end_node)
             self._attribute_edge(e, -1)
 
@@ -1317,7 +1358,8 @@ class CPGraph(nx.DiGraph):
             critical_path_nodes=self.critical_path_nodes,
             critical_path_events_set=self.critical_path_events_set,
             critical_path_edges_set=self.critical_path_edges_set,
-            event_to_node_map=self.event_to_node_map,
+            event_to_start_node_map=self.event_to_start_node_map,
+            event_to_end_node_map=self.event_to_end_node_map,
             edge_to_event_map=self.edge_to_event_map,
         )
 
@@ -1392,7 +1434,8 @@ def restore_cpgraph(zip_filename: str, t_full: "Trace", rank: int) -> CPGraph:
     restored_instance.critical_path_nodes = pickled_obj.critical_path_nodes
     restored_instance.critical_path_events_set = pickled_obj.critical_path_events_set
     restored_instance.critical_path_edges_set = pickled_obj.critical_path_edges_set
-    restored_instance.event_to_node_map = pickled_obj.event_to_node_map
+    restored_instance.event_to_start_node_map = pickled_obj.event_to_start_node_map
+    restored_instance.event_to_end_node_map = pickled_obj.event_to_end_node_map
     restored_instance.edge_to_event_map = pickled_obj.edge_to_event_map
 
     return restored_instance
