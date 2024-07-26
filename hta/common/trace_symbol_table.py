@@ -122,25 +122,25 @@ class TraceSymbolTable:
             "Expect both name and cat columns of string types to be present in the dataframe"
         )
 
-    def is_cuda_runtime(self, trace_df: pd.DataFrame, idx: int) -> bool:
-        """Check if an event is a CUDA runtime event"""
-        return trace_df["cat"].loc[idx] == self.sym_index["cuda_runtime"] or (
-            "cuda_driver" in self.sym_index.keys()
-            and (trace_df["cat"].loc[idx] == self.sym_index["cuda_driver"])
-        )
+    # Use a number lower than -1 as a sentinel for missing symbols
+    NULL: int = -128
 
-    def is_operator(self, trace_df: pd.DataFrame, idx: int) -> bool:
-        """Check if an event is a CPU operator"""
-        return trace_df["cat"].loc[idx] == self.sym_index["cpu_op"]
+    def get_operator_or_cuda_runtime_query(self) -> str:
+        """Returns a SQL query you can pass to trace dataframe query()
+        to filter events that are CUDA runtime events or operators."""
+        cpu_op_id = self.sym_index.get("cpu_op")
+        cuda_runtime_id = self.sym_index.get("cuda_driver", self.NULL)
+        cuda_driver_id = self.sym_index.get("cuda_runtime", self.NULL)
+        return f"(cat == {cpu_op_id} or cat == {cuda_runtime_id} or cat == {cuda_driver_id})"
 
     def get_runtime_launch_events_query(self) -> str:
         """Returns a SQL query you can pass to trace dataframe query()
         to filter events that are CUDA runtime kernel and memcpy launches."""
-        cudaLaunchKernel_id = self.sym_index.get("cudaLaunchKernel", -128)
-        cudaLaunchKernelExC_id = self.sym_index.get("cudaLaunchKernelExC", -128)
-        cuLaunchKernel_id = self.sym_index.get("cuLaunchKernel", -128)
-        cudaMemcpyAsync_id = self.sym_index.get("cudaMemcpyAsync", -128)
-        cudaMemsetAsync_id = self.sym_index.get("cudaMemsetAsync", -128)
+        cudaLaunchKernel_id = self.sym_index.get("cudaLaunchKernel", self.NULL)
+        cudaLaunchKernelExC_id = self.sym_index.get("cudaLaunchKernelExC", self.NULL)
+        cuLaunchKernel_id = self.sym_index.get("cuLaunchKernel", self.NULL)
+        cudaMemcpyAsync_id = self.sym_index.get("cudaMemcpyAsync", self.NULL)
+        cudaMemsetAsync_id = self.sym_index.get("cudaMemsetAsync", self.NULL)
 
         return (
             f"((name == {cudaMemsetAsync_id}) or (name == {cudaMemcpyAsync_id}) or "

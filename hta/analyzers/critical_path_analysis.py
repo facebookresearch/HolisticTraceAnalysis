@@ -375,17 +375,10 @@ class CPGraph(nx.DiGraph):
     def _create_event_nodes(self) -> None:
         """Generates a start and end node for every event we would like
         to represent in our graph"""
-
-        # XXX TODO move these to symbol table
-        sym_index = self.symbol_table.get_sym_id_map()
-        cpu_op_id = sym_index.get("cpu_op")
-        cuda_runtime_id = sym_index.get("cuda_driver", -1000)
-        cuda_driver_id = sym_index.get("cuda_runtime", -1000)
-
         events_df = (
             self.trace_df.query(
-                f"cat == {cpu_op_id} or cat == {cuda_runtime_id} or cat == {cuda_driver_id}"
-                "or (stream != -1 and index_correlation >= 0)"
+                self.symbol_table.get_operator_or_cuda_runtime_query()
+                + " or (stream != -1 and index_correlation >= 0)"
             )[["index", "ts", "dur"]]
         ).rename(columns={"index": "ev_idx"})
 
