@@ -197,12 +197,19 @@ class CallStackGraph:
         nodes (Dict[int, node]): a map from a trace entity's index to a CallStackNode object.
         device_type (DeviceType) : what type of device that the call stack resides.
         correlations (pd.Series) : a Series that maps a node index to the index of a correlated node.
+        depth (pd.Series) : a Series that maps a node index to the depth of the node.
+        filter_query (str) : used to preprocess the trace events and filter events out.
 
     Notes:
     + Because the kernels on a GPU has only one level, we don't construct a call stack for GPU kernels.
     """
 
-    def __init__(self, df: pd.DataFrame, identity: CallStackIdentity) -> None:
+    def __init__(
+        self,
+        df: pd.DataFrame,
+        identity: CallStackIdentity,
+        filter_query: Optional[str] = None,
+    ) -> None:
         """Construct an empty graph."""
         self.df = df
         self.identity: CallStackIdentity = identity
@@ -210,6 +217,7 @@ class CallStackGraph:
         self.nodes: Dict[int, CallStackNode] = {}
         self.correlations: pd.Series = None
         self.depth: pd.Series = None
+        self.filter_query: Optional[str] = filter_query
         self._construct_call_stack_graph(df)
         self._compute_depth()
 
@@ -241,7 +249,10 @@ class CallStackGraph:
         self.nodes.clear()
         self.nodes[NULL_NODE_INDEX] = CallStackNode(NULL_NODE_INDEX, -1, [])
         events = []
-        df = df[["index", "ts", "dur"]].copy()
+        if self.filter_query is not None:
+            df = df.query(self.filter_query)[["index", "ts", "dur"]].copy()
+        else:
+            df = df[["index", "ts", "dur"]].copy()
         df["dur"] = np.maximum(df["dur"], 0)
         df["end"] = df["ts"] + df["dur"].astype(int)
 
@@ -445,12 +456,18 @@ class CallGraph:
         mapping (pd.DataFrame) : the mapping from CallStackIdentity to CallStackGraph using a DataFrame
     """
 
-    def __init__(self, trace: Trace, ranks: Optional[List[int]] = None) -> None:
+    def __init__(
+        self,
+        trace: Trace,
+        ranks: Optional[List[int]] = None,
+        filter_query: Optional[str] = None,
+    ) -> None:
         """Construct a CallGraph from a Trace object <trace_data>
 
         Args:
             trace (Trace): the trace data used to construct this CallGraph object.
             ranks (List[int]) : filter the traces using the given set of ranks. Using all ranks if None.
+            filter_query (str) : used to preprocess the trace events and filter events out.
         Raises:
             ValueError: the trace data is invalid.
         """
@@ -459,14 +476,17 @@ class CallGraph:
         self.call_stacks: List[CallStackGraph] = []
 
         _ranks = [k for k in trace.get_all_traces()] if ranks is None else ranks
-        self._construct_call_graph(_ranks)
+        self._construct_call_graph(_ranks, filter_query)
 
-    def _construct_call_graph(self, ranks: List[int]) -> None:
+    def _construct_call_graph(
+        self, ranks: List[int], filter_query: Optional[str]
+    ) -> None:
         """
         Construct the call graph from the traces of a distributed training job.
 
         Args:
             ranks (List[int]) : a list ranks to select traces for construct the call stacks.
+            filter_query (str) : used to preprocess the trace events and filter events out.
         """
         call_stack_ids: List[CallStackIdentity] = []
         t0 = perf_counter()
@@ -478,7 +498,7 @@ class CallGraph:
                     # Filter out gpu annotations and sync events
                     df_thread = df_thread[df_thread["stream"].gt(0)]
                 csi = CallStackIdentity(rank, pid, tid)
-                csg = CallStackGraph(df_thread, csi)
+                csg = CallStackGraph(df_thread, csi, filter_query)
                 self.call_stacks.append(csg)
                 call_stack_ids.append(csi)
         t1 = perf_counter()

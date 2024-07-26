@@ -44,10 +44,40 @@ class CallStackTestCase(unittest.TestCase):
         self.leaf_nodes_of_5 = [5]
         self.paths_to_leaves_of_0 = [[0, 1, 2, 3], [0, 4, 5]]
 
+        # add a 0 duration event, see index 3
+        self.df2 = pd.DataFrame(
+            {
+                "index": [0, 1, 2, 3, 4, 5],
+                "ts": [0, 1, 3, 3, 7, 8],
+                "dur": [10, 5, 2, 0, 3, 1],  # << index 3 is 0 duration
+                "pid": [1, 1, 1, 1, 1, 1],
+                "tid": [3, 3, 3, 3, 3, 3],
+                "stream": [-1, -1, -1, -1, -1, -1],
+                "index_correlation": [-1, -1, -1, -1, -1, -1],
+            }
+        )
+        self.csi2 = CallStackIdentity(0, 1, 3)
+        # note that 3 will be filtered out
+        self.nodes2 = {
+            -1: CallStackNode(parent=-1, depth=-1, children=[0]),
+            0: CallStackNode(parent=-1, depth=0, children=[1, 4]),
+            1: CallStackNode(parent=0, depth=1, children=[2]),
+            2: CallStackNode(
+                parent=1, depth=2, children=[]
+            ),  # 3 will not be a child here
+            4: CallStackNode(parent=0, depth=1, children=[5]),
+            5: CallStackNode(parent=4, depth=2, children=[]),
+        }
+
     def test_construct_call_graph(self):
         csg = CallStackGraph(self.df1, self.csi)
         nodes = csg.get_nodes()
         self.assertDictEqual(nodes, self.nodes)
+
+    def test_construct_call_graph_0_dur(self):
+        csg = CallStackGraph(self.df2, self.csi2, filter_query="dur > 0")
+        nodes = csg.get_nodes()
+        self.assertDictEqual(nodes, self.nodes2)
 
     def test_sort_events(self):
         index = [1, 2, 3, 4]
