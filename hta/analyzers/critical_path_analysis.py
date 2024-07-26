@@ -448,13 +448,6 @@ class CPGraph(nx.DiGraph):
         op_depth = 0
         last_ev_parent: Optional[int] = None
 
-        def is_op_or_runtime(ev_id):
-            # ops to consider
-            return ev_id > 0 and (
-                self.symbol_table.is_operator(self.trace_df, ev_id)
-                or self.symbol_table.is_cuda_runtime(self.trace_df, ev_id)
-            )
-
         def enter_func(ev_id, csnode):
             nonlocal last_node
             nonlocal last_highlevel_op
@@ -466,10 +459,9 @@ class CPGraph(nx.DiGraph):
                     + f"Entering node {self._get_node_name(ev_id)}, id = {ev_id}"
                 )
 
-            if not is_op_or_runtime(ev_id):
-                return
-
             start_node, end_node = self.get_nodes_for_event(ev_id)
+            if start_node is None or end_node is None:
+                return
 
             if link_operators and op_depth == 0 and last_highlevel_op is not None:
                 self._add_edge_helper(
@@ -499,11 +491,12 @@ class CPGraph(nx.DiGraph):
                     "=" * csnode.depth
                     + f"Exiting node {self._get_node_name(ev_id)}, id = {ev_id}"
                 )
-            if not is_op_or_runtime(ev_id):
+
+            start_node, end_node = self.get_nodes_for_event(ev_id)
+            if start_node is None or end_node is None:
                 return
 
             op_depth -= 1
-            _, end_node = self.get_nodes_for_event(ev_id)
 
             if last_node is not None:
                 zero_weight = self._get_node_name(ev_id) in self.BLOCKING_SYNC_CALLS
