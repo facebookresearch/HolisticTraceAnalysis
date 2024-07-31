@@ -7,6 +7,7 @@ import unittest
 import pandas as pd
 
 from hta.common.call_stack import CallStackGraph, CallStackIdentity, CallStackNode
+from hta.common.trace_filter import ZeroDurationFilter
 
 
 class CallStackTestCase(unittest.TestCase):
@@ -75,7 +76,7 @@ class CallStackTestCase(unittest.TestCase):
         self.assertDictEqual(nodes, self.nodes)
 
     def test_construct_call_graph_0_dur(self):
-        csg = CallStackGraph(self.df2, self.csi2, filter_query="dur > 0")
+        csg = CallStackGraph(self.df2, self.csi2, filter_func=ZeroDurationFilter)
         nodes = csg.get_nodes()
         self.assertDictEqual(nodes, self.nodes2)
 
