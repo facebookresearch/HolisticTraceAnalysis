@@ -401,15 +401,11 @@ class CPGraph(nx.DiGraph):
         )
 
         # Create nodes
-        def create_cpnode(row):
-            return CPNode(
-                idx=row["idx"],
-                ev_idx=row["ev_idx"],
-                ts=row["ts"],
-                is_start=row["is_start"],
-            )
-
-        self.node_list = nodes_df.apply(create_cpnode, axis=1).tolist()
+        _df = nodes_df
+        self.node_list = [
+            CPNode(*args)
+            for args in zip(_df["idx"], _df["ev_idx"], _df["ts"], _df["is_start"])
+        ]
 
         _df = nodes_df[nodes_df.is_start]
         self.event_to_start_node_map = dict(zip(_df["ev_idx"], _df["idx"]))
@@ -801,22 +797,22 @@ class CPGraph(nx.DiGraph):
         return cuda_stream_wait_events.set_index("index")
 
     def _check_event_sync_helper(self, row) -> bool:
-        eid = row["index"]
-        if "wait_on_cuda_event_record_corr_id" not in row:
+        eid = row.index
+        if not hasattr(row, "wait_on_cuda_event_record_corr_id"):
             if logger.isEnabledFor(logging.DEBUG):
                 logger.debug(
                     "CUDA Stream Wait event does not have correlation id of "
                     f"cudaEventRecord, name = {self._get_node_name(eid)}, "
-                    f"correlation = {row['correlation']}"
+                    f"correlation = {row.correlation}"
                 )
             return False
 
-        if "index_previous_launch" not in row or (row["index_previous_launch"] == -1):
+        if (not hasattr(row, "index_previous_launch")) or (row.index_previous_launch == -1):
             if logger.isEnabledFor(logging.DEBUG):
                 logger.debug(
                     "CUDA Stream Wait event was not matched to a cudaRecordEvent"
                     f", name = {self._get_node_name(eid)}, correlation = "
-                    f"{row['correlation']}"
+                    f"{row.correlation}"
                 )
             return False
         return True
@@ -920,13 +916,13 @@ class CPGraph(nx.DiGraph):
         def handle_cuda_sync(row):
             nonlocal last_node
             nonlocal kernel_sync
-            eid = row["index"]
+            eid = row.index
             if logger.isEnabledFor(logging.DEBUG):
                 logger.debug(
-                    f"CUDA Sync event name = {self._get_node_name(eid)} corrid = {row['correlation']}"
+                    f"CUDA Sync event name = {self._get_node_name(eid)} corrid = {row.correlation}"
                 )
 
-            name = row["name"]
+            name = row.name
 
             # Handle event synchronizations
             if name == stream_wait_event or name == event_sync:
@@ -935,7 +931,7 @@ class CPGraph(nx.DiGraph):
 
                 # Note: use the full trace to find the src kernel
                 src_kernel_index = self.full_trace_df.index_correlation[
-                    row["index_previous_launch"]
+                    row.index_previous_launch
                 ]
 
                 if name == stream_wait_event:
@@ -944,7 +940,7 @@ class CPGraph(nx.DiGraph):
 
                     # Get the corresponding GPU event for this cudaStreamWaitEvent()
                     dest_kernel_launch_index = cuda_stream_wait_events.loc[
-                        row["index_correlation"]
+                        row.index_correlation
                     ]["index_next_launch"]
 
                     if dest_kernel_launch_index < 0:
@@ -958,7 +954,7 @@ class CPGraph(nx.DiGraph):
 
                     if logger.isEnabledFor(logging.DEBUG):
                         logger.debug(
-                            f"Scheduling a Stream Sync on stream {row['stream']} "
+                            f"Scheduling a Stream Sync on stream {row.stream} "
                             f" dest kernel index {dest_kernel_index}, corr id = "
                             f"{self.full_trace_df.correlation.loc[dest_kernel_index]}\n "
                             f"on src kernel with index = {src_kernel_index}, corr id = "
@@ -971,16 +967,14 @@ class CPGraph(nx.DiGraph):
                             "Adding cudaEventSynchronize GPU->CPU edge between GPU kernel"
                             f" with index = {src_kernel_index}, corr id = "
                             f"{self.full_trace_df.correlation.loc[src_kernel_index]}"
-                            f" to CPU event index {row['index_correlation']}, corr id ="
-                            f"{self.full_trace_df.correlation.loc[row['index_correlation']]}"
+                            f" to CPU event index {row.index_correlation}, corr id ="
+                            f"{self.full_trace_df.correlation.loc[row.index_correlation]}"
                         )
                     _, gpu_end_node = self.get_nodes_for_event(src_kernel_index)
                     if (
                         gpu_end_node is not None
                     ):  # boundary case if previous was out of window
-                        self._add_gpu_cpu_sync_edge(
-                            gpu_end_node, row["index_correlation"]
-                        )
+                        self._add_gpu_cpu_sync_edge(gpu_end_node, row.index_correlation)
                 return
 
             assert name == stream_sync or name == context_sync
@@ -990,34 +984,34 @@ class CPGraph(nx.DiGraph):
             gpu_nodes_to_sync = (
                 last_node.values()
                 if name == context_sync
-                else [last_node.get(row["stream"])]
+                else [last_node.get(row.stream)]
             )
             for gpu_node in gpu_nodes_to_sync:
                 if gpu_node is not None:
-                    self._add_gpu_cpu_sync_edge(gpu_node, row["index_correlation"])
+                    self._add_gpu_cpu_sync_edge(gpu_node, row.index_correlation)
 
         # ---------------------------------------
         # Loop through all the kernels/sync events
         # ---------------------------------------
 
-        for _, row_ in gpu_kernels.iterrows():
-            row = row_.astype(int, errors="ignore")
+        for row in gpu_kernels.itertuples(index=False):
+            # row = row_.astype(int, errors="ignore")
 
-            if row["cat"] == sync_cat:
+            if row.cat == sync_cat:
                 handle_cuda_sync(row)
                 continue
 
-            eid, stream = row["index"], row["stream"]
+            eid, stream = row.index, row.stream
             queue_length, queue_length_runtime = (
-                row["queue_length"],
-                row["queue_length_runtime"],
+                row.queue_length,
+                row.queue_length_runtime,
             )
-            runtime_index = row["index_correlation"]
+            runtime_index = row.index_correlation
 
             if logger.isEnabledFor(logging.DEBUG):
                 logger.debug(
                     f"Adding GPU kernel node for eid = {eid}, stream = {stream}, "
-                    f"name = {self._get_node_name(eid)}, correlation = {row['correlation']}"
+                    f"name = {self._get_node_name(eid)}, correlation = {row.correlation}"
                 )
 
             start_node, end_node = self.get_nodes_for_event(eid)
@@ -1038,7 +1032,7 @@ class CPGraph(nx.DiGraph):
                         logger.debug(
                             f"Could not find source kernel sync index = {kernel_sync_index}, current kernel "
                             f" eid = {eid}, stream = {stream}, "
-                            f"name = {self._get_node_name(eid)}, correlation = {row['correlation']}"
+                            f"name = {self._get_node_name(eid)}, correlation = {row.correlation}"
                         )
                     kernel_sync_index = None
                 else:
@@ -1084,7 +1078,7 @@ class CPGraph(nx.DiGraph):
                 assert success, (
                     f"Could not find runtime index = {runtime_index}, current kernel "
                     f"stream = {stream}, "
-                    f"name = {self._get_node_name(eid)}, correlation = {row['correlation']}"
+                    f"name = {self._get_node_name(eid)}, correlation = {row.correlation}"
                 )
                 edge_added = True
                 launch_delay_added = True
@@ -1109,7 +1103,7 @@ class CPGraph(nx.DiGraph):
                 logger.warning(
                     f"No edge was added - queue length is {queue_length_runtime}!= 1 but no "
                     f"last kernel on stream {stream}, current kernel: "
-                    f"name = {self._get_node_name(eid)}, correlation = {row['correlation']}"
+                    f"name = {self._get_node_name(eid)}, correlation = {row.correlation}"
                 )
 
             # When we modify the CPGraph for  performance simulations, we do not want
@@ -1427,6 +1421,7 @@ def restore_cpgraph(zip_filename: str, t_full: "Trace", rank: int) -> CPGraph:
     return restored_instance
 
 
+# TODO optimize using itertuple
 def bound_by(row: Dict[str, Any]) -> str:
     """Function to classify the bounding resource for an edge on the critical path"""
     if row["type"] == "critical_path_kernel_kernel_delay":
