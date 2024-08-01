@@ -11,7 +11,7 @@ from collections import defaultdict
 from copy import deepcopy
 from dataclasses import dataclass
 from enum import Enum
-from functools import cached_property
+from functools import cached_property, wraps
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
@@ -33,6 +33,24 @@ from hta.utils.utils import is_comm_kernel
 
 CP_LAUNCH_EDGE_ENV = "CRITICAL_PATH_ADD_ZERO_WEIGHT_LAUNCH_EDGE"
 CP_LAUNCH_EDGE_SHOW_ENV = "CRITICAL_PATH_SHOW_ZERO_WEIGHT_LAUNCH_EDGE"
+
+PROFILE_TIMES = {}
+
+
+# Enable per function timing
+def timeit(func):
+    global PROFILE_TIMES
+
+    @wraps(func)
+    def timeit_wrapper(*args, **kwargs):
+        start_time = time.perf_counter()
+        result = func(*args, **kwargs)
+        end_time = time.perf_counter()
+        total_time = end_time - start_time
+        PROFILE_TIMES[func.__name__] = total_time
+        return result
+
+    return timeit_wrapper
 
 
 @dataclass
@@ -181,8 +199,7 @@ class CPGraph(nx.DiGraph):
         # this is the attributed event for an edge
         self.edge_to_event_map: Dict[Tuple[int, int], int] = {}
 
-        cg = CallGraph(t, ranks=[rank])
-        self._construct_graph(cg)
+        self._construct_graph()
 
     def _add_node(self, node: CPNode) -> int:
         """Adds a node to the graph.
@@ -357,7 +374,7 @@ class CPGraph(nx.DiGraph):
         """
         return self._event_to_attributed_edges_map.get(ev_idx, [])
 
-    def _construct_graph(self, cg: CallGraph) -> None:
+    def _construct_graph(self) -> None:
         if self._add_zero_weight_launch_edges():
             logger.info(
                 "Adding zero weight launch edges to retain causality in subsequent simulations."
@@ -365,13 +382,11 @@ class CPGraph(nx.DiGraph):
 
         self._create_event_nodes()
 
-        cpu_call_stacks = (
-            csg for csg in cg.call_stacks if csg.device_type == DeviceType.CPU
-        )
-        for csg in cpu_call_stacks:
-            self._construct_graph_from_call_stack(csg)
+        self._construct_graph_from_call_stacks()
+
         self._construct_graph_from_kernels()
 
+    @timeit
     def _create_event_nodes(self) -> None:
         """Generates a start and end node for every event we would like
         to represent in our graph"""
@@ -416,6 +431,17 @@ class CPGraph(nx.DiGraph):
         _df = nodes_df[~nodes_df.is_start]
         self.event_to_end_node_map = dict(zip(_df["ev_idx"], _df["idx"]))
         assert len(self.event_to_start_node_map) == len(self.event_to_end_node_map)
+
+    @timeit
+    def _construct_graph_from_call_stacks(self) -> None:
+        cg = CallGraph(self.t, ranks=[self.rank])
+
+        cpu_call_stacks = (
+            csg for csg in cg.call_stacks if csg.device_type == DeviceType.CPU
+        )
+
+        for csg in cpu_call_stacks:
+            self._construct_graph_from_call_stack(csg)
 
     def _construct_graph_from_call_stack(
         self, csg: CallStackGraph, link_operators: bool = True
@@ -577,6 +603,7 @@ class CPGraph(nx.DiGraph):
         # Sanity checking to do.
         return cuda_record_stream_df.set_index("correlation")
 
+    @timeit
     def _get_cuda_event_record_df(self) -> Optional[pd.DataFrame]:
         """For Event based synchronization we need to track the last
         kernel/memcpy launched on a CPU thread just before the cudaEventRecord
@@ -689,6 +716,7 @@ class CPGraph(nx.DiGraph):
 
         return cuda_record_calls
 
+    @timeit
     def _get_cuda_stream_wait_event_df(self) -> Optional[pd.DataFrame]:
         """For Event based synchronization we need to track the next
         kernel/memcpy launched on a CPU thread just after cudaStreamWaitEvent
@@ -850,6 +878,7 @@ class CPGraph(nx.DiGraph):
         )
         return True
 
+    @timeit
     def _construct_graph_from_kernels(self) -> None:
         """Create nodes and edges for GPU kernels"""
         sym_id_map = self.symbol_table.get_sym_id_map()
@@ -1488,6 +1517,7 @@ class CriticalPathAnalysis:
             CPGraph is also a subinstance of a networkx.DiGraph.
             Run 'CPGraph?' for more info and APIs.
         """
+        global PROFILE_TIMES
         t0 = time.perf_counter()
         trace_df: pd.DataFrame = t.get_trace(rank)
         sym_index = t.symbol_table.get_sym_id_map()
@@ -1571,6 +1601,9 @@ class CriticalPathAnalysis:
         cp_graph = CPGraph(t_copy, t, rank)
         t2 = time.perf_counter()
         logger.info(f"CPGraph construction took {t2 - t1:.2f} seconds")
+
+        for func, total_time in PROFILE_TIMES.items():
+            logger.info(f"  Function {func} Took {total_time:.4f} seconds")
 
         return cp_graph, cp_graph.critical_path()
 
