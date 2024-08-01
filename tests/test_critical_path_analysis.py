@@ -83,7 +83,7 @@ class CriticalPathAnalysisTestCase(unittest.TestCase):
         self.assertEqual(get_node_name(clamp_min_idx), "aten::clamp_min_")
         self.assertEqual(get_node_name(cuda_launch_idx), "cudaLaunchKernel")
 
-        expected_node_ids = [(32, 33), (34, 35), (36, 37)]
+        expected_node_ids = [(57, 62), (58, 61), (59, 60)]
 
         def check_nodes(ev_idx: int) -> Tuple[int, int]:
             start_node, end_node = cp_graph.get_nodes_for_event(ev_idx)
