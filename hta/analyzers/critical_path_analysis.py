@@ -46,11 +46,14 @@ class CPNode:
     ev_idx: int = -1
     ts: int = 0
     is_start: bool = False
+    # Cache the is blocking calls in the object
+    is_blocking: bool = False
 
     def __repr__(self) -> str:
         return (
             f"CPNode(event: {self.ev_idx}, node_id={self.idx}, "
-            f"ts={self.ts}, is_start={self.is_start})"
+            f"ts={self.ts}, is_start={self.is_start}, "
+            f"is_blocking={self.is_blocking})"
         )
 
 
@@ -379,8 +382,15 @@ class CPGraph(nx.DiGraph):
             self.trace_df.query(
                 self.symbol_table.get_operator_or_cuda_runtime_query()
                 + " or (stream != -1 and index_correlation >= 0)"
-            )[["index", "ts", "dur"]]
+            )[["index", "ts", "dur", "name"]]
         ).rename(columns={"index": "ev_idx"})
+
+        blocking_calls = {
+            s
+            for b in self.BLOCKING_SYNC_CALLS
+            if (s := self.symbol_table.sym_index.get(b)) is not None
+        }
+        events_df["is_blocking_call"] = events_df.name.isin(blocking_calls)
 
         ops_df_start = events_df.copy()
         ops_df_end = events_df.copy()
@@ -404,7 +414,13 @@ class CPGraph(nx.DiGraph):
         _df = nodes_df
         self.node_list = [
             CPNode(*args)
-            for args in zip(_df["idx"], _df["ev_idx"], _df["ts"], _df["is_start"])
+            for args in zip(
+                _df["idx"],
+                _df["ev_idx"],
+                _df["ts"],
+                _df["is_start"],
+                _df["is_blocking_call"],
+            )
         ]
 
         _df = nodes_df[nodes_df.is_start]
@@ -488,7 +504,7 @@ class CPGraph(nx.DiGraph):
             op_depth -= 1
 
             if last_node is not None:
-                zero_weight = self._get_node_name(ev_id) in self.BLOCKING_SYNC_CALLS
+                zero_weight = start_node.is_blocking
                 if zero_weight and logger.isEnabledFor(logging.DEBUG):
                     logger.debug(
                         "Zeroing weight for synchronization runtime call "
@@ -807,7 +823,9 @@ class CPGraph(nx.DiGraph):
                 )
             return False
 
-        if (not hasattr(row, "index_previous_launch")) or (row.index_previous_launch == -1):
+        if (not hasattr(row, "index_previous_launch")) or (
+            row.index_previous_launch == -1
+        ):
             if logger.isEnabledFor(logging.DEBUG):
                 logger.debug(
                     "CUDA Stream Wait event was not matched to a cudaRecordEvent"
