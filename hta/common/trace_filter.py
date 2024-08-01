@@ -299,6 +299,24 @@ class NameFilter(Filter):
             return NameIdColumnFilter(self.name_pattern)(df, _symbol_table)
 
 
+class QueryFilter:
+    """
+    A trace event filter class to select events matching a SQL condition
+    """
+
+    def __init__(self, query_str: str) -> None:
+        self.filter_query = query_str
+
+    def __call__(
+        self, df: pd.DataFrame, symbol_table: Optional[TraceSymbolTable] = None
+    ) -> pd.DataFrame:
+        return df.query(self.filter_query)
+
+
+# This filter matches rows where the duration is non zero.
+ZeroDurationFilter = QueryFilter("dur > 0")
+
+
 def _filter_gpu_kernels_with_cuda_sync(
     df: pd.DataFrame, symbol_table: TraceSymbolTable
 ):
