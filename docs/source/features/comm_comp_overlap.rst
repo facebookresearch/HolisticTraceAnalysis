@@ -19,7 +19,7 @@ Communication computation overlap can be calculated as follows:
 
 .. code-block:: python
 
-   analyzer = TraceAnalysis(trace_dir = "/path/to/trace/folder")
+   analyzer = TraceAnalysis(trace_dir = "traces/")
    overlap_df = analyzer.get_comm_comp_overlap()
 
 The function returns a dataframe containing the overlap percentage

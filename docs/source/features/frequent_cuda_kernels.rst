@@ -22,7 +22,8 @@ be the same across different ranks.
 
 .. code-block:: python
 
-    analyzer = TraceAnalysis(trace_dir = "/path/to/trace_folder")
+    analyzer = TraceAnalysis(trace_dir = "traces/")
+    
     cuda_sequences_df = analyzer.get_frequent_cuda_kernel_sequences(
         operator_name = "aten::linear",
         output_dir = "/tmp/"

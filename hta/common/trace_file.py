@@ -59,7 +59,7 @@ def create_rank_to_trace_dict(trace_dir: str) -> Tuple[bool, Dict]:
                     )
                 rank_to_trace_dict[int(rank)] = file_path
             else:
-                logger.error(
+                raise ValueError(
                     "If the trace file does not have the rank specified in it, then add the following snippet "
                     'key to the json files to use HTA; "distributedInfo": {"rank": 0}. If there are multiple '
                     "traces files, then each file should have a unique rank value."

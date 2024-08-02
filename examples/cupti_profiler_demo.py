@@ -3,7 +3,7 @@
 # LICENSE file in the root directory of this source tree.
 
 """
-Measuring CUPTI performanc metrics using CUPTI Profiler.
+Measuring CUPTI performance metrics using CUPTI Profiler.
 This is supported on V100 and higher NVIDIA GPUs.
 """
 
