@@ -14,6 +14,8 @@ import tracemalloc
 from collections.abc import Generator
 from typing import Any, Dict, Optional, Tuple
 
+import hta.configs.env_options as hta_options
+
 import numpy as np
 
 import pandas as pd
@@ -30,12 +32,6 @@ from hta.utils.utils import normalize_gpu_stream_numbers
 
 # from memory_profiler import profile
 
-# Disables the rounding out of nanosecond precision traces.
-# The rounding was added due to the events overlapping when
-# the precision of events was increased.
-# To use this set HTA_DISABLE_NS_ROUNDING=1 or
-#  os.environ["HTA_DISABLE_NS_ROUNDING"] = "1" before initializing HTA
-HTA_DISABLE_NS_ROUNDING_ENV = "HTA_DISABLE_NS_ROUNDING"
 
 MetaData = Dict[str, Any]
 _TRACE_PARSING_BACKEND: Optional[ParserBackend] = None
@@ -305,7 +301,7 @@ def _compress_df(
 def round_down_time_stamps(df: pd.DataFrame) -> None:
     if df["ts"].dtype != np.dtype("float64"):
         return
-    if os.environ.get(HTA_DISABLE_NS_ROUNDING_ENV, "-1") == "1":
+    if hta_options.disable_ns_rounding():
         logger.warning("Rounding down ns resolution traces disabled")
         return
 

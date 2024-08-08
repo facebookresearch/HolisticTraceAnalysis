@@ -11,13 +11,14 @@ from collections import defaultdict
 from copy import deepcopy
 from dataclasses import dataclass
 from enum import Enum
-from functools import cached_property, wraps
+from functools import cached_property, lru_cache, wraps
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
+import hta.configs.env_options as hta_options
+
 import networkx as nx
 import pandas as pd
-
 from hta.analyzers.trace_counters import TraceCounters
 
 # Revert to old call stack as we have an issue with new one
@@ -30,9 +31,6 @@ from hta.common.trace_symbol_table import decode_symbol_id_to_symbol_name
 from hta.configs.config import logger
 from hta.utils.utils import is_comm_kernel
 
-
-CP_LAUNCH_EDGE_ENV = "CRITICAL_PATH_ADD_ZERO_WEIGHT_LAUNCH_EDGE"
-CP_LAUNCH_EDGE_SHOW_ENV = "CRITICAL_PATH_SHOW_ZERO_WEIGHT_LAUNCH_EDGE"
 
 PROFILE_TIMES = {}
 
@@ -150,12 +148,9 @@ class CPGraph(nx.DiGraph):
         "cudaMemcpyAsync",
     ]
 
+    @lru_cache()
     def _add_zero_weight_launch_edges(self) -> bool:
-        env = os.environ.get(CP_LAUNCH_EDGE_ENV, None)
-        if env is None:
-            # default
-            return False
-        return env == "1"
+        return hta_options.critical_path_add_zero_weight_launch_edges()
 
     def __init__(
         self, t: Optional["Trace"], t_full: "Trace", rank: int, G=None
@@ -1231,7 +1226,11 @@ class CPGraph(nx.DiGraph):
 
         for u, v in self.edges:
             e = self.edges[u, v]["object"]
-            if e.weight == -1:
+
+            if (
+                e.weight <= -1
+                and not hta_options.critical_path_strict_negative_weight_check()
+            ):
                 # Nanosecond precision is causing some of the parent events
                 # to end before child in stack. This is a separate issue that
                 # needs fixing in the trace itself.
@@ -1621,10 +1620,6 @@ class CriticalPathAnalysis:
         return cp_graph, cp_graph.critical_path()
 
     @staticmethod
-    def _show_zero_weight_launch_edges() -> bool:
-        return os.environ.get(CP_LAUNCH_EDGE_SHOW_ENV, -1) == 0
-
-    @staticmethod
     def _is_zero_weight_launch_edge(e: CPEdge) -> bool:
         return e.type == CPEdgeType.KERNEL_LAUNCH_DELAY and e.weight == 0
 
@@ -1728,7 +1723,7 @@ class CriticalPathAnalysis:
                 critical_path_graph.edges[u, v]["object"]
                 for u, v in critical_path_graph.edges
             )
-            if not CriticalPathAnalysis._show_zero_weight_launch_edges():
+            if not hta_options.critical_path_show_zero_weight_launch_edges():
                 edges = (
                     e
                     for e in edges

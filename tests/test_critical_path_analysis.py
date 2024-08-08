@@ -7,6 +7,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Tuple
 
+import hta.configs.env_options as hta_options
 from hta.analyzers.critical_path_analysis import (
     CPEdge,
     CPEdgeType,
@@ -254,7 +255,7 @@ class CriticalPathAnalysisTestCase(unittest.TestCase):
                 cpgraph_edges = (
                     cp_graph.edges[u, v]["object"] for (u, v) in cp_graph.edges
                 )
-                if not CriticalPathAnalysis._show_zero_weight_launch_edges():
+                if not hta_options.critical_path_show_zero_weight_launch_edges():
                     cpgraph_edges = filter(
                         lambda e: not CriticalPathAnalysis._is_zero_weight_launch_edge(
                             e
