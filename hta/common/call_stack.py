@@ -4,15 +4,15 @@
 
 import functools
 import logging
-import os
 from collections import namedtuple
 from enum import Enum
 from time import perf_counter
 from typing import Callable, Dict, List, NamedTuple, Optional
 
+import hta.configs.env_options as hta_options
+
 import numpy as np
 import pandas as pd
-
 from hta.common.trace import Trace
 from hta.common.trace_filter import Filter
 
@@ -20,7 +20,6 @@ NON_EXISTENT_NODE_INDEX = -2
 NULL_NODE_INDEX = -1
 EVENT_START = 1
 EVENT_END = -1
-HTA_DISABLE_CG_DEPTH_ENV = "HTA_DISABLE_CG_DEPTH"
 
 
 class DeviceType(Enum):
@@ -532,7 +531,7 @@ class CallGraph:
                     }
                 )
             df = self.trace_data.get_trace(rank)
-            if os.environ.get(HTA_DISABLE_CG_DEPTH_ENV, None) is None:
+            if not hta_options.disable_call_graph_depth():
                 depth = pd.concat(
                     [self.call_stacks[idx].get_depth() for idx in call_stack_indices]
                 )

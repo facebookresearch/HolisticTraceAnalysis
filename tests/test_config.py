@@ -7,6 +7,7 @@ import unittest
 
 from hta.configs.config import HtaConfig
 from hta.configs.default_values import DEFAULT_CONFIG_FILENAME
+from hta.configs.env_options import get_options
 
 
 class HtaConfigTestCase(unittest.TestCase):
@@ -68,6 +69,9 @@ class HtaConfigTestCase(unittest.TestCase):
         config = HtaConfig(self.test_config_path, load_default_paths=False)
         self.assertEqual(config.get_config("c", 10), self.test_config["c"])
         self.assertEqual(config.get_config("d", 10), 10)
+
+    def test_get_env_options(self):
+        self.assertNotEqual(get_options(), "")
 
 
 if __name__ == "__main__":  # pragma: no cover
