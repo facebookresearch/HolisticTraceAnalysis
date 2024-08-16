@@ -13,8 +13,7 @@ Trace Analysis
 .. code-block:: python
 
     from hta.trace_analysis import TraceAnalysis
-    analyzer = TraceAnalysis(trace_dir = "/trace/folder/path")
-
+    analyzer = TraceAnalysis(trace_dir = "traces/")
 
 Using the features is straightforward. E.g.
 
@@ -48,9 +47,9 @@ Using the features is straightforward. E.g.
   cuda_kernel_launch_stats = analyzer.get_cuda_kernel_launch_stats()
 
   # Frequent CUDA kernel sequences
-  frequent_patterns_df = analyzer.get_frequent_cuda_kernel_sequences(operator_name="aten::linear",
-                                                                    output_dir="/output/trace/path"
-                                                                   )
+  frequent_patterns_df = analyzer.get_frequent_cuda_kernel_sequences(
+                                    operator_name="aten::linear", output_dir="/output/trace/path"
+                                 )
 
 To learn more about the features in detail we refer the reader to the
 **Features** section. The features can be tuned by various

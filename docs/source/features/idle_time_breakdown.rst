@@ -33,7 +33,7 @@ function. The idle time breakdown can be generated as follows:
 
 .. code-block:: python
 
-  analyzer = TraceAnalysis(trace_dir = "/path/to/trace/folder")
+  analyzer = TraceAnalysis(trace_dir = "traces/")
   idle_time_df = analyzer.get_idle_time_breakdown()
 
 .. image:: ../_static/idle_time_breakdown_percentage.png

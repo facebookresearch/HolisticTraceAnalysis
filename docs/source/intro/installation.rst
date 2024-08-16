@@ -32,7 +32,10 @@ Install from source
 .. code-block::
 
   # get the source code
-  git clone https://github.com/facebookresearch/HolisticTraceAnalysis.git
+  git clone https://github.com/facebookresearch/HolisticTraceAnalysis
+
+  # move into the cloned directory
+  cd HolisticTraceAnalysis
 
   # execute the command below from the root of the repo
   pip install -e .

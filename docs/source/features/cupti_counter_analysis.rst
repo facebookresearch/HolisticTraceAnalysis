@@ -22,18 +22,21 @@ an example.
 .. code-block:: python
 
     with torch.profiler.profile(
-        activities=[torch.profiler.ProfilerActivity.CUDA,
-                    torch.profiler.ProfilerActivity.CPU],
-        record_shapes=True,
-        on_trace_ready=trace_handler,
-        experimental_config=torch.profiler._ExperimentalConfig(
-            profiler_metrics=[
+        activities = [
+            torch.profiler.ProfilerActivity.CUDA,
+            torch.profiler.ProfilerActivity.CPU
+        ],
+        record_shapes = True,
+        on_trace_ready = trace_handler,
+        experimental_config = torch.profiler._ExperimentalConfig(
+            profiler_metrics = [
                 "kineto__tensor_core_insts",
                 "dram__bytes_read.sum",
-                "dram__bytes_write.sum"],
-        profiler_measure_per_kernel=True),
+                "dram__bytes_write.sum"
+            ],
+        profiler_measure_per_kernel = True),
     ) as prof:
-        res = train_batch(modeldef)
+        res = train_batch(model)
         prof.step()
 
 The generated trace contains the following additional information:
@@ -55,7 +58,8 @@ The code below runs CUPTI counter analysis on the collected trace.
 
 .. code-block:: python
 
-   analyzer = TraceAnalysis(trace_dir = "/path/to/trace/folder")
+   analyzer = TraceAnalysis(trace_dir = "traces/")
+
    gpu_kernels = analyzer.get_cupti_counter_data_with_operators(ranks=[0])[0]
 
 It returns a list of dataframes, one per rank or trace file. Each dataframe

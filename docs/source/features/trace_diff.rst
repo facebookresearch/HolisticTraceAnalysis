@@ -53,7 +53,7 @@ follows:
 .. code-block:: python
 
     df = compare_traces_output.sort_values(by="diff_duration", ascending=False)
-    # The duration differerence can be overshadowed by the "ProfilerStep",
+    # The duration difference can be overshadowed by the "ProfilerStep",
     # so we can filter it out to show the trend of other operators.
     df = df.loc[~df.index.str.startswith("ProfilerStep")].head(10)
     TraceDiff.visualize_duration_diff(df)

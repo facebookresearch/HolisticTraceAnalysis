@@ -25,7 +25,8 @@ The temporal breakdown can be calculated as follows:
 
 .. code-block:: python
 
-   analyzer = TraceAnalysis(trace_dir = "/path/to/trace/folder")
+   analyzer = TraceAnalysis(trace_dir = "traces/")
+   
    time_spent_df = analyzer.get_temporal_breakdown()
 
 The function returns a dataframe containing the temporal breakdown for each rank.

@@ -13,7 +13,8 @@ The kernel breakdown can be calculated as follows:
 
 .. code-block:: python
 
-   analyzer = TraceAnalysis(trace_dir = "/path/to/trace/folder")
+   analyzer = TraceAnalysis(trace_dir = "traces/")
+   
    kernel_type_metrics_df, kernel_metrics_df = analyzer.get_gpu_kernel_breakdown()
 
 The first dataframe returned by the function contains the raw values used to
