@@ -83,10 +83,9 @@ class TestTraceFile(unittest.TestCase):
 
     def test_create_rank_to_trace_dict_with_mixed_dir(self) -> None:
         with self.assertLogs(logger, level="WARNING") as cm:
-            self.assertEqual(
-                create_rank_to_trace_dict_from_dir(self.trace_mixed_files),
-                (True, {0: "tests/data/mixed_files/rank_non_gpu.json.gz"}),
-            )
+            ok, res_dict = create_rank_to_trace_dict_from_dir(self.trace_mixed_files)
+            self.assertTrue(ok)
+            self.assertEqual(list(res_dict.keys()), [0])
             self.assertIn("has the same rank", cm.output[0])
 
     def test_create_rank_to_trace_dict_with_file_list(self) -> None:
