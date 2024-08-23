@@ -98,6 +98,9 @@ class TraceParseTestCase(unittest.TestCase):
         inference_trace_dir: str = "tests/data/inference_single_rank"
         vision_transformer_rank_0_file: str = "rank-0.json.gz"
         inference_rank_0_file: str = "inference_rank_0.json.gz"
+        inference_trace_files = [
+            os.path.join(inference_trace_dir, inference_rank_0_file)
+        ]
         max_ranks = 8
 
         # Trace parser for vision transformer
@@ -109,7 +112,9 @@ class TraceParseTestCase(unittest.TestCase):
             vision_transformer_trace_dir, vision_transformer_rank_0_file
         )
         # Trace parser for inference
-        cls.inference_t: Trace = Trace(trace_dir=inference_trace_dir)
+        cls.inference_t: Trace = Trace(
+            trace_files=inference_trace_files, trace_dir=os.getcwd()
+        )
         cls.inference_t.parse_traces(max_ranks=max_ranks, use_multiprocessing=True)
         cls.inference_raw_df = prepare_ground_truth_df(
             inference_trace_dir, inference_rank_0_file

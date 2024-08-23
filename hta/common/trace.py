@@ -12,13 +12,13 @@ import re
 import sys
 import time
 import tracemalloc
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
 import pandas as pd
 
-from hta.common.trace_file import get_trace_files
+from hta.common.trace_file import create_rank_to_trace_dict, get_trace_files
 from hta.common.trace_filter import CPUOperatorFilter, GPUKernelFilter
 from hta.common.trace_parser import parse_trace_dataframe, parse_trace_dict
 from hta.common.trace_symbol_table import (
@@ -311,14 +311,15 @@ class Trace:
 
     def __init__(
         self,
-        trace_files: Optional[Dict[int, str]] = None,
+        trace_files: Union[List[str], Optional[Dict[int, str]]] = None,
         trace_dir: str = DEFAULT_TRACE_DIR,
     ) -> None:
         """
         The constructor of a Trace object.
         Args:
-            trace_files: Dict[int, str] : a map from rank to trace file names. The trace file names can be either
-                relative to the path `trace_path` or absolute file paths.
+            trace_files: Union[List[str], Dict[int, str] : either a list of trace file names or a map from rank to trace file names.
+                When a list is provided, HTA will infer the ranks by reading the trace file metadata.
+                The trace file names can be either relative to the path `trace_path` or absolute file paths.
             trace_dir (str) : a path used to derive `trace_path = normalize_path(trace_dir)`.
 
         Raises:
@@ -326,9 +327,22 @@ class Trace:
         """
         self.trace_path: str = normalize_path(trace_dir)
         logger.info(f"{self.trace_path}")
-        self.trace_files: Dict[int, str] = (
-            trace_files if trace_files is not None else get_trace_files(self.trace_path)
-        )
+
+        self.trace_files: Dict[int, str]
+        if trace_files is None:
+            self.trace_files = get_trace_files(self.trace_path)
+        elif isinstance(trace_files, dict):
+            self.trace_files = trace_files
+        elif isinstance(trace_files, list):
+            ok, self.trace_files = create_rank_to_trace_dict(trace_files)
+            if not ok:
+                logger.warning("failed to create rank to trace map")
+        else:
+            logger.error(
+                f"Unsupported type for trace_files = {trace_files}, should be list or dict"
+            )
+            return
+
         logger.debug(self.trace_files)
         self.traces: Dict[int, pd.DataFrame] = {}
         self.symbol_table = TraceSymbolTable()

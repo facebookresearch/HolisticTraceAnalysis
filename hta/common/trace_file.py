@@ -6,12 +6,12 @@ import gzip
 import json
 import os
 import re
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, List, Tuple
 
 from hta.configs.config import logger
 
 
-def create_rank_to_trace_dict(trace_dir: str) -> Tuple[bool, Dict]:
+def create_rank_to_trace_dict_from_dir(trace_dir: str) -> Tuple[bool, Dict]:
     """
     Create a rank -> trace_filename map for traces located within the directory <trace_path>
 
@@ -35,14 +35,19 @@ def create_rank_to_trace_dict(trace_dir: str) -> Tuple[bool, Dict]:
     if len(file_list) == 0:
         logger.warning(f"No trace file is found in {trace_dir}")
         return False, {}
+    return create_rank_to_trace_dict(
+        [os.path.join(trace_dir, file) for file in file_list]
+    )
 
+
+def create_rank_to_trace_dict(file_list: List[str]) -> Tuple[bool, Dict]:
     rank_to_trace_dict: Dict[int, str] = {}
     rank_re = re.compile(r'"rank":\s+(\d+)')
-    for file in file_list:
-        file_path = os.path.join(trace_dir, file)
-
+    for file_path in file_list:
         with (
-            gzip.open(file_path, "rb") if file.endswith("gz") else open(file_path, "r")
+            gzip.open(file_path, "rb")
+            if file_path.endswith("gz")
+            else open(file_path, "r")
         ) as f:
             for line in f:
                 data = line.decode() if isinstance(line, bytes) else line
@@ -54,16 +59,18 @@ def create_rank_to_trace_dict(trace_dir: str) -> Tuple[bool, Dict]:
             if match:
                 rank = int(match.group(1))
                 if rank in rank_to_trace_dict:
-                    logger.error(
+                    logger.warning(
                         f"File {rank_to_trace_dict[rank]} and file {file_path} has the same rank. Will use {file_path} as the path to rank: {rank}."
                     )
                 rank_to_trace_dict[int(rank)] = file_path
             else:
-                logger.error(
+                logger.warning(
                     "If the trace file does not have the rank specified in it, then add the following snippet "
                     'key to the json files to use HTA; "distributedInfo": {"rank": 0}. If there are multiple '
                     "traces files, then each file should have a unique rank value."
+                    "For now we will default to rank = 0."
                 )
+                rank_to_trace_dict[0] = file_path
 
     return True, rank_to_trace_dict
 
@@ -84,7 +91,7 @@ def get_trace_files(trace_path: str) -> Dict[int, str]:
     if not os.path.exists(trace_path):
         logger.warning(f"{trace_path} is not a valid path")
     else:
-        ok, rank_to_trace_dict = create_rank_to_trace_dict(trace_path)
+        ok, rank_to_trace_dict = create_rank_to_trace_dict_from_dir(trace_path)
         if not ok:
             logger.warning("failed to create rank to trace map")
             return {}
