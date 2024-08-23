@@ -527,6 +527,12 @@ class Trace:
         """Get the list of (sorted) ranks included in this trace."""
         return sorted(self.traces.keys())
 
+    def _get_first_rank(self, rank: Optional[int] = None) -> int:
+        if rank is None:
+            _ranks = self.get_ranks()
+            rank = _ranks[0] if len(_ranks) > 0 else -1
+        return rank
+
     def get_iterations(self, rank: Optional[int] = None) -> List[int]:
         """Get the list of iterations for a given rank.
 
@@ -538,15 +544,26 @@ class Trace:
             A list of iteration IDs for the given rank.
             Return an empty list when the rank is invalid or column "iteration" does not exists.
         """
-        if rank is None:
-            _ranks = self.get_ranks()
-            rank = _ranks[0] if len(_ranks) > 0 else -1
+        rank = self._get_first_rank(rank)
 
         if rank in self.get_ranks():
             df = self.traces[rank]
             if "iteration" in df.columns:
                 return sorted([i for i in df["iteration"].unique() if i >= 0])
         return []
+
+    def get_trace_duration(self, rank: Optional[int] = None) -> int:
+        """Get the duration of specified rank.
+
+        Args:
+            rank (Optional[int]): a rank
+                when rank is None, use the first item of the list returned by self.get_ranks().
+
+        Returns: duration of trace (int)
+        """
+        rank = self._get_first_rank(rank)
+        trace_df = self.get_trace(rank)
+        return trace_df.ts.max() - trace_df.ts.min()
 
     def get_trace(self, rank: int) -> pd.DataFrame:
         """

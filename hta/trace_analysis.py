@@ -16,6 +16,7 @@ from hta.analyzers.cupti_counter_analysis import CuptiCounterAnalysis
 from hta.analyzers.straggler import find_stragglers_with_late_start_comm_kernels
 from hta.analyzers.straggler_analysis import StragglerAnalysis
 from hta.analyzers.trace_counters import TraceCounters
+from hta.common.constants import CUDA_MAX_LAUNCH_QUEUE_PER_STREAM
 from hta.common.trace import Trace
 from hta.configs.config import logger
 from hta.configs.default_values import DEFAULT_TRACE_DIR
@@ -355,6 +356,29 @@ class TraceAnalysis:
         """
         return TraceCounters.get_queue_length_summary(self.t, ranks)
 
+    def get_queue_length_summary_from_time_series(
+        self,
+        queue_length_dict: Dict[int, pd.DataFrame],
+    ) -> Optional[pd.DataFrame]:
+        r"""
+        Queue length is defined as the number of outstanding CUDA operations on a stream. This
+        functions calculates the summary statistics for the queue length on each CUDA stream for
+        the specified ranks. This function takes the output from get_queue_length_time_series() directly.
+
+        Args:
+            queue_length_dict (Dict[int, pd.DataFrame]): A dictionary of rank -> time series with the queue length of each CUDA stream.
+                This is the output of get_queue_length_time_series().
+
+        Returns:
+            pd.DataFrame or None
+                A dataframe summarizing the queue length statistics. The dataframe contains count,
+                min, max, standard deviation, 25th, 50th and 75th percentiles.
+                The function returns None when the dataframe is empty.
+        """
+        return TraceCounters.get_queue_length_summary_from_time_series(
+            queue_length_dict
+        )
+
     def get_queue_length_time_series(
         self,
         ranks: Optional[List[int]] = None,
@@ -374,6 +398,39 @@ class TraceAnalysis:
                 tid (thread id), stream, and queue length.
         """
         return TraceCounters.get_queue_length_time_series(self.t, ranks)
+
+    def get_time_spent_blocked_on_full_queue(
+        self,
+        queue_length_dict: Dict[int, pd.DataFrame],
+        max_queue_length: int = CUDA_MAX_LAUNCH_QUEUE_PER_STREAM,
+    ) -> Optional[pd.DataFrame]:
+        r"""
+        The GPU kernels launch queue is finite. If the CPU fills up this queue the CPU
+        will block till the GPU device launches kernels. We compute the time spent blocked
+        on a full launch queue in this function.
+
+        Returns an (optional) dataframe with the time spent on the kernel launch queue full.
+        This function takes the output from get_queue_length_time_series() and sums
+        up the time spent on all streams where the queue is full (see max_queue_length)
+
+        Args:
+            queue_length_dict (Dict[int, pd.DataFrame]): A dictionary of rank -> time series with the queue length of each CUDA stream.
+                This is the output of get_queue_length_time_series().
+            max_queue_length (int): Max kernel launch queue length.
+
+        Returns:
+            Optional[pd.DataFrame]
+                An (optional) dataframe containing the summary statistics blocked time per
+                stream and rank
+                The dataframe contains the columns- rank, stream, duration_at_max_queue_length,
+                and relative_duration_at_max_queue_length.
+
+                Relative duration at max queue length considers the total duration of a trace
+                and normalizes the duration_at_max_queue_length.
+        """
+        return TraceCounters.get_time_spent_blocked_on_full_queue(
+            self.t, queue_length_dict, max_queue_length
+        )
 
     def get_memory_bw_summary(
         self,
