@@ -232,7 +232,7 @@ class TraceAnalysisTestCase(unittest.TestCase):
         self.assertEqual(kernel_breakdown.iloc[151]["kernel_type"], "MEMORY")
         self.assertEqual(kernel_breakdown.iloc[151]["sum (us)"], 1064)
 
-    def test_get_queue_length_summary(self):
+    def test_get_queue_length_stats(self):
         qd_summary = self.vision_transformer_t.get_queue_length_summary(ranks=[0])
         streams = qd_summary.index.to_list()
         self.assertEqual(streams, list(zip([0] * 6, [7, 20, 24, 26, 28, 30])))
@@ -255,6 +255,23 @@ class TraceAnalysisTestCase(unittest.TestCase):
                 places=2,
                 msg=f"Stream 7 stats mismatch key={key}",
             )
+
+        queue_len_ts_dict = self.vision_transformer_t.get_queue_length_time_series()
+        queue_full_df = self.vision_transformer_t.get_time_spent_blocked_on_full_queue(
+            queue_len_ts_dict, max_queue_length=400  # Just a hack for testing
+        )
+        self.assertEqual(len(queue_full_df), 1)
+        self.assertAlmostEqual(
+            queue_full_df.loc[0]["duration_at_max_queue_length"],
+            2300.0,
+            msg=f"queue_full_df = {queue_full_df}",
+        )
+        self.assertAlmostEqual(
+            queue_full_df.loc[0]["relative_duration_at_max_queue_length"],
+            0.001129,
+            places=5,
+            msg=f"queue_full_df = {queue_full_df}",
+        )
 
     @patch.object(hta.common.trace.Trace, "write_raw_trace")
     def test_generate_trace_with_counters(self, mock_write_trace):

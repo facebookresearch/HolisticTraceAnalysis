@@ -137,13 +137,43 @@ class TraceCounters:
         return dict(filter(lambda x: x[1] is not None, result.items()))
 
     @classmethod
+    def get_queue_length_summary_from_time_series(
+        cls,
+        queue_length_dict: Dict[int, pd.DataFrame],
+    ) -> Optional[pd.DataFrame]:
+        """
+        Returns an (optional) dataframe with queue length statistics per CUDA stream and rank.
+        This function takes the output from get_queue_length_time_series() directly.
+
+        Args:
+            Dict[int, pd.DataFrame]: A dictionary of rank -> time series with the queue length of each CUDA stream.
+                This is the output of get_queue_length_time_series().
+
+        Returns:
+            Optional[pd.DataFrame]
+                An (optional) dataframe containing the summary statistics of queue length per
+                stream and rank.
+        """
+        results_list: List[pd.DataFrame] = []
+
+        for rank, rank_df in queue_length_dict.items():
+            rank_df["rank"] = rank
+            result = (
+                rank_df[["rank", "stream", "queue_length"]]
+                .groupby(["rank", "stream"])
+                .describe()
+            )
+            results_list.append(result)
+        return pd.concat(results_list) if len(results_list) > 0 else None
+
+    @classmethod
     def get_queue_length_summary(
         cls,
         t: "Trace",
         ranks: Optional[List[int]] = None,
     ) -> Optional[pd.DataFrame]:
         """
-        Returns an (optional) dataframe with queue length statistics per CUDA stream and rank.
+        Returns an (optional) dataframewith queue length statistics per CUDA stream and rank.
 
         Args:
             t (Trace): Input trace data structure.
@@ -157,19 +187,71 @@ class TraceCounters:
         if ranks is None or len(ranks) == 0:
             ranks = [0]
 
-        results_list: List[pd.DataFrame] = []
+        return TraceCounters.get_queue_length_summary_from_time_series(
+            TraceCounters.get_queue_length_time_series(t, ranks)
+        )
 
-        for rank, rank_df in TraceCounters.get_queue_length_time_series(
-            t, ranks
-        ).items():
-            rank_df["rank"] = rank
-            result = (
-                rank_df[["rank", "stream", "queue_length"]]
-                .groupby(["rank", "stream"])
-                .describe()
-            )
-            results_list.append(result)
-        return pd.concat(results_list) if len(results_list) > 0 else None
+    @classmethod
+    def get_time_spent_blocked_on_full_queue(
+        cls,
+        t: "Trace",
+        queue_length_dict: Dict[int, pd.DataFrame],
+        max_queue_length: int,
+    ) -> Optional[pd.DataFrame]:
+        """
+
+        Returns an (optional) dataframe with the time spent on the kernel launch queue full.
+        This function takes the output from get_queue_length_time_series() and sums
+        up the time spent on all streams where the queue is full (see max_queue_length)
+
+        Args:
+            t (Trace): Input trace data structure.
+            queue_length_dict (Dict[int, pd.DataFrame]): A dictionary of rank -> time series with the queue length of each CUDA stream.
+                This is the output of get_queue_length_time_series().
+            max_queue_length (int): Max kernel launch queue length.
+
+        Returns:
+            Optional[pd.DataFrame]
+                An (optional) dataframe containing the summary statistics blocked time per
+                stream and rank
+                The dataframe contains the columns- rank, stream, duration_at_max_queue_length,
+                and relative_duration_at_max_queue_length.
+
+                Relative duration at max queue length considers the total duration of a trace
+                and normalizes the duration_at_max_queue_length.
+        """
+
+        result = {}
+
+        for rank, ql in queue_length_dict.items():
+            for stream in ql.stream.unique():
+                df = ql.loc[ql.stream == stream].copy()
+                df["dur"] = df.ts.shift(-1) - df.ts
+
+                df = df.loc[ql.queue_length >= max_queue_length]
+                if df.empty:
+                    continue
+
+                dur_at_max_queue_len = df.dur.sum()
+
+                logger.info(
+                    f"Rank={rank}, stream={stream}, total dur at max_queue = {dur_at_max_queue_len}"
+                )
+                rel_dur_at_max_queue_len = (
+                    dur_at_max_queue_len * 1.0 / t.get_trace_duration(rank)
+                )
+                result[rank] = [stream, dur_at_max_queue_len, rel_dur_at_max_queue_len]
+
+        result_df = pd.DataFrame.from_dict(
+            result,
+            orient="index",
+            columns=[
+                "stream",
+                "duration_at_max_queue_length",
+                "relative_duration_at_max_queue_length",
+            ],
+        )
+        return result_df.reset_index(names="rank")
 
     @classmethod
     def _get_memory_bw_time_series_for_rank(

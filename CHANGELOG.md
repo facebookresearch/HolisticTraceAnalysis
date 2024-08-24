@@ -16,6 +16,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 - (Experimental) Critical path analysis fixes: fixing async memcpy and adding GPU to CPU event based synchronization.
 - (Experimental) Added save and restore feature for critical path graph.
 - Add nccl collective fields to parser config
+- Queue length analysis: Add feature to compute time blocked on a stream hitting max queue length.
 
 #### Changed
 - Change test data path in unittests from relative path to real path to support running test within IDEs.
