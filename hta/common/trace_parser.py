@@ -281,6 +281,8 @@ def _compress_df(
             )
         df.drop(["args"], axis=1, inplace=True)
 
+    normalize_gpu_stream_numbers(df)
+
     # create a local symbol table
     local_symbol_table = TraceSymbolTable()
     symbols = set(df["cat"].unique()).union(set(df["name"].unique()))
@@ -383,7 +385,6 @@ def _parse_trace_dataframe_ijson(
         df = _parse_trace_events_ijson(trace_file_path)
 
     round_down_time_stamps(df)
-    normalize_gpu_stream_numbers(df)
 
     # assign an index to each event
     df.reset_index(inplace=True)

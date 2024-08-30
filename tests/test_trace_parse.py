@@ -301,14 +301,19 @@ class TraceParseIjsonOthersTestCase(unittest.TestCase):
 
 class TraceParseConfigTestCase(unittest.TestCase):
     def setUp(self) -> None:
+        # Trace parser test file for nccl fields
         resnet_nccl_trace: str = "tests/data/nccl_parser_config"
-        # Trace parser for nccl fields
         self.resnet_nccl_t: Trace = Trace(trace_dir=resnet_nccl_trace)
+
+        # Trace parser test file for Triton fields
+        triton_trace: str = "tests/data/triton_example"
+        self.triton_t: Trace = Trace(trace_dir=triton_trace)
 
         # Parse all nccl fields in the test
         custom_cfg = ParserConfig(ParserConfig.get_minimum_args())
         custom_cfg.add_args(
             [spec for (arg, spec) in AVAILABLE_ARGS.items() if arg.startswith("nccl")]
+            + [AVAILABLE_ARGS["cpu_op::kernel_backend"]]
         )
         ParserConfig.set_default_cfg(custom_cfg)
 
@@ -340,6 +345,25 @@ class TraceParseConfigTestCase(unittest.TestCase):
         self.assertEqual(nccl_data["process_group_name"], "0")
         self.assertEqual(nccl_data["process_group_desc"], "default_pg")
         self.assertEqual(nccl_data["process_group_ranks"], "[0, 1]")
+
+    def test_triton_trace(self) -> None:
+        """Tests if a file with Triton/torch.compile() is parsed correctly,
+        and we can obtain special attributes from the cpu ops tha launch Triton kernels"""
+        self.triton_t.parse_traces(max_ranks=1, use_multiprocessing=False)
+        self.triton_t.decode_symbol_ids(use_shorten_name=False)
+
+        trace_df = self.triton_t.get_trace(0)
+        self.assertGreater(len(trace_df), 0)
+        self.assertTrue("kernel_backend" in trace_df.columns)
+
+        triton_cpu_ops = trace_df[trace_df.kernel_backend.ne("")]
+        # We have one triton cpu op
+        self.assertEqual(len(triton_cpu_ops), 1)
+
+        triton_op = triton_cpu_ops.iloc[0].to_dict()
+        self.assertEqual(triton_op["s_name"], "triton_poi_fused_add_cos_sin_0")
+        self.assertEqual(triton_op["s_cat"], "cpu_op")
+        self.assertEqual(triton_op["kernel_backend"], "triton")
 
 
 if __name__ == "__main__":  # pragma: no cover
