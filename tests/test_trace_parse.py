@@ -348,7 +348,8 @@ class TraceParseConfigTestCase(unittest.TestCase):
 
     def test_triton_trace(self) -> None:
         """Tests if a file with Triton/torch.compile() is parsed correctly,
-        and we can obtain special attributes from the cpu ops tha launch Triton kernels"""
+        and we can obtain special attributes from the cpu ops tha launch Triton kernels
+        """
         self.triton_t.parse_traces(max_ranks=1, use_multiprocessing=False)
         self.triton_t.decode_symbol_ids(use_shorten_name=False)
 
