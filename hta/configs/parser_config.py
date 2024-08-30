@@ -60,6 +60,10 @@ AVAILABLE_ARGS: Dict[str, AttributeSpec] = {
     "cpu_op::sequence_number": AttributeSpec(
         "sequence", "Sequence number", ValueType.Int, -1
     ),
+    # kernel_backend, for example triton.
+    "cpu_op::kernel_backend": AttributeSpec(
+        "kernel_backend", "kernel_backend", ValueType.String, ""
+    ),
     "correlation::cbid": AttributeSpec("cbid", "cbid", ValueType.Int, -1),
     "correlation::cpu_gpu": AttributeSpec(
         "correlation", "correlation", ValueType.Int, -1
