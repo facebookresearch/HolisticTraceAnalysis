@@ -17,6 +17,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 - (Experimental) Added save and restore feature for critical path graph.
 - Add nccl collective fields to parser config
 - Queue length analysis: Add feature to compute time blocked on a stream hitting max queue length.
+- Add `kernel_backend` to parser config for Triton / torch.compile() support.
 
 #### Changed
 - Change test data path in unittests from relative path to real path to support running test within IDEs.
