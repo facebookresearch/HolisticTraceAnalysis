@@ -571,7 +571,7 @@ class CPGraph(nx.DiGraph):
                 gpu_kernels[["stream", "index", "pid"]],
                 left_on="index_correlation",
                 right_on="index",
-                suffixes=["", "_kernel"],
+                suffixes=("", "_kernel"),
             )
             .set_index("index")
         ).rename(columns={"pid_kernel": "gpu_kernel"})
@@ -688,7 +688,7 @@ class CPGraph(nx.DiGraph):
                 left_on="previous_launch_id",
                 right_on="launch_id",
                 how="left",
-                suffixes=["", "_launch_event"],
+                suffixes=("", "_launch_event"),
                 # multiple CUDA records can have same previous launch ID, but not vice versa
                 validate="many_to_one",
             )
@@ -771,7 +771,7 @@ class CPGraph(nx.DiGraph):
                 gpu_kernels[["stream", "index"]],
                 left_on="index_correlation",
                 right_on="index",
-                suffixes=["", "_kernel"],
+                suffixes=("", "_kernel"),
             )
             .set_index("index")
         )
@@ -805,7 +805,7 @@ class CPGraph(nx.DiGraph):
                 left_on="next_launch_id",
                 right_on="launch_id",
                 how="left",
-                suffixes=["", "_launch_event"],
+                suffixes=("", "_launch_event"),
             )
 
         pid_tid_streams = (
@@ -929,7 +929,7 @@ class CPGraph(nx.DiGraph):
                     left_on="wait_on_cuda_event_record_corr_id",
                     right_on="correlation",
                     how="left",
-                    suffixes=["", "_cuda_record"],
+                    suffixes=("", "_cuda_record"),
                 )
                 .fillna(-1)
                 .astype(int)
