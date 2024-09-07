@@ -175,10 +175,10 @@ class TraceParseTestCase(unittest.TestCase):
                 df.loc[valid_gpu_kernels.index, "index_correlation"]
             ]
             gpu_kernels_per_iteration = (
-                valid_gpu_kernels.groupby("iteration")["index"].agg("count").to_dict()
+                valid_gpu_kernels.groupby("iteration")["index"].count().to_dict()
             )
             correlated_cpu_ops_per_iteration = (
-                correlated_cpu_ops.groupby("iteration")["index"].agg("count").to_dict()
+                correlated_cpu_ops.groupby("iteration")["index"].count().to_dict()
             )
 
             self.assertTrue("iteration" in df.columns)
