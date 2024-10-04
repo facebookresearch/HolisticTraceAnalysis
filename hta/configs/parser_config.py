@@ -1,10 +1,12 @@
+# pyre-strict
+
 import copy
 from enum import Enum
 from typing import Dict, List, NamedTuple, Optional, Set, Union
 
 
 class ParserBackend(str, Enum):
-    """Tracer parser and laoder backend
+    """Tracer parser and loader backend
     See https://github.com/facebookresearch/HolisticTraceAnalysis/pull/125
     for details on performance and memory usage.
     """
@@ -22,6 +24,14 @@ class ValueType(Enum):
     Float = 2
     String = 3
     Object = 4
+
+
+class TraceType(str, Enum):
+    """TraceType enumerates the possible trace types"""
+
+    Training = "training"
+    TrainingWoProfilerstepAnnot = "training_wo_profilerstep_annot"
+    Inference = "inference"
 
 
 class AttributeSpec(NamedTuple):
@@ -56,6 +66,12 @@ AVAILABLE_ARGS: Dict[str, AttributeSpec] = {
     ),
     "cpu_op::input_type": AttributeSpec(
         "input_type", "Input type", ValueType.Object, "-1"
+    ),
+    "cpu_op::input_strides": AttributeSpec(
+        "input_strides",
+        "Input Strides",
+        ValueType.Object,
+        "-1",
     ),
     "cpu_op::sequence_number": AttributeSpec(
         "sequence", "Sequence number", ValueType.Int, -1
@@ -112,7 +128,7 @@ AVAILABLE_ARGS: Dict[str, AttributeSpec] = {
         "out_msg_nelems", "Out msg nelems", ValueType.Int, 0
     ),
     "nccl::group_size": AttributeSpec("group_size", "Group size", ValueType.Int, 0),
-    "nccl::dtype": AttributeSpec("dtype", "dtype", ValueType.String, ""),
+    "nccl::dtype": AttributeSpec("msg_dtype", "dtype", ValueType.String, ""),
     "nccl::in_split_size": AttributeSpec(
         "in_split_size", "In split size", ValueType.Object, "[]"
     ),
@@ -128,6 +144,7 @@ AVAILABLE_ARGS: Dict[str, AttributeSpec] = {
     "nccl::process_group_ranks": AttributeSpec(
         "process_group_ranks", "Process Group Ranks", ValueType.Object, "[]"
     ),
+    "nccl::rank": AttributeSpec("process_rank", "Rank", ValueType.Int, -1),
 }
 
 
@@ -149,7 +166,8 @@ class ParserConfig:
     """
 
     ARGS_INPUT_SHAPE: List[AttributeSpec] = [
-        AVAILABLE_ARGS[k] for k in ["cpu_op::input_dims", "cpu_op::input_type"]
+        AVAILABLE_ARGS[k]
+        for k in ["cpu_op::input_dims", "cpu_op::input_type", "cpu_op::input_strides"]
     ]
     ARGS_BANDWIDTH: List[AttributeSpec] = [
         AVAILABLE_ARGS[k] for k in ["data::bytes", "data::bandwidth"]
@@ -163,17 +181,39 @@ class ParserConfig:
     ARGS_COMPLETE: List[AttributeSpec] = [
         AVAILABLE_ARGS[k] for k in AVAILABLE_ARGS if not k.startswith("info")
     ]
+    ARGS_INFO: List[AttributeSpec] = [
+        AVAILABLE_ARGS[k] for k in ["info::labels", "info::name", "info::sort_index"]
+    ]
+    ARGS_COMMUNICATION: List[AttributeSpec] = [
+        AVAILABLE_ARGS[k]
+        for k in [
+            "nccl::collective_name",
+            "nccl::in_msg_nelems",
+            "nccl::out_msg_nelems",
+            "nccl::dtype",
+            "nccl::group_size",
+            "nccl::rank",
+            "nccl::in_split_size",
+            "nccl::out_split_size",
+        ]
+    ]
     ARGS_DEFAULT: List[AttributeSpec] = (
         ARGS_MINIMUM
         + ARGS_BANDWIDTH
         + ARGS_SYNC
+        + ARGS_INPUT_SHAPE
         + [AVAILABLE_ARGS["index::external_id"]]
     )
 
-    def __init__(self, args: Optional[List[AttributeSpec]] = None):
+    def __init__(
+        self,
+        args: Optional[List[AttributeSpec]] = None,
+        user_provide_trace_type: Optional[TraceType] = None,
+    ) -> None:
         self.args: List[AttributeSpec] = args if args else self.get_default_args()
         self.parser_backend: Optional[ParserBackend] = None
         self.trace_memory: bool = False
+        self.user_provide_trace_type: Optional[TraceType] = user_provide_trace_type
 
     @classmethod
     def get_default_cfg(cls) -> "ParserConfig":
@@ -190,6 +230,10 @@ class ParserConfig:
     @classmethod
     def get_default_args(cls) -> List[AttributeSpec]:
         return cls.ARGS_DEFAULT.copy()
+
+    @classmethod
+    def get_info_args(cls) -> List[AttributeSpec]:
+        return cls.ARGS_INFO.copy()
 
     def set_args(self, args: List[AttributeSpec]) -> None:
         if args != self.args:
@@ -208,6 +252,10 @@ class ParserConfig:
 
     def set_parser_backend(self, parser_backend: ParserBackend) -> None:
         self.parser_backend = parser_backend
+
+    @staticmethod
+    def enable_communication_args() -> None:
+        _DEFAULT_PARSER_CONFIG.add_args(ParserConfig.ARGS_COMMUNICATION)
 
 
 # Define a global ParserConfig variable for internal use. To access this variable,
