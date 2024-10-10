@@ -122,7 +122,7 @@ def _check_args(
 
 
 def validate_trace_format(
-    trace_file_path: str, level: str = "standard"
+    trace_file_path: str, level: str = "standard", ignore_missing_arguments: bool = True
 ) -> Tuple[bool, Dict[str, Any]]:
     """Validate validate_trace_format
 
@@ -163,7 +163,7 @@ def validate_trace_format(
             else:
                 errors["args_data_type"] = f"args is not a dict: {args}"
 
-    if len(skipped_arguments) > 0:
+    if len(skipped_arguments) > 0 and not ignore_missing_arguments:
         errors["skipped_arguments"] = skipped_arguments
 
     if len(type_violations) > 0:
