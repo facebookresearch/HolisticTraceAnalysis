@@ -2,7 +2,9 @@
 
 import copy
 from enum import Enum
-from typing import Dict, List, NamedTuple, Optional, Set, Union
+from typing import Dict, List, Optional, Set
+
+from hta.configs.default_values import AttributeSpec, ValueType
 
 
 class ParserBackend(str, Enum):
@@ -17,37 +19,12 @@ class ParserBackend(str, Enum):
     IJSON_BATCH_AND_COMPRESS = "ijson_batch_and_compress"
 
 
-class ValueType(Enum):
-    """ValueType enumerates the possible data types for the attribute values."""
-
-    Int = 1
-    Float = 2
-    String = 3
-    Object = 4
-
-
 class TraceType(str, Enum):
     """TraceType enumerates the possible trace types"""
 
     Training = "training"
     TrainingWoProfilerstepAnnot = "training_wo_profilerstep_annot"
     Inference = "inference"
-
-
-class AttributeSpec(NamedTuple):
-    """AttributeSpec specifies what an attribute looks like and how to parse it.
-
-    An AttributeSpec instance has the following fields:
-    + name: the column name used in the output dataframe.
-    + raw_name: the key used in args dict object in the original json trace.
-    + value_type: the expected data type for the values of the attribute.
-    + default_value: what value will be used for missing attribute values.
-    """
-
-    name: str
-    raw_name: str
-    value_type: ValueType
-    default_value: Union[int, float, str, object]
 
 
 AVAILABLE_ARGS: Dict[str, AttributeSpec] = {
