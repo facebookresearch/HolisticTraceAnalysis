@@ -28,7 +28,7 @@ class TraceType(str, Enum):
     Inference = "inference"
 
 
-DEFAULT_PARSE_VERSION: YamlVersion = YamlVersion.v1_0_0
+DEFAULT_PARSE_VERSION: YamlVersion = YamlVersion.v2_0_0
 
 AVAILABLE_ARGS: Dict[str, AttributeSpec] = parse_event_args_yaml(
     DEFAULT_PARSE_VERSION

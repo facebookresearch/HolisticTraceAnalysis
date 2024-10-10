@@ -15,6 +15,7 @@ from hta.configs.default_values import AttributeSpec, EventArgs, ValueType
 
 class YamlVersion(Enum):
     v1_0_0 = "1.0.0"
+    v2_0_0 = "2.0.0"
 
 
 ARGS_INPUT_SHAPE_FUNC: Callable[[Dict[str, AttributeSpec]], List[AttributeSpec]] = (

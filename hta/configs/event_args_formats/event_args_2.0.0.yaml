@@ -1,0 +1,210 @@
+version: 2.0.0
+
+# release log: Change the type of memory bandwidth (GB/s) to float
+
+AVAILABLE_ARGS:
+  index::ev_idx:
+    name: ev_idx
+    raw_name: Ev Idx
+    value_type: Int
+    default_value: -1
+  index::external_id:
+    name: external_id
+    raw_name: External id
+    value_type: Int
+    default_value: -1
+  cpu_op::concrete_inputs:
+    name: concrete_inputs
+    raw_name: Concrete Inputs
+    value_type: Int
+    default_value: -1
+  cpu_op::fwd_thread:
+    name: fwd_thread_id
+    raw_name: Fwd thread id
+    value_type: Int
+    default_value: -1
+  cpu_op::input_dims:
+    name: input_dims
+    raw_name: Input Dims
+    value_type: Object
+    default_value: "-1"
+  cpu_op::input_type:
+    name: input_type
+    raw_name: Input type
+    value_type: Object
+    default_value: "-1"
+  cpu_op::input_strides:
+    name: input_strides
+    raw_name: Input Strides
+    value_type: Object
+    default_value: "-1"
+  cpu_op::sequence_number:
+    name: sequence
+    raw_name: Sequence number
+    value_type: Int
+    default_value: -1
+  cpu_op::kernel_backend:
+    name: kernel_backend
+    raw_name: kernel_backend
+    value_type: String
+    default_value: ""
+  correlation::cbid:
+    name: cbid
+    raw_name: cbid
+    value_type: Int
+    default_value: -1
+  correlation::cpu_gpu:
+    name: correlation
+    raw_name: correlation
+    value_type: Int
+    default_value: -1
+  sm::blocks:
+    name: blocks_per_sm
+    raw_name: blocks per SM
+    value_type: Int
+    default_value: -1
+  sm::occupancy:
+    name: est_occupancy
+    raw_name: est. achieved occupancy %
+    value_type: Int
+    default_value: -1
+  sm::warps:
+    name: warps_per_sm
+    raw_name: warps per SM
+    value_type: Int
+    default_value: -1
+  data::bytes:
+    name: bytes
+    raw_name: bytes
+    value_type: Int
+    default_value: -1
+  data::bandwidth:
+    name: memory_bw_gbps
+    raw_name: memory bandwidth (GB/s)
+    value_type: Float
+    default_value: -1
+  cuda::context:
+    name: context
+    raw_name: context
+    value_type: Int
+    default_value: -1
+  cuda::device:
+    name: device
+    raw_name: device
+    value_type: Int
+    default_value: -1
+  cuda::stream:
+    name: stream
+    raw_name: stream
+    value_type: Int
+    default_value: -1
+  kernel::queued:
+    name: queued
+    raw_name: queued
+    value_type: Int
+    default_value: -1
+  kernel::shared_memory:
+    name: shared_memory
+    raw_name: shared memory
+    value_type: Int
+    default_value: -1
+  threads::block:
+    name: block
+    raw_name: block
+    value_type: Object
+    default_value: "-1"
+  threads::grid:
+    name: grid
+    raw_name: grid
+    value_type: Int
+    default_value: -1
+  threads::registers:
+    name: registers_per_thread
+    raw_name: registers per thread
+    value_type: Int
+    default_value: -1
+  cuda_sync::stream:
+    name: wait_on_stream
+    raw_name: wait_on_stream
+    value_type: Int
+    default_value: -1
+  cuda_sync::event:
+    name: wait_on_cuda_event_record_corr_id
+    raw_name: wait_on_cuda_event_record_corr_id
+    value_type: Int
+    default_value: -1
+  info::labels:
+    name: labels
+    raw_name: labels
+    value_type: String
+    default_value: ""
+  info::name:
+    name: name
+    raw_name: name
+    value_type: Int
+    default_value: -1
+  info::op_count:
+    name: op_count
+    raw_name: Op count
+    value_type: Int
+    default_value: -1
+  info::sort_index:
+    name: sort_index
+    raw_name: sort_index
+    value_type: Int
+    default_value: -1
+  nccl::collective_name:
+    name: collective_name
+    raw_name: Collective name
+    value_type: String
+    default_value: ""
+  nccl::in_msg_nelems:
+    name: in_msg_nelems
+    raw_name: In msg nelems
+    value_type: Int
+    default_value: 0
+  nccl::out_msg_nelems:
+    name: out_msg_nelems
+    raw_name: Out msg nelems
+    value_type: Int
+    default_value: 0
+  nccl::group_size:
+    name: group_size
+    raw_name: Group size
+    value_type: Int
+    default_value: 0
+  nccl::dtype:
+    name: msg_dtype
+    raw_name: dtype
+    value_type: String
+    default_value: ""
+  nccl::in_split_size:
+    name: in_split_size
+    raw_name: In split size
+    value_type: Object
+    default_value: "[]"
+  nccl::out_split_size:
+    name: out_split_size
+    raw_name: Out split size
+    value_type: Object
+    default_value: "[]"
+  nccl::process_group_name:
+    name: process_group_name
+    raw_name: Process Group Name
+    value_type: String
+    default_value: ""
+  nccl::process_group_desc:
+    name: process_group_desc
+    raw_name: Process Group Description
+    value_type: String
+    default_value: ""
+  nccl::process_group_ranks:
+    name: process_group_ranks
+    raw_name: Process Group Ranks
+    value_type: Object
+    default_value: "[]"
+  nccl::rank:
+    name: process_rank
+    raw_name: Rank
+    value_type: Int
+    default_value: -1
