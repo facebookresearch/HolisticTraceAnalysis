@@ -56,7 +56,7 @@ AVAILABLE_ARGS: Dict[str, AttributeSpec] = {
         "external_id", "External id", ValueType.Int, -1
     ),
     "cpu_op::concrete_inputs": AttributeSpec(
-        "concrete_inputs", "Concrete Inputs", ValueType.Int, -1
+        "concrete_inputs", "Concrete Inputs", ValueType.Object, "[]"
     ),
     "cpu_op::fwd_thread": AttributeSpec(
         "fwd_thread_id", "Fwd thread id", ValueType.Int, -1
@@ -84,11 +84,13 @@ AVAILABLE_ARGS: Dict[str, AttributeSpec] = {
     "correlation::cpu_gpu": AttributeSpec(
         "correlation", "correlation", ValueType.Int, -1
     ),
-    "sm::blocks": AttributeSpec("blocks_per_sm", "blocks per SM", ValueType.Object, "[]"),
+    "sm::blocks": AttributeSpec(
+        "blocks_per_sm", "blocks per SM", ValueType.Object, "[]"
+    ),
     "sm::occupancy": AttributeSpec(
         "est_occupancy", "est. achieved occupancy %", ValueType.Int, -1
     ),
-    "sm::warps": AttributeSpec("warps_per_sm", "warps per SM", ValueType.Int, -1),
+    "sm::warps": AttributeSpec("warps_per_sm", "warps per SM", ValueType.Float, 0.0),
     "data::bytes": AttributeSpec("bytes", "bytes", ValueType.Int, -1),
     "data::bandwidth": AttributeSpec(
         "memory_bw_gbps", "memory bandwidth (GB/s)", ValueType.Float, 0.0
@@ -100,8 +102,8 @@ AVAILABLE_ARGS: Dict[str, AttributeSpec] = {
     "kernel::shared_memory": AttributeSpec(
         "shared_memory", "shared memory", ValueType.Int, -1
     ),
-    "threads::block": AttributeSpec("block", "block", ValueType.Object, "-1"),
-    "threads::grid": AttributeSpec("grid", "grid", ValueType.Int, -1),
+    "threads::block": AttributeSpec("block", "block", ValueType.Object, "[]"),
+    "threads::grid": AttributeSpec("grid", "grid", ValueType.Object, "[]"),
     "threads::registers": AttributeSpec(
         "registers_per_thread", "registers per thread", ValueType.Int, -1
     ),
