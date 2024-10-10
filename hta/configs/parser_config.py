@@ -84,14 +84,14 @@ AVAILABLE_ARGS: Dict[str, AttributeSpec] = {
     "correlation::cpu_gpu": AttributeSpec(
         "correlation", "correlation", ValueType.Int, -1
     ),
-    "sm::blocks": AttributeSpec("blocks_per_sm", "blocks per SM", ValueType.Int, -1),
+    "sm::blocks": AttributeSpec("blocks_per_sm", "blocks per SM", ValueType.Object, "[]"),
     "sm::occupancy": AttributeSpec(
         "est_occupancy", "est. achieved occupancy %", ValueType.Int, -1
     ),
     "sm::warps": AttributeSpec("warps_per_sm", "warps per SM", ValueType.Int, -1),
     "data::bytes": AttributeSpec("bytes", "bytes", ValueType.Int, -1),
     "data::bandwidth": AttributeSpec(
-        "memory_bw_gbps", "memory bandwidth (GB/s)", ValueType.Int, -1
+        "memory_bw_gbps", "memory bandwidth (GB/s)", ValueType.Float, 0.0
     ),
     "cuda::context": AttributeSpec("context", "context", ValueType.Int, -1),
     "cuda::device": AttributeSpec("device", "device", ValueType.Int, -1),

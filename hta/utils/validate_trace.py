@@ -105,17 +105,20 @@ def _check_args(
     for k, v in args.items():
         if k not in arg_type_map:
             skipped_arguments[k] += 1
+            continue
         else:
             # pyre-ignore[23]
             arg_type, arg_value = arg_type_map.get(k)
-            if arg_type != ValueType.Object and isinstance(v, type(arg_value)):
+            if arg_type != ValueType.Object:
+                if isinstance(v, type(arg_value)) or isinstance(v, int) and isinstance(arg_value, float):
+                    continue
                 type_violations[
                     k
                 ] = f"key={k}: value={v} type={type(v)}; expect type={arg_type.name} default value={arg_value}"
 
 
 def validate_trace_format(
-    trace_file_path: str, level: str = "default"
+    trace_file_path: str, level: str = "standard"
 ) -> Tuple[bool, Dict[str, Any]]:
     """Validate validate_trace_format
 
@@ -165,3 +168,61 @@ def validate_trace_format(
     ok = len(errors) == 0
 
     return ok, errors
+
+
+"""
+Usage:
+    python3 hta/utils/validate_trace.py <trace_file> --level <level>
+    python hta/utils/validate_trace.py tests/data/h100/h100_trace.json.gz --level complete
+
+Sampel output:
+
+python hta/utils/validate_trace.py tests/data/h100/h100_trace.json.gz --level complete
+Validation result: False
+----
+Error Type: skipped_arguments
+key=name count=16
+key=labels count=9
+key=sort_index count=17
+key=Op count count=1
+----
+Error Type: type_violations
+key=Concrete Inputs count=key=Concrete Inputs: value=['', '0'] type=<class 'list'>; expect type=Int default value=-1
+key=warps per SM count=key=warps per SM: value=15.515152 type=<class 'float'>; expect type=Int default value=-1
+key=grid count=key=grid: value=[512, 1, 1] type=<class 'list'>; expect type=Int default value=-1
+----
+
+"""
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Validate trace format",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument(
+        "trace_file",
+        type=str,
+        help="The path to the trace file to be validated.",
+    )
+    parser.add_argument(
+        "--level",
+        type=str,
+        default="standard",
+        choices=["minimal", "standard", "complete"],
+        help="The level of validation",
+    )
+    args = parser.parse_args()
+
+    ok, errors = validate_trace_format(args.trace_file, args.level)
+    print(f"Validation result: {ok}")
+    print("----")
+    if not ok:
+        for err_type, err_data in errors.items():
+            print(f"Error Type: {err_type}")
+            if isinstance(err_data, dict):
+                for k, v in err_data.items():
+                    print(f"key={k} count={v}")
+            else:
+                print(f"Error Data: {err_data}")
+            print("----")
