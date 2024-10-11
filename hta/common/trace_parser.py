@@ -22,12 +22,8 @@ import pandas as pd
 from hta.common.trace_symbol_table import TraceSymbolTable
 
 from hta.configs.config import logger
-from hta.configs.parser_config import (
-    AttributeSpec,
-    ParserBackend,
-    ParserConfig,
-    ValueType,
-)
+from hta.configs.default_values import ValueType
+from hta.configs.parser_config import AttributeSpec, ParserBackend, ParserConfig
 from hta.utils.utils import normalize_gpu_stream_numbers
 
 # from memory_profiler import profile
