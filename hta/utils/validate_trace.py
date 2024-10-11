@@ -8,7 +8,8 @@ from typing import Any, Dict, List, Tuple
 
 import pandas as pd
 from hta.common.trace_file import read_trace
-from hta.configs.parser_config import AttributeSpec, ParserConfig, ValueType
+from hta.configs.default_values import ValueType
+from hta.configs.parser_config import AttributeSpec, ParserConfig
 
 
 def get_argument_spec(level: str = "default") -> List[AttributeSpec]:
