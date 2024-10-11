@@ -5,6 +5,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 #### Added
+- Add trace format validator
 - Added multiple trace filter classes and demos.
 - Added enhanced trace call stack graph implementation.
 - Added memory timeline view.
