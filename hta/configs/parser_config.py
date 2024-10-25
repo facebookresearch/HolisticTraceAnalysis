@@ -32,7 +32,7 @@ class TraceType(str, Enum):
     Inference = "inference"
 
 
-DEFAULT_PARSE_VERSION = v1_0_0
+DEFAULT_PARSE_VERSION: YamlVersion = v1_0_0
 DEFAULT_VER_EVENT_ARGS: EventArgs = parse_event_args_yaml(DEFAULT_PARSE_VERSION)
 AVAILABLE_ARGS: Dict[str, AttributeSpec] = DEFAULT_VER_EVENT_ARGS.AVAILABLE_ARGS
 
