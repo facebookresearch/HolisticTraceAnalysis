@@ -3,9 +3,9 @@
 # pyre-strict
 
 
-import importlib.resources
 import re
 from functools import lru_cache
+from pathlib import Path
 from typing import Callable, Dict, List, NamedTuple
 
 import yaml
@@ -94,11 +94,10 @@ ARGS_DEFAULT_FUNC: Callable[[Dict[str, AttributeSpec]], List[AttributeSpec]] = (
 
 @lru_cache()
 def parse_event_args_yaml(version: YamlVersion) -> EventArgs:
-    local_yaml_data_filepath = str(
-        importlib.resources.files(__package__).joinpath(
-            f"event_args_{version.get_version_str()}.yaml",
-        )
-    )
+    pkg_path: Path = Path(__file__).parent
+    yaml_file = f"event_args_{version.get_version_str()}.yaml"
+    local_yaml_data_filepath = str(pkg_path.joinpath("event_args_formats", yaml_file))
+
     with open(local_yaml_data_filepath, "r") as f:
         yaml_content = yaml.safe_load(f)
 
