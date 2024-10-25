@@ -117,6 +117,7 @@ def _check_args(
                     and isinstance(arg_value, float)
                 ):
                     continue
+
                 type_violations[k] = (
                     f"key={k}: value={v} type={type(v)}; expect_type='{arg_type.name}' default_value={arg_value}"
                 )
