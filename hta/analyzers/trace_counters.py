@@ -234,11 +234,13 @@ class TraceCounters:
 
                 dur_at_max_queue_len = df.dur.sum()
 
-                logger.info(
-                    f"Rank={rank}, stream={stream}, total dur at max_queue = {dur_at_max_queue_len}"
-                )
                 rel_dur_at_max_queue_len = (
                     dur_at_max_queue_len * 1.0 / t.get_trace_duration(rank)
+                )
+                logger.info(
+                    f"Rank={rank}, stream={stream}, total dur at max_queue= {dur_at_max_queue_len} (ns)"
+                    f" trace_duration = {t.get_trace_duration(rank)} (ns)"
+                    f" rel_dur_at_max_queue_len = {rel_dur_at_max_queue_len} (ns)"
                 )
                 result[rank] = [stream, dur_at_max_queue_len, rel_dur_at_max_queue_len]
 
