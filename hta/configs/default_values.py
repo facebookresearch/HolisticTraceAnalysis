@@ -2,6 +2,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+import re
 from enum import Enum
 from typing import Dict, List, NamedTuple, Union
 
@@ -15,6 +16,24 @@ DF_SYMBOL_COLUMNS: List[str] = ["cat", "name"]
 # Runtime configurations
 IS_DEBUG_ENABLED: bool = True
 MAX_NUM_PROCESSES: int = 32
+
+
+class YamlVersion(NamedTuple):
+    major: int
+    minor: int
+    patch: int
+
+    def get_version_str(self) -> str:
+        return f"{self.major}.{self.minor}.{self.patch}"
+
+    @staticmethod
+    def from_string(version_str: str) -> "YamlVersion":
+        pattern = r"^(\d+)\.(\d+)\.(\d+)$"
+        match = re.match(pattern, version_str)
+        if not match:
+            raise ValueError(f"Invalid version string: {version_str}")
+        major, minor, patch = map(int, match.groups())
+        return YamlVersion(major, minor, patch)
 
 
 class ValueType(Enum):
@@ -40,6 +59,9 @@ class AttributeSpec(NamedTuple):
     raw_name: str
     value_type: ValueType
     default_value: Union[int, float, str, object]
+    # This property allows for addition of fields that do
+    # not break backwards compatibility with other fields (minor version bumps).
+    min_supported_version: YamlVersion
 
 
 class EventArgs(NamedTuple):

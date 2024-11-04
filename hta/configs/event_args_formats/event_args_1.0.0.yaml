@@ -46,6 +46,12 @@ AVAILABLE_ARGS:
     raw_name: kernel_backend
     value_type: String
     default_value: ""
+  cpu_op::kernel_hash:
+    name: kernel_hash
+    raw_name: kernel_hash
+    value_type: String
+    default_value: ""
+    min_supported_version: "1.1.0"
   correlation::cbid:
     name: cbid
     raw_name: cbid
@@ -164,6 +170,16 @@ AVAILABLE_ARGS:
   nccl::out_msg_nelems:
     name: out_msg_nelems
     raw_name: Out msg nelems
+    value_type: Int
+    default_value: 0
+  nccl::in_msg_size:
+    name: in_msg_size
+    raw_name: In msg size
+    value_type: Int
+    default_value: 0
+  nccl::out_msg_size:
+    name: out_msg_size
+    raw_name: Out msg size
     value_type: Int
     default_value: 0
   nccl::group_size:

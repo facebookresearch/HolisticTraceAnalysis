@@ -149,6 +149,13 @@ class ParserConfig:
         ).ARGS_COMMUNICATION
         ParserConfig.ARGS_DEFAULT = parse_event_args_yaml(version).ARGS_DEFAULT
 
+    @staticmethod
+    def show_available_args():
+        from pprint import pprint
+
+        global AVAILABLE_ARGS
+        pprint(AVAILABLE_ARGS)
+
 
 # Define a global ParserConfig variable for internal use. To access this variable,
 # Clients should use ParserConfig.get_default_cfg and ParserConfig.set_default_cfg.

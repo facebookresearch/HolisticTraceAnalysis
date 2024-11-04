@@ -356,6 +356,7 @@ class TraceParseConfigTestCase(unittest.TestCase):
         trace_df = self.triton_t.get_trace(0)
         self.assertGreater(len(trace_df), 0)
         self.assertTrue("kernel_backend" in trace_df.columns)
+        self.assertTrue("kernel_hash" in trace_df.columns)
 
         triton_cpu_ops = trace_df[trace_df.kernel_backend.ne("")]
         # We have one triton cpu op
@@ -365,6 +366,10 @@ class TraceParseConfigTestCase(unittest.TestCase):
         self.assertEqual(triton_op["s_name"], "triton_poi_fused_add_cos_sin_0")
         self.assertEqual(triton_op["s_cat"], "cpu_op")
         self.assertEqual(triton_op["kernel_backend"], "triton")
+        self.assertEqual(
+            triton_op["kernel_hash"],
+            "cqaokwf2bph4egogzevc22vluasiyuui4i54zpemp6knbsggfbuu",
+        )
 
 
 if __name__ == "__main__":  # pragma: no cover

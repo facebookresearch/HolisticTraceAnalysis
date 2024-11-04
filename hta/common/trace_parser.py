@@ -23,7 +23,12 @@ from hta.common.trace_symbol_table import TraceSymbolTable
 
 from hta.configs.config import logger
 from hta.configs.default_values import ValueType
-from hta.configs.parser_config import AttributeSpec, ParserBackend, ParserConfig
+from hta.configs.parser_config import (
+    AttributeSpec,
+    DEFAULT_PARSE_VERSION,
+    ParserBackend,
+    ParserConfig,
+)
 from hta.utils.utils import normalize_gpu_stream_numbers
 
 # from memory_profiler import profile
@@ -260,7 +265,16 @@ def _compress_df(
         )
         # args_to_keep = args_to_keep.union(counter_names)
         cfg.add_args(
-            [AttributeSpec(name, name, ValueType.Int, -1) for name in counter_names]
+            [
+                AttributeSpec(
+                    name,
+                    name,
+                    ValueType.Int,
+                    -1,
+                    min_supported_version=DEFAULT_PARSE_VERSION,
+                )
+                for name in counter_names
+            ]
         )
         logger.info(f"counter_names={counter_names}")
         logger.info(f"args={cfg.get_args()}")
