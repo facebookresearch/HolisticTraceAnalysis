@@ -3,32 +3,13 @@
 # pyre-strict
 
 
-import re
 from functools import lru_cache
 from pathlib import Path
-from typing import Callable, Dict, List, NamedTuple
+from typing import Callable, Dict, List
 
 import yaml
 
-from hta.configs.default_values import AttributeSpec, EventArgs, ValueType
-
-
-class YamlVersion(NamedTuple):
-    major: int
-    minor: int
-    patch: int
-
-    def get_version_str(self) -> str:
-        return f"{self.major}.{self.minor}.{self.patch}"
-
-    @staticmethod
-    def from_string(version_str: str) -> "YamlVersion":
-        pattern = r"^(\d+)\.(\d+)\.(\d+)$"
-        match = re.match(pattern, version_str)
-        if not match:
-            raise ValueError(f"Invalid version string: {version_str}")
-        major, minor, patch = map(int, match.groups())
-        return YamlVersion(major, minor, patch)
+from hta.configs.default_values import AttributeSpec, EventArgs, ValueType, YamlVersion
 
 
 # Yaml version will be mapped to the yaml files defined under the "event_args_formats" folder
@@ -110,6 +91,11 @@ def parse_event_args_yaml(version: YamlVersion) -> EventArgs:
             raw_name=value["raw_name"],
             value_type=parse_value_type(value["value_type"]),
             default_value=value["default_value"],
+            min_supported_version=(
+                YamlVersion.from_string(value["min_supported_version"])
+                if "min_supported_version" in value
+                else version
+            ),
         )
         for k, value in yaml_content["AVAILABLE_ARGS"].items()
     }
