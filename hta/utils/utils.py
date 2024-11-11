@@ -76,7 +76,8 @@ def is_memory_kernel(name: str) -> bool:
     Returns:
         A boolean indicating if the kernel is an IO kernel.
     """
-    return "Memcpy" in name or "Memset" in name
+    memory_kernel_pattern = re.compile(r"(^Memcpy)|(^Memset)|(^dma)")
+    return memory_kernel_pattern.match(name) is not None
 
 
 def is_compute_kernel(name: str) -> bool:
