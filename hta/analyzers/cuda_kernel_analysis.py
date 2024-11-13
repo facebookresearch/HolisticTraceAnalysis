@@ -392,11 +392,18 @@ class CudaKernelAnalysis:
             cuda_launch_kernel_ex_c_id = sym_index.get("cudaLaunchKernelExC", None)
             cuda_memcpy_async_id = sym_index.get("cudaMemcpyAsync", None)
             cuda_memset_async_id = sym_index.get("cudaMemsetAsync", None)
+            mtia_launch_kernel_id = sym_index.get(
+                "runFunction - job_prep_and_submit_for_execution", None
+            )
 
             # get correlation id's of cudaLaunchKernel events
+            launch_ids = [
+                cuda_launch_kernel_id,
+                cuda_launch_kernel_ex_c_id,
+                mtia_launch_kernel_id,
+            ]
             cuda_launch_kernel_correlation_series: pd.Series = trace_df[
-                (trace_df["name"] == cuda_launch_kernel_id)
-                | (trace_df["name"] == cuda_launch_kernel_ex_c_id)
+                trace_df["name"].isin(launch_ids)
             ].correlation
 
             # whether to use memory events - cudaMemsetAsync and cudaMemcpyAsync.
