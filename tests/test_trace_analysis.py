@@ -288,6 +288,49 @@ class TraceAnalysisTestCase(unittest.TestCase):
             msg=f"queue_full_df = {queue_full_df}",
         )
 
+    def test_get_mtia_queue_length_stats(self):
+        qd_summary = self.mtia_single_rank_trace_t.get_queue_length_summary(ranks=[0])
+        streams = qd_summary.index.to_list()
+        self.assertEqual(streams, list(zip([0] * 2, [1, 102])))
+
+        stream102_stats = qd_summary.loc[0, 102]["queue_length"].to_dict()
+        expected_stats = {
+            "count": 6.0,
+            "mean": 0.5,
+            "std": 0.547723,
+            "min": 0.0,
+            "25%": 0.0,
+            "50%": 0.5,
+            "75%": 1.0,
+            "max": 1.0,
+        }
+        for key, expval in expected_stats.items():
+            self.assertAlmostEqual(
+                stream102_stats[key],
+                expval,
+                places=2,
+                msg=f"Stream 102 stats mismatch key={key}",
+            )
+
+        queue_len_ts_dict = self.mtia_single_rank_trace_t.get_queue_length_time_series()
+        queue_full_df = (
+            self.mtia_single_rank_trace_t.get_time_spent_blocked_on_full_queue(
+                queue_len_ts_dict, max_queue_length=1  # Just a hack for testing
+            )
+        )
+        self.assertEqual(len(queue_full_df), 1)
+        self.assertAlmostEqual(
+            queue_full_df.loc[0]["duration_at_max_queue_length"],
+            1060.0,
+            msg=f"queue_full_df = {queue_full_df}",
+        )
+        self.assertAlmostEqual(
+            queue_full_df.loc[0]["relative_duration_at_max_queue_length"],
+            0.000079,
+            places=5,
+            msg=f"queue_full_df = {queue_full_df}",
+        )
+
     @patch.object(hta.common.trace.Trace, "write_raw_trace")
     def test_generate_trace_with_counters(self, mock_write_trace):
         # Use a trace with some kernels missing attribution to operators
