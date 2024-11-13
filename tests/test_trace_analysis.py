@@ -47,6 +47,10 @@ class TraceAnalysisTestCase(unittest.TestCase):
         )
         cls.rank_non_gpu_t = TraceAnalysis(trace_dir=cls.rank_non_gpu_trace_dir)
         cls.h100_trace_t = TraceAnalysis(trace_dir=cls.h100_trace_dir)
+        cls.mtia_single_rank_dir: str = os.path.join(
+            cls.base_data_dir, "mtia_trace_single_rank/"
+        )
+        cls.mtia_single_rank_trace_t = TraceAnalysis(trace_dir=cls.mtia_single_rank_dir)
 
     def setUp(self):
         self.overlaid_trace_dir = self.base_data_dir
@@ -119,6 +123,17 @@ class TraceAnalysisTestCase(unittest.TestCase):
         self.assertEqual(row["cpu_duration"].item(), 9)
         self.assertEqual(row["gpu_duration"].item(), 3)
         self.assertEqual(row["launch_delay"].item(), 20)
+
+    def test_get_mtia_kernel_launch_stats_inference_single_rank(self):
+        dataframe_list = self.mtia_single_rank_trace_t.get_cuda_kernel_launch_stats(
+            visualize=False
+        )
+        rank_0_df = dataframe_list[0]
+        row = rank_0_df[rank_0_df["correlation"] == 423]
+
+        self.assertEqual(row["cpu_duration"].item(), 435.200)
+        self.assertEqual(row["gpu_duration"].item(), 124.768)
+        self.assertEqual(row["launch_delay"].item(), 340.291)
 
     def test_get_cuda_kernel_launch_stats_for_h100(self):
         dataframe_dict = self.h100_trace_t.get_cuda_kernel_launch_stats(
