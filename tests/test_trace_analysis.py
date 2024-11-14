@@ -232,6 +232,26 @@ class TraceAnalysisTestCase(unittest.TestCase):
             delta=0.01,
         )
 
+    def test_mtia_temporal_breakdown(self):
+        idle_time = self.mtia_single_rank_trace_t.get_temporal_breakdown(
+            visualize=False
+        )
+        self.assertAlmostEqual(
+            idle_time.iloc[0]["idle_time_pctg"],
+            round((5649476.0 * 100) / 13328071, 3),
+            delta=0.01,
+        )
+        self.assertAlmostEqual(
+            idle_time.iloc[0]["compute_time_pctg"],
+            round((7305597.0 * 100 / 13328071), 3),
+            delta=0.01,
+        )
+        self.assertAlmostEqual(
+            idle_time.iloc[0]["non_compute_time_pctg"],
+            round(372998.0 * 100 / 13328071, 3),
+            delta=0.01,
+        )
+
     def test_get_gpu_kernel_breakdown(self):
         (
             kernel_type_breakdown,
@@ -246,6 +266,21 @@ class TraceAnalysisTestCase(unittest.TestCase):
         self.assertEqual(kernel_breakdown.iloc[0]["sum (us)"], 627683)
         self.assertEqual(kernel_breakdown.iloc[151]["kernel_type"], "MEMORY")
         self.assertEqual(kernel_breakdown.iloc[151]["sum (us)"], 1064)
+
+    def test_get_mtia_kernel_breakdown(self):
+        (
+            kernel_type_breakdown,
+            kernel_breakdown,
+        ) = self.mtia_single_rank_trace_t.get_gpu_kernel_breakdown(
+            visualize=False, include_memory_kernels=True
+        )
+
+        self.assertEqual(kernel_type_breakdown.iloc[0]["kernel_type"], "COMPUTATION")
+        self.assertEqual(kernel_type_breakdown.iloc[0]["sum"], 7305597)
+        self.assertEqual(kernel_breakdown.iloc[0]["kernel_type"], "COMPUTATION")
+        self.assertEqual(kernel_breakdown.iloc[0]["sum (us)"], 77283.0)
+        self.assertEqual(kernel_breakdown.iloc[11]["kernel_type"], "MEMORY")
+        self.assertEqual(kernel_breakdown.iloc[11]["sum (us)"], 400892.0)
 
     def test_get_queue_length_stats(self):
         qd_summary = self.vision_transformer_t.get_queue_length_summary(ranks=[0])
