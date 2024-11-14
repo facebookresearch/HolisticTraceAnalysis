@@ -141,11 +141,13 @@ class TraceSymbolTable:
         cuLaunchKernel_id = self.sym_index.get("cuLaunchKernel", self.NULL)
         cudaMemcpyAsync_id = self.sym_index.get("cudaMemcpyAsync", self.NULL)
         cudaMemsetAsync_id = self.sym_index.get("cudaMemsetAsync", self.NULL)
-
+        mtiaLaunchKernel_id = self.sym_index.get(
+            "runFunction - job_prep_and_submit_for_execution", self.NULL
+        )
         return (
             f"((name == {cudaMemsetAsync_id}) or (name == {cudaMemcpyAsync_id}) or "
             f" (name == {cudaLaunchKernel_id}) or (name == {cudaLaunchKernelExC_id})"
-            f" or (name == {cuLaunchKernel_id})) and (index_correlation > 0)"
+            f" or (name == {cuLaunchKernel_id}) or (name == {mtiaLaunchKernel_id})) and (index_correlation > 0)"
         )
 
 
