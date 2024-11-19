@@ -202,6 +202,18 @@ AVAILABLE_ARGS:
     raw_name: Out split size
     value_type: Object
     default_value: "[]"
+  nccl::input_tensors_start:
+    name: input_tensors_start
+    raw_name: Input Tensors start
+    value_type: Object
+    default_value: "[]"
+    min_supported_version: "1.2.0"
+  nccl::output_tensors_start:
+    name: output_tensors_start
+    raw_name: Output Tensors start
+    value_type: Object
+    default_value: "[]"
+    min_supported_version: "1.2.0"
   nccl::process_group_name:
     name: process_group_name
     raw_name: Process Group Name
