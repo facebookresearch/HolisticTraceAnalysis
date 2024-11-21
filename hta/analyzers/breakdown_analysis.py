@@ -527,6 +527,7 @@ class BreakdownAnalysis:
             "Memset",
             "gpu_memcpy",
             "Memcpy",
+            "mtia_ccp_events",
         ]
         sym_id_map = t.symbol_table.get_sym_id_map()
         kernel_cat_ids = [sym_id_map.get(cat, -1000) for cat in kernel_cats]

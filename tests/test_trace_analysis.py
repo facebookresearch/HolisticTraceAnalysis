@@ -453,6 +453,39 @@ class TraceAnalysisTestCase(unittest.TestCase):
                 msg=f"Stream 7 idle stats mismatch key={key}",
             )
 
+    def test_get_mtia_idle_time_breakdown(self):
+        (
+            idle_time_df,
+            idle_interval_df,
+        ) = self.mtia_single_rank_trace_t.get_idle_time_breakdown(
+            ranks=[0], visualize=False, show_idle_interval_stats=True
+        )
+        ranks = idle_time_df["rank"].unique()
+        streams = idle_time_df.stream.unique()
+        idle_categories = idle_time_df.idle_category.unique()
+
+        self.assertEqual(set(ranks), {0})
+        self.assertEqual(set(streams), {1, 102})
+        self.assertEqual(set(idle_categories), {"host_wait", "kernel_wait", "other"})
+
+        # Ratios sum up to 1.0, 2 streams x 1 ranks = 2.0
+        self.assertAlmostEqual(idle_time_df.idle_time_ratio.sum(), 2.0)
+
+        stream1_stats = idle_time_df[idle_time_df.stream == 1].iloc[0].to_dict()
+        expected_stats = {
+            "idle_category": "host_wait",
+            "idle_time": 417937.0,
+            "stream": 1,
+            "idle_time_ratio": 0.07,
+            "rank": 0,
+        }
+        for key, expval in expected_stats.items():
+            self.assertAlmostEqual(
+                stream1_stats[key],
+                expval,
+                msg=f"Stream 1 idle stats mismatch key={key}",
+            )
+
 
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()
