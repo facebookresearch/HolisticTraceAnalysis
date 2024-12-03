@@ -62,6 +62,14 @@ class ParserConfig:
     ARGS_INFO: List[AttributeSpec] = DEFAULT_VER_EVENT_ARGS.ARGS_INFO
     ARGS_COMMUNICATION: List[AttributeSpec] = DEFAULT_VER_EVENT_ARGS.ARGS_COMMUNICATION
     ARGS_DEFAULT: List[AttributeSpec] = DEFAULT_VER_EVENT_ARGS.ARGS_DEFAULT
+    DEFAULT_MIN_REQUIRED_COLS: List[str] = [
+        "ts",
+        "dur",
+        "name",
+        "cat",
+        "pid",
+        "tid",
+    ]
 
     def __init__(
         self,
@@ -75,6 +83,7 @@ class ParserConfig:
         self.parser_backend: Optional[ParserBackend] = None
         self.trace_memory: bool = False
         self.user_provide_trace_type: Optional[TraceType] = user_provide_trace_type
+        self.min_required_cols: List[str] = self.DEFAULT_MIN_REQUIRED_COLS
 
     @classmethod
     def get_default_cfg(cls) -> "ParserConfig":
@@ -87,6 +96,7 @@ class ParserConfig:
     @classmethod
     def set_default_cfg(cls, cfg: "ParserConfig") -> None:
         _DEFAULT_PARSER_CONFIG.set_args(cfg.get_args())
+        _DEFAULT_PARSER_CONFIG.set_min_required_cols(cfg.get_min_required_cols())
 
     @classmethod
     def get_minimum_args(
@@ -113,6 +123,14 @@ class ParserConfig:
 
     def get_args(self) -> List[AttributeSpec]:
         return self.args
+
+    def set_min_required_cols(self, cols: List[str]) -> None:
+        if cols != self.min_required_cols:
+            self.min_required_cols.clear()
+            self.min_required_cols = cols
+
+    def get_min_required_cols(self) -> List[str]:
+        return self.min_required_cols
 
     def add_args(self, args: List[AttributeSpec]) -> None:
         arg_set: Set[str] = {arg.name for arg in self.args}
