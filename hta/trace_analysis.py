@@ -155,7 +155,7 @@ class TraceAnalysis:
             image_renderer,
         )
 
-    def get_gpu_kernel_breakdown(
+    def get_gpu_user_annotation_breakdown(
         self,
         visualize: bool = True,
         duration_ratio: float = 0.8,
