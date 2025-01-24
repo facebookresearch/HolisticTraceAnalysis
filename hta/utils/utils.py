@@ -63,7 +63,7 @@ def is_comm_kernel(name: str) -> bool:
     Returns:
         A boolean indicating if the kernel is a communication kernel.
     """
-    return "ncclKernel" in name
+    return "nccl" in name
 
 
 def is_memory_kernel(name: str) -> bool:
