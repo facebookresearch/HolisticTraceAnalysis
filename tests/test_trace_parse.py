@@ -313,7 +313,7 @@ class TraceParseConfigTestCase(unittest.TestCase):
         custom_cfg = ParserConfig(ParserConfig.get_minimum_args())
         custom_cfg.add_args(
             [spec for (arg, spec) in AVAILABLE_ARGS.items() if arg.startswith("nccl")]
-            + [AVAILABLE_ARGS["cpu_op::kernel_backend"]]
+            + ParserConfig.ARGS_TRITON_KERNELS
         )
         ParserConfig.set_default_cfg(custom_cfg)
 
