@@ -155,6 +155,31 @@ class TraceAnalysis:
             image_renderer,
         )
 
+    def get_gpu_kernels_with_user_annotations(
+        cls,
+        t: "Trace",
+        rank: int,
+        expand_names: bool = True,
+        shortern_names: bool = True,
+    ) -> Optional[pd.DataFrame]:
+        r"""
+        Provides a full dataframe of GPU kernels and matches them to the corresponding user annotation i.e. user provided training phase. The output is a dataframe with all GPU kernel data alongside a "user_annotation" column.
+
+        Args:
+            rank (int): Specify rank to return GPU kernels for.
+            expand_names (bool): Expand integer name value to full names. This will add
+                the columns "s_name" and "s_user_annotation" to the dataframe.
+            shortern_names (bool): When expand_names is True, this flag enables shortening
+                large CUDA kernel names. This works by removing the '<' template paramters etc.
+
+        Returns:
+            pd.Dataframe:
+                The returned dataframe has all trace columns along with "user_annotation", 
+                and optionally "s_user_annotation" column.
+
+        Note: This API is per rank, and does not have any visualization components
+        """
+
     def get_temporal_breakdown(self, visualize: bool = True) -> pd.DataFrame:
         r"""
         Compute the idle time, compute time and non-compute time for each rank. Time is measured in
