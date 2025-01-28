@@ -268,6 +268,7 @@ class TraceAnalysis:
         time_series: Optional[TimeSeriesTypes] = None,
         ranks: Optional[List[int]] = None,
         output_suffix: str = "_with_counters",
+        custom_time_series = None,
     ) -> None:
         r"""
         Adds a set of time series to the trace in order to aid debugging traces. Creates a new trace file
@@ -326,6 +327,9 @@ class TraceAnalysis:
                 counter_name="Memcpy BW",
                 counter_col="memory_bw_gbps",
             )
+        if custom_time_series:
+            add_time_series(**custom_time_series)
+
 
         for rank, ev_list in counter_events.items():
             raw_trace_content = self.t.get_raw_trace_for_one_rank(rank=rank)
