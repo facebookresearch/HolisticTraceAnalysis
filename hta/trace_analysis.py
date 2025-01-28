@@ -20,6 +20,7 @@ from hta.common.constants import CUDA_MAX_LAUNCH_QUEUE_PER_STREAM
 from hta.common.trace import Trace
 from hta.configs.config import logger
 from hta.configs.default_values import DEFAULT_TRACE_DIR
+from hta.analyzers.trace_memory_analysis import MemoryAnalysis
 
 
 class TimeSeriesTypes(Flag):
@@ -659,3 +660,26 @@ class TraceAnalysis:
             only_show_critical_events,
             show_all_edges,
         )
+
+    def get_memory_timeline(self, rank: Optional[int] = None, visualize: bool = True) -> pd.DataFrame:
+        """Get memory usage timeline
+
+        This function analyzes memory allocation events in the trace to produce a
+        timeline of memory usage including both allocated and reserved memory.
+
+        Args:
+            rank (Optional[int]): Analyze specific rank. If None, use first available rank.
+            visualize (bool): Whether to display the memory timeline plot. Default=True.
+
+        Returns:
+            pd.DataFrame: DataFrame containing memory events with columns:
+                - ts: timestamp
+                - device_id: Device ID
+                - device_type: Device type (1=CPU, 2=CUDA)
+                - bytes_delta: Change in bytes
+                - total_allocated: Total allocated memory
+                - total_reserved: Total reserved memory
+                - addr: Memory address
+        """
+        analyzer = MemoryAnalysis(self.t)
+        return analyzer.get_memory_timeline(rank=rank, visualize=visualize)
