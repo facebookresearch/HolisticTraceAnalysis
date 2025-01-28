@@ -53,6 +53,9 @@ def normalize_path(path: str) -> str:
     return normalized_path
 
 
+NCCL_KERNEL_RE = re.compile(r"^nccl.*Kernel")
+
+
 def is_comm_kernel(name: str) -> bool:
     """
     Check if a given GPU kernel is a communication kernel.
@@ -63,7 +66,10 @@ def is_comm_kernel(name: str) -> bool:
     Returns:
         A boolean indicating if the kernel is a communication kernel.
     """
-    return "ncclKernel" in name
+    return NCCL_KERNEL_RE.match(name) is not None
+
+
+MEMORY_KERNEL_RE = re.compile(r"(^Memcpy)|(^Memset)|(^dma)")
 
 
 def is_memory_kernel(name: str) -> bool:
@@ -76,8 +82,10 @@ def is_memory_kernel(name: str) -> bool:
     Returns:
         A boolean indicating if the kernel is an IO kernel.
     """
-    memory_kernel_pattern = re.compile(r"(^Memcpy)|(^Memset)|(^dma)")
-    return memory_kernel_pattern.match(name) is not None
+    return MEMORY_KERNEL_RE.match(name) is not None
+
+
+NCCL_COMPUTE_KERNEL_RE = re.compile(r"(^nccl.*Kernel)|(.*(Memcpy)|(Memset))|(.*Sync)")
 
 
 def is_compute_kernel(name: str) -> bool:
@@ -88,8 +96,7 @@ def is_compute_kernel(name: str) -> bool:
     Returns:
         A boolean indicating if the kernel is a computation kernel.
     """
-    non_compute_kernel_re = re.compile(r"(^ncclKernel)|(.*(Memcpy)|(Memset))|(.*Sync)")
-    return not non_compute_kernel_re.match(name)
+    return not NCCL_COMPUTE_KERNEL_RE.match(name)
 
 
 def is_computer_kernel(name: str) -> bool:

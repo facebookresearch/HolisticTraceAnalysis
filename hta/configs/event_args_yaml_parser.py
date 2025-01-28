@@ -62,6 +62,11 @@ ARGS_COMMUNICATION_FUNC: Callable[[Dict[str, AttributeSpec]], List[AttributeSpec
         ]
     ]
 )
+ARGS_TRITON_KERNELS_FUNC: Callable[[Dict[str, AttributeSpec]], List[AttributeSpec]] = (
+    lambda available_args: [
+        available_args[k] for k in ["cpu_op::kernel_backend", "cpu_op::kernel_hash"]
+    ]
+)
 ARGS_DEFAULT_FUNC: Callable[[Dict[str, AttributeSpec]], List[AttributeSpec]] = (
     lambda available_args: (
         ARGS_MINIMUM_FUNC(available_args)
@@ -109,6 +114,7 @@ def parse_event_args_yaml(version: YamlVersion) -> EventArgs:
         ARGS_COMPLETE=ARGS_COMPLETE_FUNC(available_args),
         ARGS_INFO=ARGS_INFO_FUNC(available_args),
         ARGS_COMMUNICATION=ARGS_COMMUNICATION_FUNC(available_args),
+        ARGS_TRITON_KERNELS=ARGS_TRITON_KERNELS_FUNC(available_args),
         ARGS_DEFAULT=ARGS_DEFAULT_FUNC(available_args),
     )
 
