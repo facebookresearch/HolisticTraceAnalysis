@@ -162,3 +162,5 @@ def decode_symbol_id_to_symbol_name(
         df["s_name"] = df["name"].apply(lambda idx: s_tab[idx])
     if "cat" in df.columns and df["cat"].dtype.kind == "i":
         df["s_cat"] = df["cat"].apply(lambda idx: s_tab[idx])
+    if "user_annotation" in df.columns and df["user_annotation"].dtype.kind == "i":
+        df["s_user_annotation"] = df["user_annotation"].apply(lambda idx: s_tab[idx])

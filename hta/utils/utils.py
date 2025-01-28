@@ -151,6 +151,8 @@ def shorten_name(name: str) -> str:
     This utility removes the functional arguments, template arguments, and return values
     to make the name easy to understand.
     """
+    if name.find("<") < 0:
+        return name
     s: str = name.replace("->", "")
     stack: List[str] = []
     for c in s:
