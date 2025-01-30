@@ -6,6 +6,7 @@
 import os
 import unittest
 from collections import namedtuple
+from functools import cached_property
 from pathlib import Path
 from typing import List
 from unittest.mock import patch
@@ -16,10 +17,6 @@ from hta.trace_analysis import TimeSeriesTypes, TraceAnalysis
 
 
 class TraceAnalysisTestCase(unittest.TestCase):
-    vision_transformer_t: TraceAnalysis
-    inference_t: TraceAnalysis
-    df_index_resolver_t: TraceAnalysis
-    rank_non_gpu_t: TraceAnalysis
 
     @classmethod
     def setUpClass(cls):
@@ -38,19 +35,40 @@ class TraceAnalysisTestCase(unittest.TestCase):
             cls.base_data_dir, "rank_non_gpu/"
         )
         cls.h100_trace_dir: str = os.path.join(cls.base_data_dir, "h100")
-        cls.vision_transformer_t = TraceAnalysis(
-            trace_dir=cls.vision_transformer_trace_dir
-        )
-        cls.inference_t = TraceAnalysis(trace_dir=cls.inference_trace_dir)
-        cls.df_index_resolver_t = TraceAnalysis(
-            trace_dir=cls.df_index_resolver_trace_dir
-        )
-        cls.rank_non_gpu_t = TraceAnalysis(trace_dir=cls.rank_non_gpu_trace_dir)
-        cls.h100_trace_t = TraceAnalysis(trace_dir=cls.h100_trace_dir)
         cls.mtia_single_rank_dir: str = os.path.join(
             cls.base_data_dir, "mtia_trace_single_rank/"
         )
-        cls.mtia_single_rank_trace_t = TraceAnalysis(trace_dir=cls.mtia_single_rank_dir)
+        cls.ns_resolution_trace_dir: str = os.path.join(
+            cls.base_data_dir, "ns_resolution_trace"
+        )
+
+    @cached_property
+    def vision_transformer_t(self):
+        return TraceAnalysis(trace_dir=self.vision_transformer_trace_dir)
+
+    @cached_property
+    def inference_t(self):
+        return TraceAnalysis(trace_dir=self.inference_trace_dir)
+
+    @cached_property
+    def df_index_resolver_t(self):
+        return TraceAnalysis(trace_dir=self.df_index_resolver_trace_dir)
+
+    @cached_property
+    def rank_non_gpu_t(self):
+        return TraceAnalysis(trace_dir=self.rank_non_gpu_trace_dir)
+
+    @cached_property
+    def h100_trace_t(self):
+        return TraceAnalysis(trace_dir=self.h100_trace_dir)
+
+    @cached_property
+    def mtia_single_rank_trace_t(self):
+        return TraceAnalysis(trace_dir=self.mtia_single_rank_dir)
+
+    @cached_property
+    def ns_resolution_t(self):
+        return TraceAnalysis(trace_dir=self.ns_resolution_trace_dir)
 
     def setUp(self):
         self.overlaid_trace_dir = self.base_data_dir
@@ -281,6 +299,38 @@ class TraceAnalysisTestCase(unittest.TestCase):
         self.assertEqual(kernel_breakdown.iloc[0]["sum (us)"], 77283.0)
         self.assertEqual(kernel_breakdown.iloc[11]["kernel_type"], "MEMORY")
         self.assertEqual(kernel_breakdown.iloc[11]["sum (us)"], 400892.0)
+
+    def test_get_gpu_kernels_with_user_annotations(self):
+        gpu_kernels_df = self.ns_resolution_t.get_gpu_kernels_with_user_annotations(
+            rank=0,
+            expand_names=True,
+            shortern_names=True,
+        )
+        self.assertEqual(len(gpu_kernels_df), 4876)
+        # 3 unique annotations, +one for -1
+        self.assertEqual(gpu_kernels_df.user_annotation.unique().size, 4)
+
+        # Kernels with specific annotation
+        self.assertEqual(
+            len(
+                gpu_kernels_df[
+                    gpu_kernels_df.s_user_annotation == "Optimizer.step#SGD.step"
+                ]
+            ),
+            27,
+        )
+
+        row0 = gpu_kernels_df[gpu_kernels_df.correlation == 135139]
+        self.assertEqual(
+            row0["s_user_annotation"].item(), "DistributedDataParallel.forward"
+        )
+        self.assertEqual(row0["s_name"].item(), "Memcpy DtoD (Device -> Device)")
+
+        row1 = gpu_kernels_df[gpu_kernels_df.correlation == 164926]
+        self.assertEqual(row1["s_user_annotation"].item(), "Optimizer.step#SGD.step")
+        self.assertEqual(
+            row1["s_name"].item(), "at::native::::multi_tensor_apply_kernel"
+        )
 
     def test_get_queue_length_stats(self):
         qd_summary = self.vision_transformer_t.get_queue_length_summary(ranks=[0])

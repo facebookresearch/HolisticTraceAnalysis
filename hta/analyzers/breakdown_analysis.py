@@ -275,7 +275,9 @@ class BreakdownAnalysis:
                 gpu_kernels_df.loc[overlaps, "user_annotation"] = anno_name
 
         if expand_names:
-            decode_symbol_id_to_symbol_name(gpu_kernels_df, t.symbol_table, shortern_names)
+            decode_symbol_id_to_symbol_name(
+                gpu_kernels_df, t.symbol_table, shortern_names
+            )
 
         return gpu_kernels_df.reset_index(drop=True)
 

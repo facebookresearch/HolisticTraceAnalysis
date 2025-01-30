@@ -156,14 +156,13 @@ class TraceAnalysis:
         )
 
     def get_gpu_kernels_with_user_annotations(
-        cls,
-        t: "Trace",
+        self,
         rank: int,
         expand_names: bool = True,
         shortern_names: bool = True,
     ) -> Optional[pd.DataFrame]:
         r"""
-        Provides a full dataframe of GPU kernels and matches them to the corresponding user annotation i.e. user provided training phase. The output is a dataframe with all GPU kernel data alongside a "user_annotation" column.
+        Provides a complete dataframe of GPU kernels and matches them to the corresponding user annotation i.e. user provided training phase. The output is a dataframe with all GPU kernel data alongside a "user_annotation" column.
 
         Args:
             rank (int): Specify rank to return GPU kernels for.
@@ -174,11 +173,17 @@ class TraceAnalysis:
 
         Returns:
             pd.Dataframe:
-                The returned dataframe has all trace columns along with "user_annotation", 
-                and optionally "s_user_annotation" column.
+                The returned dataframe has all trace columns along with "user_annotation",
+                and optionally "s_user_annotation" column if expand_names=True.
 
-        Note: This API is per rank, and does not have any visualization components
+        Note: This API is per rank, and does not have any visualization aspect.
         """
+        return BreakdownAnalysis.get_gpu_kernels_with_user_annotations(
+            self.t,
+            rank,
+            expand_names,
+            shortern_names,
+        )
 
     def get_temporal_breakdown(self, visualize: bool = True) -> pd.DataFrame:
         r"""
