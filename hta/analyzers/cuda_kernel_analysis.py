@@ -442,8 +442,11 @@ class CudaKernelAnalysis:
                 on="correlation",
             )
             joined_df["launch_delay"] = (
-                joined_df["ts_y"] - joined_df["ts_x"] + joined_df["dur_x"]
+                joined_df["ts_y"] - joined_df["ts_x"] - joined_df["dur_x"]
             )
+
+            # clip the launch delay to 0 if it is negative
+            joined_df["launch_delay"] = joined_df["launch_delay"].clip(lower=0)
 
             # rename columns and select the required columns from the final dataframe
             renamed_df = joined_df.rename(
