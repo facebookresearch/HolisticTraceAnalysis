@@ -151,6 +151,12 @@ def shorten_name(name: str) -> str:
     This utility removes the functional arguments, template arguments, and return values
     to make the name easy to understand.
     """
+    if MEMORY_KERNEL_RE.match(name) is not None:
+        return name
+
+    if name.find("<") < 0 and name.find("(") < 0:
+        return name
+
     s: str = name.replace("->", "")
     stack: List[str] = []
     for c in s:
