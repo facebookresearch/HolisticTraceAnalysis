@@ -151,14 +151,15 @@ def shorten_name(name: str) -> str:
     This utility removes the functional arguments, template arguments, and return values
     to make the name easy to understand.
     """
-    if name.find("") < 0 and name.find("(") < 0:
+    if MEMORY_KERNEL_RE.match(name) is not None:
+        return name
+
     if name.find("<") < 0 and name.find("(") < 0:
         return name
 
     s: str = name.replace("->", "")
     stack: List[str] = []
     for c in s:
-        print(c)
         if c == ">":  # match generic template arguments
             while len(stack) and stack[-1] != "<":
                 stack.pop()
@@ -170,7 +171,6 @@ def shorten_name(name: str) -> str:
                 stack.pop()
             if len(stack) > 0 and stack[-1] == "(":
                 stack.pop()
-            print(stack)
         else:
             stack.append(c)
     return "".join(stack).split(" ")[-1]
