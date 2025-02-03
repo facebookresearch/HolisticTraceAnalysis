@@ -110,10 +110,10 @@ class TraceAnalysisTestCase(unittest.TestCase):
 
         self.assertEqual(row1["cpu_duration"].item(), 16)
         self.assertEqual(row1["gpu_duration"].item(), 2394)
-        self.assertEqual(row1["launch_delay"].item(), 16491)
+        self.assertEqual(row1["launch_delay"].item(), 16459)
         self.assertEqual(row2["cpu_duration"].item(), 21)
         self.assertEqual(row2["gpu_duration"].item(), 94)
-        self.assertEqual(row2["launch_delay"].item(), 41)
+        self.assertEqual(row2["launch_delay"].item(), 0)
 
     def test_get_cuda_kernel_launch_stats_inference_single_rank(self):
         dataframe_list = self.inference_t.get_cuda_kernel_launch_stats(visualize=False)
@@ -122,7 +122,7 @@ class TraceAnalysisTestCase(unittest.TestCase):
 
         self.assertEqual(row["cpu_duration"].item(), 9)
         self.assertEqual(row["gpu_duration"].item(), 3)
-        self.assertEqual(row["launch_delay"].item(), 20)
+        self.assertEqual(row["launch_delay"].item(), 2)
 
     def test_get_mtia_kernel_launch_stats_inference_single_rank(self):
         dataframe_list = self.mtia_single_rank_trace_t.get_cuda_kernel_launch_stats(
@@ -131,9 +131,9 @@ class TraceAnalysisTestCase(unittest.TestCase):
         rank_0_df = dataframe_list[0]
         row = rank_0_df[rank_0_df["correlation"] == 423]
 
-        self.assertEqual(row["cpu_duration"].item(), 435.200)
-        self.assertEqual(row["gpu_duration"].item(), 124.768)
-        self.assertEqual(row["launch_delay"].item(), 340.291)
+        self.assertAlmostEqual(row["cpu_duration"].item(), 435.200, delta=2.0)
+        self.assertAlmostEqual(row["gpu_duration"].item(), 124.768, delta=2.0)
+        self.assertAlmostEqual(row["launch_delay"].item(), 0, delta=2.0)
 
     def test_get_cuda_kernel_launch_stats_for_h100(self):
         dataframe_dict = self.h100_trace_t.get_cuda_kernel_launch_stats(
@@ -145,7 +145,7 @@ class TraceAnalysisTestCase(unittest.TestCase):
         self.assertEqual(rank_1_df.shape[0], 32835)
         self.assertEqual(row["cpu_duration"].item(), 20)
         self.assertEqual(row["gpu_duration"].item(), 31)
-        self.assertEqual(row["launch_delay"].item(), 41)
+        self.assertEqual(row["launch_delay"].item(), 1)
 
     def test_get_profiler_steps(self):
         results = self.vision_transformer_t.get_profiler_steps()

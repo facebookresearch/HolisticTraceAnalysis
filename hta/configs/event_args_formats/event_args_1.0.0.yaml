@@ -269,3 +269,13 @@ AVAILABLE_ARGS:
     raw_name: Ev Idx
     value_type: Int
     default_value: -1
+  inference::batch_size:
+    name: batch_size
+    raw_name: batchSize
+    value_type: Int
+    default_value: -1
+  inference::batch_id:
+    name: batch_id
+    raw_name: batchId
+    value_type: String
+    default_value: ""

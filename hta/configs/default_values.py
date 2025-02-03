@@ -73,4 +73,5 @@ class EventArgs(NamedTuple):
     ARGS_COMPLETE: List[AttributeSpec]
     ARGS_INFO: List[AttributeSpec]
     ARGS_COMMUNICATION: List[AttributeSpec]
+    ARGS_TRITON_KERNELS: List[AttributeSpec]
     ARGS_DEFAULT: List[AttributeSpec]
