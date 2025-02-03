@@ -29,14 +29,7 @@ class MemoryAnalysis:
             rank (Optional[int]): Process events for specific rank. If None, use first rank.
 
         Returns:
-            pd.DataFrame containing memory events with columns:
-                - ts: timestamp
-                - device_id: Device ID
-                - device_type: Device type (1=CPU, 2=CUDA)
-                - bytes_delta: Change in bytes
-                - total_allocated: Total allocated memory
-                - total_reserved: Total reserved memory
-                - addr: Memory address
+            pd.DataFrame containing memory events
         """
         # Get trace for rank
         if rank is None:
@@ -47,43 +40,17 @@ class MemoryAnalysis:
 
         trace_df = self.t.get_trace(rank)
 
-        # Filter memory events
+        # Filter memory events using the column names from the default parser config
         memory_events = trace_df[
-            (trace_df["ph"] == "i") &
-            (trace_df["name"].apply(lambda x: self.t.symbol_table.get_sym_table()[x] == "[memory]"))
-        ]
+            (trace_df["total_allocated"] >= 0) |
+            (trace_df["total_reserved"] >= 0)
+        ].copy()
 
-        # Extract memory data
-        def extract_arg(row, arg_name, default=0):
-            args = row.get("args", {})
-            if isinstance(args, dict):
-                return args.get(arg_name, default)
-            return default
+        if memory_events.empty:
+            logger.warning("No memory events found in trace")
+            return pd.DataFrame()
 
-        events_data = {
-            "ts": [],
-            "device_id": [],
-            "device_type": [],
-            "bytes_delta": [],
-            "total_allocated": [],
-            "total_reserved": [],
-            "addr": []
-        }
-
-        for _, event in memory_events.iterrows():
-            args = event.get("args", {})
-            if not isinstance(args, dict):
-                continue
-
-            events_data["ts"].append(event["ts"])
-            events_data["device_id"].append(args.get("Device Id", 0))
-            events_data["device_type"].append(args.get("Device Type", 1))
-            events_data["bytes_delta"].append(args.get("Bytes", 0))
-            events_data["total_allocated"].append(args.get("Total Allocated", 0))
-            events_data["total_reserved"].append(args.get("Total Reserved", 0))
-            events_data["addr"].append(args.get("Addr", 0))
-
-        return pd.DataFrame(events_data)
+        return memory_events
 
     def get_memory_timeline(self, rank: Optional[int] = None, visualize: bool = True) -> pd.DataFrame:
         """Generate timeline of memory usage
@@ -99,7 +66,6 @@ class MemoryAnalysis:
         events_df = self._process_memory_events(rank)
 
         if events_df.empty:
-            logger.warning("No memory events found in trace")
             return pd.DataFrame()
 
         if visualize:
@@ -107,10 +73,15 @@ class MemoryAnalysis:
             fig = go.Figure()
 
             # Plot allocated memory
+            events_df.sort_values("ts", inplace=True)
+            gpu_device = events_df.device_id != -1
+            allocated_gb = events_df.loc[gpu_device, "total_allocated"]/(1024**3)
+            reserved_gb = events_df.loc[gpu_device, "total_reserved"]/(1024**3)
+
             fig.add_trace(
                 go.Scatter(
                     x=events_df["ts"]/1e6,  # Convert to milliseconds
-                    y=events_df["total_allocated"]/(1024**3),  # Convert to GB
+                    y=allocated_gb,  # Convert to GB
                     name='Allocated Memory',
                     mode='lines',
                     line=dict(color=colorscheme[0])
@@ -121,7 +92,7 @@ class MemoryAnalysis:
             fig.add_trace(
                 go.Scatter(
                     x=events_df["ts"]/1e6,
-                    y=events_df["total_reserved"]/(1024**3),
+                    y=reserved_gb,
                     name='Reserved Memory',
                     mode='lines',
                     line=dict(color=colorscheme[1])
