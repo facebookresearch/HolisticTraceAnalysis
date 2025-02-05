@@ -255,23 +255,29 @@ class BreakdownAnalysis:
         kernel_per_rank: Dict[str, Dict] = defaultdict(dict)
         for rank, trace_df in t.traces.items():
             gpu_user_annotation_kernels = trace_df[trace_df["cat"].eq(idx)].copy()
-            gpu_user_annotation_kernels["kernel_type"] = gpu_user_annotation_kernels[["name"]].apply(
-                lambda x: get_kernel_type(sym_table[x["name"]]), axis=1
-            )
-            gpu_user_annotation_kernels["name"] = gpu_user_annotation_kernels["name"].apply(lambda x: sym_table[x])
+            gpu_user_annotation_kernels["kernel_type"] = gpu_user_annotation_kernels[
+                ["name"]
+            ].apply(lambda x: get_kernel_type(sym_table[x["name"]]), axis=1)
+            gpu_user_annotation_kernels["name"] = gpu_user_annotation_kernels[
+                "name"
+            ].apply(lambda x: sym_table[x])
 
             # Create kernel type dataframe
             kernel_type_df = pd.concat(
                 [
                     kernel_type_df,
-                    cls._get_gpu_kernel_type_time(gpu_user_annotation_kernels, kernel_type_to_analysis),
+                    cls._get_gpu_kernel_type_time(
+                        gpu_user_annotation_kernels, kernel_type_to_analysis
+                    ),
                 ],
                 ignore_index=True,
             )
 
             # Create all kernel info dataframe
             for kernel_type in kernel_type_to_analysis:
-                gpu_kernel_time = gpu_user_annotation_kernels[gpu_user_annotation_kernels["kernel_type"] == kernel_type]
+                gpu_kernel_time = gpu_user_annotation_kernels[
+                    gpu_user_annotation_kernels["kernel_type"] == kernel_type
+                ]
 
                 if kernel_type not in kernel_per_rank:
                     kernel_per_rank[kernel_type] = {}
@@ -389,7 +395,7 @@ class BreakdownAnalysis:
                         fig.show(renderer=image_renderer)
 
         return kernel_type_df, all_kernel_df
-    
+
     @classmethod
     def _get_gpu_kernel_type_time(
         cls, gpu_kernels: pd.DataFrame, kernel_type_to_analysis: List[str]
