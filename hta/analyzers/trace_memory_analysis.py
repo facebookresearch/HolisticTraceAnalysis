@@ -3,7 +3,7 @@
 # LICENSE file in the root directory of this source tree.
 import re
 import time
-from typing import Callable, List, Optional, Tuple, TypedDict, Union
+from typing import Callable, List, Optional, Tuple, TypedDict, Union, Dict
 
 import numpy as np
 
@@ -518,9 +518,9 @@ class MemoryAnalysis:
             return classification_func(row)
 
         memory_events = self._add_alloc_or_dealloc_to_memory_events(rank)
-        device_timelines: dict[int, pd.DataFrame] = {}
+        device_timelines: Dict[int, pd.DataFrame] = {}
         first_memory_event_time = memory_events["ts"].min()
-        device_dfs: dict[int, pd.DataFrame] = {}
+        device_dfs: Dict[int, pd.DataFrame] = {}
         for device, tmp in memory_events.groupby(by="device_id"):
 
             # Create an event for allocations which have happened before the profile
