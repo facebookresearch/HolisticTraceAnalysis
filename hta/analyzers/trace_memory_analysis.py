@@ -246,7 +246,7 @@ class MemoryAnalysis:
         return memory_events
 
     def get_memory_timeline(
-        self, rank: Optional[int] = None, visualize: bool = True
+        self, rank: Optional[int] = None, visualize: bool = True, device = None
     ) -> pd.DataFrame:
         """Generate timeline of memory usage
 
@@ -265,46 +265,44 @@ class MemoryAnalysis:
 
         if visualize:
             # Create plot
-            fig = go.Figure()
 
             # Plot allocated memory
             events_df.sort_values("ts", inplace=True)
-            gpu_device = events_df.device_id != -1
-            allocated_gb = events_df.loc[gpu_device, "total_allocated"] / (1024**3)
-            reserved_gb = events_df.loc[gpu_device, "total_reserved"] / (1024**3)
+            for device, timeline in events_df.groupby("device_id"):
+                fig = go.Figure()
+                allocated_gb = timeline["total_allocated"] / (1024**3)
+                reserved_gb = timeline["total_reserved"] / (1024**3)
 
-            fig.add_trace(
-                go.Scatter(
-                    x=events_df["ts"] / 1e6,  # Convert to milliseconds
-                    y=allocated_gb,  # Convert to GB
-                    name="Allocated Memory",
-                    mode="lines",
-                    line=dict(color=colorscheme[0]),
+                fig.add_trace(
+                    go.Scatter(
+                        x=timeline["ts"] / 1e6,  # Convert to milliseconds
+                        y=allocated_gb,  # Convert to GB
+                        name="Allocated Memory",
+                        mode="lines",
+                        line=dict(color=colorscheme[0]),
+                    )
                 )
-            )
 
-            # Plot reserved memory
-            fig.add_trace(
-                go.Scatter(
-                    x=events_df["ts"] / 1e6,
-                    y=reserved_gb,
-                    name="Reserved Memory",
-                    mode="lines",
-                    line=dict(color=colorscheme[1]),
+                # Plot reserved memory
+                fig.add_trace(
+                    go.Scatter(
+                        x=timeline["ts"] / 1e6,
+                        y=reserved_gb,
+                        name="Reserved Memory",
+                        mode="lines",
+                        line=dict(color=colorscheme[1]),
+                    )
                 )
-            )
 
-            # Update layout
-            fig.update_layout(
-                title="Memory Usage Timeline",
-                xaxis_title="Time (ms)",
-                yaxis_title="Memory (GB)",
-                hovermode="x unified",
-                width=1200,
-                height=800,
-            )
+                # Update layout
+                fig.update_layout(
+                    title=f"Memory Usage Timeline (device {device})",
+                    xaxis_title="Time (ms)",
+                    yaxis_title="Memory (GB)",
+                    hovermode="x unified",
+                )
 
-            fig.show()
+                fig.show()
 
         return events_df
 
@@ -497,7 +495,7 @@ class MemoryAnalysis:
             visualize (bool, optional): Whether to display the plot. Default is True.
 
         Returns:
-            dict[int, pd.DataFrame]: A dictionary where each key is a device ID and the
+            dict[int, pd.DataFrame], pd.DataFrame: A dictionary where each key is a device ID and the
             corresponding value is a DataFrame containing categorized memory events.
 
         """
@@ -515,6 +513,7 @@ class MemoryAnalysis:
         memory_events = self._add_alloc_or_dealloc_to_memory_events(rank)
         device_timelines: dict[int, pd.DataFrame] = {}
         first_memory_event_time = memory_events["ts"].min()
+        device_dfs: dict[int, pd.DataFrame] = {}
         for device, tmp in memory_events.groupby(by="device_id"):
 
             # Create an event for allocations which have happened before the profile
@@ -569,6 +568,7 @@ class MemoryAnalysis:
                 out["category"] = i
                 timelines = pd.concat([timelines, out])
             device_timelines[device] = timelines  # type: ignore
+            device_dfs[device] = tmp  # type: ignore
         if visualize:
             for device, timelines in device_timelines.items():
                 timelines["ms"] = timelines["ts"] / 1e6
@@ -610,7 +610,7 @@ class MemoryAnalysis:
                     legend_title="Memory type",
                 )
                 fig.show()
-        return device_timelines
+        return device_timelines, device_dfs
 
 
 def classify_torchtitan_calls(mem_event: MemoryEvent):
