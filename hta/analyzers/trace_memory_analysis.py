@@ -3,7 +3,7 @@
 # LICENSE file in the root directory of this source tree.
 import re
 import time
-from typing import Callable, List, Optional, Tuple, TypedDict, Union, Dict
+from typing import Callable, Dict, List, Optional, Tuple, TypedDict, Union
 
 import numpy as np
 
