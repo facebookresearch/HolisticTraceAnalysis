@@ -246,7 +246,10 @@ class MemoryAnalysis:
         return memory_events
 
     def get_memory_timeline(
-        self, rank: Optional[int] = None, visualize: bool = True, device = None
+        self,
+        rank: Optional[int] = None,
+        visualize: bool = True,
+        device=None,
     ) -> pd.DataFrame:
         """Generate timeline of memory usage
 
@@ -381,8 +384,12 @@ class MemoryAnalysis:
         )[["stack_ids", "stack_name"]].copy()
         print(f" - done in {time.time() - start}s")
         for n in ["stack_ids", "stack_name"]:
-            assert (fast_trace.dropna()[n] == slow_trace.dropna()[n]).any(), f"{n} did not have any match"
-            assert (fast_trace.dropna()[n] == slow_trace.dropna()[n]).all(), f"{n} did not all match"
+            assert (
+                fast_trace.dropna()[n] == slow_trace.dropna()[n]
+            ).any(), f"{n} did not have any match"
+            assert (
+                fast_trace.dropna()[n] == slow_trace.dropna()[n]
+            ).all(), f"{n} did not all match"
         print("Stack names and IDs matched between python and numba implementations")
         return fast_trace, slow_trace
 

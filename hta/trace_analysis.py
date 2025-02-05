@@ -697,7 +697,7 @@ class TraceAnalysis:
         rank: Optional[int] = None,
         visualize: bool = True,
         classification_func=classify_torchtitan_calls,
-    ) -> pd.DataFrame:
+    ):
         """Get memory usage timeline from user supplied categories.
 
         This function analyzes memory allocation events in the trace to produce a
