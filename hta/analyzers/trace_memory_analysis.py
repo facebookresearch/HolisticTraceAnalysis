@@ -35,9 +35,16 @@ class MemoryAnalysis:
         Args:
             t (Trace): HTA Trace object containing memory events
         """
-        self._ranks_with_stacks = []
-        self._ranks_with_allocs_and_deallocs = []
         self.t = t
+
+    def _get_rank(self, rank: None | int):
+        if rank is None:
+            ranks = sorted(self.t.get_all_traces().keys())
+            if not ranks:
+                raise ValueError("No ranks found in trace")
+            rank = ranks[0]
+
+        return self.t.get_trace(rank)
 
     def _process_memory_events(self, rank: Optional[int] = None) -> pd.DataFrame:
         """Process memory events from trace into a DataFrame
@@ -48,15 +55,7 @@ class MemoryAnalysis:
         Returns:
             pd.DataFrame containing memory events
         """
-        # Get trace for rank
-        if rank is None:
-            ranks = sorted(self.t.get_all_traces().keys())
-            if not ranks:
-                raise ValueError("No ranks found in trace")
-            rank = ranks[0]
-
-        trace_df = self.t.get_trace(rank)
-
+        trace_df = self._get_rank(rank)
         # Filter memory events using the column names from the default parser config
         memory_events = trace_df[
             (trace_df["total_allocated"] >= 0) | (trace_df["total_reserved"] >= 0)
@@ -133,8 +132,8 @@ class MemoryAnalysis:
 
     def _add_stack_frames_to_memory_events(
         self,
-        rank=0,
-        condition: None | Callable[[pd.Series]] = None,
+        rank: int| None=None,
+        condition: None | Callable[[pd.Series], bool] = None,
         stack_separator: str = ";",
     ):
         """Adds 'stack_ids' and 'stack_name' columns for memory events.
@@ -162,10 +161,13 @@ class MemoryAnalysis:
             condition = is_memory
 
         self.t.decode_symbol_ids()
-        trace_df = self.t.get_trace(rank)
-        if rank in self._ranks_with_stacks:
-            assert "stack_name" in trace_df.columns
+        trace_df = self._get_rank(rank)
+        # if rank in self._ranks_with_stacks:
+        if "stack_name" in trace_df.columns:
+            print("Previous stack_name found - skipping")
             return trace_df
+        print("Calculating stack_name")
+
         saved_stacks = []
         for group_id, group in trace_df.groupby(by=["pid", "tid"]):
             stacks = []
@@ -183,10 +185,10 @@ class MemoryAnalysis:
         trace_df[["stack_ids", "stack_name"]] = pd.DataFrame(
             saved_stacks, columns=["index", "stack_name", "stack_ids"]
         ).set_index("index")[["stack_ids", "stack_name"]]
-        self._ranks_with_stacks.append(rank)
         return trace_df
 
-    def _add_alloc_or_dealloc_to_memory_events(self, rank=0):
+    def _add_alloc_or_dealloc_to_memory_events(self,         rank: int| None=None,
+):
         """Adds a column to memory events with the index of the corresponding allocation
         or deallocation.
 
@@ -202,17 +204,23 @@ class MemoryAnalysis:
         """
         trace_df = self._add_stack_frames_to_memory_events(rank)
         memory_events = trace_df.loc[trace_df.total_reserved >= 0]
-        if rank in self._ranks_with_allocs_and_deallocs:
-            assert "alloc_or_dealloc_id" in memory_events.columns
+        if "alloc_or_dealloc_id" in memory_events.columns:
+            print("Previous alloc and dealloc found - skipping")
             return memory_events
+        print("Calculating alloc and dealloc")
         mem_by_addr = memory_events.set_index("addr")
 
         def find_deallocation(mem_event: MemoryEvent):
             if mem_event["bytes_delta"] < 0 or mem_event["addr"] < 0:
                 return
             same_addr = mem_by_addr.loc[mem_event["addr"]]
+            if not isinstance(same_addr, pd.DataFrame):
+                # There was a single event at that memory location - no matching events
+                return
+
             same_addr = same_addr.loc[same_addr.device_id == mem_event["device_id"]]
             out = same_addr.loc[same_addr.ts > mem_event["ts"]]
+
             if len(out) > 0:
                 out = out[-mem_event["bytes_delta"] == out["bytes_delta"]]
             if len(out) > 0:
@@ -224,7 +232,12 @@ class MemoryAnalysis:
             if mem_event["bytes_delta"] > 0 or mem_event["addr"] < 0:
                 return
             same_addr = mem_by_addr.loc[mem_event["addr"]]
+            if not isinstance(same_addr, pd.DataFrame):
+                # There was a single event at that memory location - no matching events
+                return
+            same_addr = same_addr.loc[same_addr.device_id == mem_event["device_id"]]
             out = same_addr.loc[same_addr.ts < mem_event["ts"]]
+
             if len(out) > 0:
                 out = out[-mem_event["bytes_delta"] == out["bytes_delta"]]
             if len(out) > 0:
@@ -239,13 +252,12 @@ class MemoryAnalysis:
                 return find_allocation(mem_event)
             return
 
-        memory_events["alloc_or_dealloc_id"] = memory_events.apply(find_mirror_event_time, axis="columns")  # type: ignore
-        self._ranks_with_allocs_and_deallocs.append(rank)
-        return memory_events
+        trace_df.loc[memory_events.index, "alloc_or_dealloc_id"] = memory_events.apply(find_mirror_event_time, axis="columns")  # type: ignore
+        return trace_df.loc[memory_events.index]
 
     def get_classified_memory_timelines(
         self,
-        rank=0,
+        rank: int| None=None,
         classification_func: Callable[[MemoryEvent], str] | None = None,
         visualize: bool = True,
     ):
@@ -261,68 +273,72 @@ class MemoryAnalysis:
             return classification_func(row)
 
         memory_events = self._add_alloc_or_dealloc_to_memory_events(rank)
-        tmp = memory_events.copy()
+        device_timelines = {}
+        first_memory_event_time = memory_events["ts"].min()
+        for device, tmp in memory_events.groupby(by="device_id"):
 
-        # Create an event for allocations which have happened before the profile
-        pre_profile_allocs = tmp.iloc[tmp["ts"].argmin()].copy()
-        pre_alloc_index = tmp.index.max() + 1
-        pre_profile_allocs["total_allocated"] -= pre_profile_allocs["bytes_delta"]
-        pre_profile_allocs["bytes_delta"] = pre_profile_allocs["total_allocated"]
-        pre_profile_allocs["ts"] -= 1
-        pre_profile_allocs["addr"] = -1
-        pre_profile_allocs["stack_name"] = unknown_alloc_class
-        pre_profile_allocs["ev_idx"] = -1
-        pre_profile_allocs["external_id"] = -1
-        pre_profile_allocs["index"] = pre_alloc_index
-        tmp.loc[pre_alloc_index] = pre_profile_allocs
-        tmp["stack_type"] = tmp.apply(_class_func, axis="columns")
+            # Create an event for allocations which have happened before the profile
+            pre_profile_allocs = tmp.iloc[tmp["ts"].argmin()].copy()
+            pre_alloc_index = tmp.index.max() + 1
+            pre_profile_allocs["total_allocated"] -= pre_profile_allocs["bytes_delta"]
+            pre_profile_allocs["bytes_delta"] = pre_profile_allocs["total_allocated"]
+            pre_profile_allocs["ts"] = first_memory_event_time - 1
+            pre_profile_allocs["addr"] = -1
+            pre_profile_allocs["stack_name"] = unknown_alloc_class
+            pre_profile_allocs["ev_idx"] = -1
+            pre_profile_allocs["external_id"] = -1
+            pre_profile_allocs["index"] = pre_alloc_index
+            tmp.loc[pre_alloc_index] = pre_profile_allocs
+            tmp["stack_type"] = tmp.apply(_class_func, axis="columns")
 
-        logger.info("indexing allocation types")
-        # For the purpose of this plot deallocations need to match that of their allocation id
-        mask = (tmp.bytes_delta < 0) & tmp.alloc_or_dealloc_id.isna()
-        tmp.loc[mask, "stack_type"] = unknown_alloc_class
-        mask = (tmp.bytes_delta < 0) & (tmp.alloc_or_dealloc_id > 0)
-        tmp.loc[mask, "stack_type"] = tmp.loc[
-            tmp.loc[mask, "alloc_or_dealloc_id"], "stack_type"
-        ].values
-        logger.info("Assembling timelines")
-        timelines = pd.DataFrame()
-        for i, g in tmp.groupby(by="stack_type"):
-            if len(g) == 0:
-                continue
-            # Add events with zero delta before each event to get nice square
-            # memory profiles
-            ref = g[["ts", "bytes_delta", "stack_name"]].copy()
-            ref["ts"] -= 1
-            ref["bytes_delta"] = 0
+            logger.info("indexing allocation types")
+            # For the purpose of this plot deallocations need to match that of their allocation id
+            mask = (tmp.bytes_delta < 0) & tmp.alloc_or_dealloc_id.isna()
+            tmp.loc[mask, "stack_type"] = unknown_alloc_class
+            mask = (tmp.bytes_delta < 0) & (tmp.alloc_or_dealloc_id > 0)
+            tmp.loc[mask, "stack_type"] = tmp.loc[
+                tmp.loc[mask, "alloc_or_dealloc_id"], "stack_type"
+            ].values
+            logger.info("Assembling timelines")
+            timelines = pd.DataFrame()
+            for i, g in tmp.groupby(by="stack_type"):
+                if len(g) == 0:
+                    continue
+                # Add events with zero delta before each event to get nice square
+                # memory profiles
+                ref = g[["ts", "bytes_delta", "stack_name"]].copy()
+                ref["ts"] -= 1
+                ref["bytes_delta"] = 0
 
-            out = pd.concat(
-                [
-                    g[["ts", "bytes_delta", "stack_name"]],
-                    ref,
-                ]
-            ).sort_values("ts")
-            out[i] = out["bytes_delta"].cumsum()
-            out["category"] = i
-            timelines = pd.concat([timelines, out])
+                out = pd.concat(
+                    [
+                        g[["ts", "bytes_delta", "stack_name"]],
+                        ref,
+                    ]
+                ).sort_values("ts")
+                out[i] = out["bytes_delta"].cumsum()
+                out["category"] = i
+                timelines = pd.concat([timelines, out])
+            device_timelines[device] = timelines
         if visualize:
-            timelines["ms"] = timelines["ts"] / 1e6
-            fig = (
-                timelines.sort_values("ms")
-                .ffill(axis="index")
-                .set_index("ms")
-                .drop(["bytes_delta", "stack_name", "category"], axis="columns")
-                / (1024**3)
-            ).plot.area(backend="plotly")
-            fig.update_layout(
-                title="Memory breakdown",
-                xaxis_title="Time (ms)",
-                yaxis_title="Memory (GB)",
-                legend_title="Memory type",
-                hovermode="x unified",
-            )
-            fig.show()
-        return timelines
+            for device, timelines in device_timelines.items():
+                timelines["ms"] = timelines["ts"] / 1e6
+                fig = (
+                    timelines.sort_values("ms")
+                    .ffill(axis="index")
+                    .set_index("ms")
+                    .drop(["bytes_delta", "stack_name", "category", "ts"], axis="columns")
+                    / (1024**3)
+                ).plot.area(backend="plotly")
+                fig.update_layout(
+                    title=f"Memory breakdown - device {device}",
+                    xaxis_title="Time (ms)",
+                    yaxis_title="Memory (GB)",
+                    legend_title="Memory type",
+                    hovermode="x unified",
+                )
+                fig.show()
+        return device_timelines
 
 
 def classify_torchtitan_calls(mem_event: MemoryEvent):

@@ -20,7 +20,7 @@ from hta.common.constants import CUDA_MAX_LAUNCH_QUEUE_PER_STREAM
 from hta.common.trace import Trace
 from hta.configs.config import logger
 from hta.configs.default_values import DEFAULT_TRACE_DIR
-from hta.analyzers.trace_memory_analysis import MemoryAnalysis
+from hta.analyzers.trace_memory_analysis import MemoryAnalysis, classify_torchtitan_calls
 
 
 class TimeSeriesTypes(Flag):
@@ -682,5 +682,32 @@ class TraceAnalysis:
                 - total_reserved: Total reserved memory
                 - addr: Memory address
         """
+
         analyzer = MemoryAnalysis(self.t)
         return analyzer.get_memory_timeline(rank=rank, visualize=visualize)
+
+    def get_memory_timeline_per_category(self, rank: Optional[int] = None, visualize: bool = True, classification_func=classify_torchtitan_calls) -> pd.DataFrame:
+        """Get memory usage timeline from user supplied categories.
+
+        This function analyzes memory allocation events in the trace to produce a
+        timeline of allocated memory for different user-customisable categories.
+
+        Note: this function takes
+
+        Args:
+            rank (Optional[int]): Analyze specific rank. If None, use first available rank.
+            visualize (bool): Whether to display the memory timeline plot. Default=True.
+            classification_func (Callable[[MemoryEvent], str])
+
+        Returns:
+            pd.DataFrame: DataFrame containing memory events with columns:
+                - ts: timestamp in nano-second
+                - category: the category assigned to the event by the classification_func
+                - stack_name: a string containing the name of all the parent events of the
+                  allocation.
+                - <category columns>: a column for each category with the current total allocated
+                  for that category, or Nan if the timestep does not correspond to this data point.
+        """
+
+        analyzer = MemoryAnalysis(self.t)
+        return analyzer.get_classified_memory_timelines(rank=rank, visualize=visualize, classification_func=classification_func)
