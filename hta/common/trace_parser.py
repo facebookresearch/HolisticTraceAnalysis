@@ -251,9 +251,9 @@ def _compress_df(
 
     # Keep memory events (which are instant events)
     is_memory_event = (
-        (df["ph"] == "i") &
-        (df["name"] == "[memory]") &
-        (df["cat"] == "cpu_instant_event")
+        (df["ph"] == "i")
+        & (df["name"] == "[memory]")
+        & (df["cat"] == "cpu_instant_event")
     )
     df.loc[is_memory_event, "dur"] = 0
     # drop rows with null values
