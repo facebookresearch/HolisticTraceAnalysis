@@ -16,11 +16,14 @@ from hta.analyzers.cupti_counter_analysis import CuptiCounterAnalysis
 from hta.analyzers.straggler import find_stragglers_with_late_start_comm_kernels
 from hta.analyzers.straggler_analysis import StragglerAnalysis
 from hta.analyzers.trace_counters import TraceCounters
+from hta.analyzers.trace_memory_analysis import (
+    classify_torchtitan_calls,
+    MemoryAnalysis,
+)
 from hta.common.constants import CUDA_MAX_LAUNCH_QUEUE_PER_STREAM
 from hta.common.trace import Trace
 from hta.configs.config import logger
 from hta.configs.default_values import DEFAULT_TRACE_DIR
-from hta.analyzers.trace_memory_analysis import MemoryAnalysis, classify_torchtitan_calls
 
 
 class TimeSeriesTypes(Flag):
@@ -37,7 +40,9 @@ class TraceAnalysis:
         use_multiprocessing=True,
     ):
         self.t = Trace(trace_files, trace_dir)
-        self.t.load_traces(include_last_profiler_step, use_multiprocessing=use_multiprocessing)
+        self.t.load_traces(
+            include_last_profiler_step, use_multiprocessing=use_multiprocessing
+        )
         assert self.t.is_parsed is True
 
     def get_comm_comp_overlap(self, visualize: bool = True) -> pd.DataFrame:
@@ -270,7 +275,7 @@ class TraceAnalysis:
         time_series: Optional[TimeSeriesTypes] = None,
         ranks: Optional[List[int]] = None,
         output_suffix: str = "_with_counters",
-        custom_time_series = None,
+        custom_time_series=None,
     ) -> None:
         r"""
         Adds a set of time series to the trace in order to aid debugging traces. Creates a new trace file
@@ -331,7 +336,6 @@ class TraceAnalysis:
             )
         if custom_time_series:
             add_time_series(**custom_time_series)
-
 
         for rank, ev_list in counter_events.items():
             raw_trace_content = self.t.get_raw_trace_for_one_rank(rank=rank)
@@ -662,7 +666,9 @@ class TraceAnalysis:
             show_all_edges,
         )
 
-    def get_memory_timeline(self, rank: Optional[int] = None, visualize: bool = True) -> pd.DataFrame:
+    def get_memory_timeline(
+        self, rank: Optional[int] = None, visualize: bool = True
+    ) -> pd.DataFrame:
         """Get memory usage timeline
 
         This function analyzes memory allocation events in the trace to produce a
@@ -686,7 +692,12 @@ class TraceAnalysis:
         analyzer = MemoryAnalysis(self.t)
         return analyzer.get_memory_timeline(rank=rank, visualize=visualize)
 
-    def get_memory_timeline_per_category(self, rank: Optional[int] = None, visualize: bool = True, classification_func=classify_torchtitan_calls) -> pd.DataFrame:
+    def get_memory_timeline_per_category(
+        self,
+        rank: Optional[int] = None,
+        visualize: bool = True,
+        classification_func=classify_torchtitan_calls,
+    ) -> pd.DataFrame:
         """Get memory usage timeline from user supplied categories.
 
         This function analyzes memory allocation events in the trace to produce a
@@ -710,4 +721,6 @@ class TraceAnalysis:
         """
 
         analyzer = MemoryAnalysis(self.t)
-        return analyzer.get_classified_memory_timelines(rank=rank, visualize=visualize, classification_func=classification_func)
+        return analyzer.get_classified_memory_timelines(
+            rank=rank, visualize=visualize, classification_func=classification_func
+        )
