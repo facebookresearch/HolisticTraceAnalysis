@@ -169,7 +169,7 @@ class TraceAnalysis:
             expand_names (bool): Expand integer name value to full names. This will add
                 the columns "s_name" and "s_user_annotation" to the dataframe.
             shortern_names (bool): When expand_names is True, this flag enables shortening
-                large CUDA kernel names. This works by removing the '<' template paramters etc.
+                large CUDA kernel names. This works by removing the '<' template parameters etc.
 
         Returns:
             pd.Dataframe:

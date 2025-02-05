@@ -259,10 +259,10 @@ class BreakdownAnalysis:
 
         for p in pid_tids:
             pid, tid = p["pid"], p["tid"]
-            gpu_kernels_df_filt = gpu_kernels_df.query(f"pid == {pid} and tid == {tid}")
             gpu_user_anno_df_filt = gpu_user_anno_df.query(
                 f"pid == {pid} and tid == {tid}"
             )
+            gpu_kernels_df_filt = gpu_kernels_df.query(f"pid == {pid} and tid == {tid}")
             logger.info(
                 f"Pid,tid = {p}, Num gpu kernels = {len(gpu_kernels_df_filt)}, Num gpu annotations = {len(gpu_user_anno_df_filt)}"
             )
@@ -272,7 +272,12 @@ class BreakdownAnalysis:
             for row in gpu_user_anno_df_filt.itertuples():
                 interval, anno_name = row.Index, row.name
                 overlaps = gpu_kernels_intervals.overlaps(interval)
-                gpu_kernels_df.loc[overlaps, "user_annotation"] = anno_name
+                gpu_kernels_df.loc[
+                    (gpu_kernels_df["pid"] == pid)
+                    & (gpu_kernels_df["tid"] == tid)
+                    & overlaps,
+                    "user_annotation",
+                ] = anno_name
 
         if expand_names:
             decode_symbol_id_to_symbol_name(
