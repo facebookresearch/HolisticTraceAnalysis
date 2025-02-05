@@ -285,6 +285,12 @@ class TraceAnalysisTestCase(unittest.TestCase):
         self.assertEqual(kernel_breakdown.iloc[151]["kernel_type"], "MEMORY")
         self.assertEqual(kernel_breakdown.iloc[151]["sum (us)"], 1064)
 
+        # Negative test as this trace does not have gpu user annotations
+        gpu_kernels_df = (
+            self.vision_transformer_t.get_gpu_kernels_with_user_annotations(rank=0)
+        )
+        self.assertIsNone(gpu_kernels_df)
+
     def test_get_mtia_kernel_breakdown(self):
         (
             kernel_type_breakdown,

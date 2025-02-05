@@ -213,29 +213,49 @@ class BreakdownAnalysis:
         return kernel_type_df, all_kernel_df
 
     @classmethod
-    def get_gpu_kernels_with_user_annotations(
+    def _get_gpu_kernel_interval_dataframe(
         cls,
+        trace_df: pd.DataFrame,
         t: "Trace",
-        rank: int,
-        expand_names: bool,
-        shortern_names: bool,
-    ) -> Optional[pd.DataFrame]:
-        """Returns a dataframe of all GPU kernels and associates them to closest
-        GPU user annotation. Read more in get_gpu_kernels_with_user_annotations
-        in hta/trace_analysis.py."""
-        trace_df = t.get_trace(rank)
-        trace_df["end"] = trace_df["ts"] + trace_df["dur"]
-        trace_df["user_annotation"] = -1
+    ) -> pd.DataFrame:
+        """Obtains all GPU kernels in the trace dataframe and assigns them
+        an interval index that can be used for analyzing overlap.
+            @args: trace_df (pd.DataFrame) : trace df for specific rank
+                Please make sure this includes "end" column.
+            @args: t (Trace) : trace object
 
+        Returns: pd.DataFrame with GPU kernels subset with an interval index
+                of [start, end) intervals.
+        """
+        gpu_kernels_df = GPUKernelFilter()(trace_df, t.symbol_table).copy()
+        gpu_kernels_intervals = pd.IntervalIndex.from_arrays(
+            gpu_kernels_df["ts"], gpu_kernels_df["end"], closed="left"
+        )
+        gpu_kernels_df.set_index(gpu_kernels_intervals, inplace=True)
+        return gpu_kernels_df
+
+    @classmethod
+    def _get_gpu_user_anno_interval_dataframe(
+        cls,
+        trace_df: pd.DataFrame,
+        t: "Trace",
+    ) -> Optional[pd.DataFrame]:
+        """Obtains all GPU user annotations in the trace dataframe and assigns them
+        an interval index that can be used for analyzing overlap.
+            @args: trace_df (pd.DataFrame) : trace df for specific rank
+                Please make sure this includes "end" column.
+            @args: t (Trace) : trace object
+
+        Returns: pd.DataFrame with GPU kernels subset with an interval index
+                of [start, end) intervals.
+                None if the trace does not have user annotations.
+        """
         sym_id_map = t.symbol_table.get_sym_id_map()
         if (gpu_user_anno_id := sym_id_map.get("gpu_user_annotation", -1)) == -1:
-            logger.warning(
-                f"Trace for rank {rank} does not contain any GPU user annotations"
-            )
             return None
 
-        # Reverse sort annotations by duration. This ensures the closest annotation in
-        # the stack is assigned to the kernel.
+        # Reverse sort annotations by duration. This order will ensure the leaf/bottom of
+        # the stack is always processed last.
         gpu_user_anno_df = trace_df[trace_df.cat == gpu_user_anno_id][
             ["pid", "tid", "ts", "end", "dur", "name"]
         ].sort_values("dur", ascending=False)
@@ -246,38 +266,74 @@ class BreakdownAnalysis:
             ),
             inplace=True,
         )
+        return gpu_user_anno_df
 
-        # Get the pid tid to scan over
+    @classmethod
+    def _associate_gpu_kernels_with_user_annotations(
+        cls,
+        trace_df: pd.DataFrame,
+        gpu_kernels_df: pd.DataFrame,
+        gpu_user_anno_df: pd.DataFrame,
+    ) -> None:
+        """Assigns each gpu_kernel  user annotation. If the kernel overlaps with multiple
+        user annotations, we will pick the lowest/leaf annotation in the stack to attribute to.
+            @args: trace_df (pd.DataFrame) : trace df for specific rank
+                Please make sure this includes "end" column.
+            @args: gpu_kernels_df (pd.DataFrame) : kernel df with interval index.
+            @args: gpu_user_anno_df (pd.DataFrame) : gpu user annotation df with interval index.
+        """
+        # Get the pid tid combinations to scan over
         pid_tids = gpu_user_anno_df[["pid", "tid"]].drop_duplicates().to_dict("records")
-
-        # Get GPU kernels
-        gpu_kernels_df = GPUKernelFilter()(trace_df, t.symbol_table).copy()
-        gpu_kernels_intervals = pd.IntervalIndex.from_arrays(
-            gpu_kernels_df["ts"], gpu_kernels_df["end"], closed="left"
-        )
-        gpu_kernels_df.set_index(gpu_kernels_intervals, inplace=True)
 
         for p in pid_tids:
             pid, tid = p["pid"], p["tid"]
             gpu_user_anno_df_filt = gpu_user_anno_df.query(
                 f"pid == {pid} and tid == {tid}"
             )
-            gpu_kernels_df_filt = gpu_kernels_df.query(f"pid == {pid} and tid == {tid}")
             logger.info(
-                f"Pid,tid = {p}, Num gpu kernels = {len(gpu_kernels_df_filt)}, Num gpu annotations = {len(gpu_user_anno_df_filt)}"
+                f"Pid,tid = {p}, Num gpu annotations = {len(gpu_user_anno_df_filt)}"
             )
 
             # Loop over all GPU user annotation intervals and match them with GPU
-            # kernel phases. This will be efficiency given size(user annotations) << size(kernels)
+            # kernel intervals. This will be efficient if len(user annotations) << len(kernels)
             for row in gpu_user_anno_df_filt.itertuples():
                 interval, anno_name = row.Index, row.name
-                overlaps = gpu_kernels_intervals.overlaps(interval)
+                overlaps = gpu_kernels_df.index.overlaps(interval)
                 gpu_kernels_df.loc[
                     (gpu_kernels_df["pid"] == pid)
                     & (gpu_kernels_df["tid"] == tid)
                     & overlaps,
                     "user_annotation",
                 ] = anno_name
+
+    @classmethod
+    def get_gpu_kernels_with_user_annotations(
+        cls,
+        t: "Trace",
+        rank: int,
+        expand_names: bool = True,
+        shortern_names: bool = True,
+    ) -> Optional[pd.DataFrame]:
+        """Returns a dataframe of all GPU kernels and associates them to closest or leaf
+        GPU user annotation. If the kernel overlaps with multiple user annotations,
+        we will pick the lowest/leaf annotation in the stack to attribute to.
+        Read more in get_gpu_kernels_with_user_annotations in hta/trace_analysis.py."""
+        trace_df = t.get_trace(rank)
+        trace_df["end"] = trace_df["ts"] + trace_df["dur"]
+        trace_df["user_annotation"] = -1
+
+        gpu_user_anno_df = cls._get_gpu_user_anno_interval_dataframe(trace_df, t)
+        if gpu_user_anno_df is None:
+            logger.warning(
+                f"Trace for rank {rank} does not contain any GPU user annotations"
+            )
+            return None
+
+        gpu_kernels_df = cls._get_gpu_kernel_interval_dataframe(trace_df, t)
+
+        cls._associate_gpu_kernels_with_user_annotations(
+            trace_df, gpu_kernels_df, gpu_user_anno_df
+        )
 
         if expand_names:
             decode_symbol_id_to_symbol_name(
