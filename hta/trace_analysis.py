@@ -196,7 +196,7 @@ class TraceAnalysis:
             include_memory_kernels,
             image_renderer,
         )
-    
+
     def get_temporal_breakdown(self, visualize: bool = True) -> pd.DataFrame:
         r"""
         Compute the idle time, compute time and non-compute time for each rank. Time is measured in
