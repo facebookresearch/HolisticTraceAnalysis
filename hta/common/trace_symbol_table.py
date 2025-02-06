@@ -158,7 +158,13 @@ def decode_symbol_id_to_symbol_name(
     s_tab: List[str] = symbol_table.sym_table
     if use_shorten_name:
         s_tab = [shorten_name(s) for s in s_tab]
+
+    def get_sym(idx):
+        return s_tab[idx] if idx >= 0 else ""
+
     if "name" in df.columns and df["name"].dtype.kind == "i":
-        df["s_name"] = df["name"].apply(lambda idx: s_tab[idx])
+        df["s_name"] = df["name"].apply(lambda idx: get_sym(idx))
     if "cat" in df.columns and df["cat"].dtype.kind == "i":
-        df["s_cat"] = df["cat"].apply(lambda idx: s_tab[idx])
+        df["s_cat"] = df["cat"].apply(lambda idx: get_sym(idx))
+    if "user_annotation" in df.columns and df["user_annotation"].dtype.kind == "i":
+        df["s_user_annotation"] = df["user_annotation"].apply(lambda idx: get_sym(idx))
