@@ -343,6 +343,192 @@ class BreakdownAnalysis:
         return gpu_kernels_df.reset_index(drop=True)
 
     @classmethod
+    def get_gpu_user_annotation_breakdown(
+        cls,
+        t: "Trace",
+        visualize: bool = True,
+        duration_ratio: float = 0.8,
+        num_kernels: int = 10,
+        include_memory_kernels: bool = False,
+        image_renderer="notebook",
+    ) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        """
+        GPU kernel breakdown implementation. See `get_gpu_kernel_breakdown` in `trace_analysis.py` for details.
+        """
+        sym_table = t.symbol_table.get_sym_table()
+        idx = sym_table.index("gpu_user_annotation")
+
+        all_kernel_df = pd.DataFrame(
+            {
+                "name": pd.Series(dtype="str"),
+                "sum": pd.Series(dtype="int"),
+                "max": pd.Series(dtype="int"),
+                "min": pd.Series(dtype="int"),
+                "std": pd.Series(dtype="float"),
+                "mean": pd.Series(dtype="int"),
+                "kernel_type": pd.Series(dtype="str"),
+                "rank": pd.Series(dtype="int"),
+            }
+        )
+        kernel_type_df = pd.DataFrame(
+            {
+                "kernel_type": pd.Series(dtype="str"),
+                "sum": pd.Series(dtype="int"),
+            }
+        )
+
+        kernel_type_to_analysis: List[str] = [
+            KernelType.COMPUTATION.name,
+            KernelType.COMMUNICATION.name,
+        ]
+        if include_memory_kernels:
+            kernel_type_to_analysis.append(KernelType.MEMORY.name)
+
+        kernel_per_rank: Dict[str, Dict] = defaultdict(dict)
+        for rank, trace_df in t.traces.items():
+            gpu_user_annotation_kernels = trace_df[trace_df["cat"].eq(idx)].copy()
+            gpu_user_annotation_kernels["kernel_type"] = gpu_user_annotation_kernels[
+                ["name"]
+            ].apply(lambda x: get_kernel_type(sym_table[x["name"]]), axis=1)
+            gpu_user_annotation_kernels["name"] = gpu_user_annotation_kernels[
+                "name"
+            ].apply(lambda x: sym_table[x])
+
+            # Create kernel type dataframe
+            kernel_type_df = pd.concat(
+                [
+                    kernel_type_df,
+                    cls._get_gpu_kernel_type_time(
+                        gpu_user_annotation_kernels, kernel_type_to_analysis
+                    ),
+                ],
+                ignore_index=True,
+            )
+
+            # Create all kernel info dataframe
+            for kernel_type in kernel_type_to_analysis:
+                gpu_kernel_time = gpu_user_annotation_kernels[
+                    gpu_user_annotation_kernels["kernel_type"] == kernel_type
+                ]
+
+                if kernel_type not in kernel_per_rank:
+                    kernel_per_rank[kernel_type] = {}
+
+                gpu_kernel_time = cls._aggr_gpu_kernel_time(
+                    gpu_kernel_time,
+                    duration_ratio=duration_ratio,
+                    num_kernels=num_kernels,
+                )
+
+                kernel_per_rank[kernel_type][rank] = gpu_kernel_time
+
+                gpu_kernel_time["kernel_type"] = kernel_type
+                gpu_kernel_time["rank"] = int(rank)
+                all_kernel_df = pd.concat(
+                    [all_kernel_df, gpu_kernel_time], ignore_index=True
+                )
+
+        kernel_type_df = kernel_type_df.groupby(by=["kernel_type"])["sum"].agg(["sum"])
+        kernel_type_df.reset_index(inplace=True)
+        kernel_type_df.sort_values(
+            by=["sum"], ignore_index=True, inplace=True, ascending=False
+        )
+        kernel_type_df["percentage"] = (
+            kernel_type_df["sum"] / kernel_type_df["sum"].sum()
+        ) * 100
+        kernel_type_df = kernel_type_df.round({"percentage": 1})
+
+        all_kernel_df.sort_values(
+            by=["kernel_type", "name", "rank"], ignore_index=True, inplace=True
+        )
+        all_kernel_df.rename(
+            columns={
+                "sum": "sum (us)",
+                "mean": "mean (us)",
+                "max": "max (us)",
+                "min": "min (us)",
+                "std": "stddev",
+            },
+            inplace=True,
+        )
+
+        if visualize:  # pragma: no cover
+            non_zero_kernel_df = kernel_type_df[(kernel_type_df["percentage"] > 0)]
+
+            fig = px.pie(
+                non_zero_kernel_df,
+                values="percentage",
+                names="kernel_type",
+                height=500,
+                title="Kernel Type Percentage Across All Ranks",
+            )
+            fig.update_layout(
+                margin=dict(l=50, r=50, b=50, t=50),
+                showlegend=True,
+                legend=dict(yanchor="bottom", y=-0.4, xanchor="left", x=0),
+            )
+            fig.show(renderer=image_renderer)
+
+            for kernel in kernel_per_rank:
+                specs = []
+                for count, rank in enumerate(kernel_per_rank[kernel]):
+                    if count % 2 == 0:
+                        specs.append([{"type": "domain"}, {"type": "domain"}])
+                fig = make_subplots(
+                    rows=int((len(kernel_per_rank[kernel]) + 1) / 2),
+                    cols=2,
+                    specs=specs,
+                )
+                for rank in kernel_per_rank[kernel]:
+                    fig.add_trace(
+                        go.Pie(
+                            labels=kernel_per_rank[kernel][rank]["name"],
+                            values=kernel_per_rank[kernel][rank]["sum"],
+                            title=f"Rank {rank}",
+                            automargin=False,
+                        ),
+                        int(rank / 2) + 1,
+                        int(rank % 2) + 1,
+                    )
+                image_size_multiplier = 1 + (len(t.traces.keys())) / 2
+                fig.update_layout(
+                    title_text=f'Kernel type "{kernel}" - kernel distribution on each rank',
+                    margin=dict(l=50, r=50, b=50, t=50),
+                    showlegend=True,
+                    height=400 * image_size_multiplier,
+                    legend=dict(yanchor="bottom", y=-0.1, xanchor="left", x=0),
+                )
+                fig.show(renderer=image_renderer)
+
+                kernel_df = all_kernel_df[all_kernel_df["kernel_type"].eq(kernel)]
+
+                kernel_name = kernel_df["name"].unique()
+                for name in kernel_name:
+                    if name != "others":
+                        kernel_name_df = kernel_df[kernel_df["name"].eq(name)]
+                        fig = px.bar(
+                            kernel_name_df,
+                            x="rank",
+                            y="mean (us)",
+                            title=name,
+                            labels={
+                                "rank": "Rank",
+                                "mean (us)": "Mean Duration (us)",
+                            },
+                            error_y=kernel_name_df["max (us)"]
+                            - kernel_name_df["mean (us)"],
+                            error_y_minus=kernel_name_df["mean (us)"]
+                            - kernel_name_df["min (us)"],
+                        )
+                        fig.update_layout(
+                            title_text=f'Kernel type "{kernel}" - {name}',
+                            xaxis=dict(tickmode="linear", tick0=0, dtick=1),
+                        )
+                        fig.show(renderer=image_renderer)
+
+        return kernel_type_df, all_kernel_df
+
+    @classmethod
     def _get_gpu_kernel_type_time(
         cls, gpu_kernels: pd.DataFrame, kernel_type_to_analysis: List[str]
     ) -> pd.DataFrame:
