@@ -119,7 +119,7 @@ class TraceAnalysis:
         duration_ratio: float = 0.8,
         num_kernels: int = 10,
         include_memory_kernels: bool = True,
-        image_renderer: str = "notebook",
+        image_renderer: str = "",
     ) -> Tuple[pd.DataFrame, pd.DataFrame]:
         r"""
         Summarizes the time spent by each kernel and by kernel type. Outputs the following graphs:
@@ -187,43 +187,42 @@ class TraceAnalysis:
 
     def get_gpu_user_annotation_breakdown(
         self,
+        use_gpu_time: bool = True,
         visualize: bool = True,
         duration_ratio: float = 0.8,
         num_kernels: int = 10,
-        include_memory_kernels: bool = True,
-        image_renderer: str = "notebook",
-    ) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        image_renderer: str = "",
+    ) -> Optional[pd.DataFrame]:
         r"""
-        Summarizes the time spent by each kernel and by kernel type. Outputs the following graphs:
+        Summarizes the time spent by each GPU user annotation. Outputs the following graphs:
 
-        1. Pie chart indicating the percentage of time taken by each kernel type.
-        2. Pie charts showing the most time consuming kernels for each rank for each kernel type.
-        3. Bar graphs showing the average duration for the most time consuming kernels for each rank and each kernel type.
+        1. Pie charts showing the most time consuming user annotations for each rank.
+        2. Bar graphs showing the average duration for the most time user annotations for each rank.
 
         Args:
+            use_gpu_time (boolean): Use time on GPU for each user annotation, if false use the time on CPU instead. Default = True,
             visualize (boolean): Set to True to display the graphs. Default = True.
             duration_ratio (float): Floating point value between 0 and 1 specifying the ratio of time taken
-                                    by top COMM/COMP/MEMORY kernels. Default = 0.8.
-            num_kernels (int): Maximum number of COMM/COMP/MEMORY kernels to show. Default = 10.
-            include_memory_kernels (bool): Whether to include MEMORY kernels in the analysis. Default = True.
+                                    by top user annotations. Default = 0.8.
+            num_kernels (int): Maximum number of user annotations to show. Default = 10. Rest get grouped into "other".
             image_renderer (str): Set to ``notebook`` when using jupyter and ``jupyterlab`` when using jupyter-lab.
                 To see all available options execute: ``import plotly; plotly.io.renderers`` in a python shell.
 
         Returns:
-            Tuple[pd.DataFrame, pd.DataFrame]
-                Returns two dataframes. The first dataframe shows the percentage of time spent by kernel type.
-                The second dataframe shows the min, max, mean, standard deviation, total time taken by each
-                kernel on each rank. This dataframe will be summarized based on values of ``duration_ratio``
+            Optional[pd.DataFrame]
+                Returns a dataframe that shows the min, max, mean, standard deviation, total time taken by each
+                user annotation on each rank. This dataframe will be summarized based on values of ``duration_ratio``
                 and ``num_kernels``. If both ``duration_ratio`` and ``num_kernels`` are specified,
                 ``num_kernels`` takes precedence.
+                If user_annotations are not present on CPU or GPU (according to use_gpu_time flag), return None.
         """
 
         return BreakdownAnalysis.get_gpu_user_annotation_breakdown(
             self.t,
+            use_gpu_time,
             visualize,
             duration_ratio,
             num_kernels,
-            include_memory_kernels,
             image_renderer,
         )
 
