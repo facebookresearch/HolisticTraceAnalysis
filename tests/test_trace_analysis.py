@@ -12,6 +12,7 @@ from typing import List
 from unittest.mock import patch
 
 import hta
+import pandas as pd
 from hta.common.trace import PHASE_COUNTER
 from hta.trace_analysis import TimeSeriesTypes, TraceAnalysis
 
@@ -285,12 +286,6 @@ class TraceAnalysisTestCase(unittest.TestCase):
         self.assertEqual(kernel_breakdown.iloc[151]["kernel_type"], "MEMORY")
         self.assertEqual(kernel_breakdown.iloc[151]["sum (us)"], 1064)
 
-        # Negative test as this trace does not have gpu user annotations
-        gpu_kernels_df = (
-            self.vision_transformer_t.get_gpu_kernels_with_user_annotations(rank=0)
-        )
-        self.assertIsNone(gpu_kernels_df)
-
     def test_get_mtia_kernel_breakdown(self):
         (
             kernel_type_breakdown,
@@ -305,6 +300,51 @@ class TraceAnalysisTestCase(unittest.TestCase):
         self.assertEqual(kernel_breakdown.iloc[0]["sum (us)"], 77283.0)
         self.assertEqual(kernel_breakdown.iloc[11]["kernel_type"], "MEMORY")
         self.assertEqual(kernel_breakdown.iloc[11]["sum (us)"], 400892.0)
+
+    def __test_gpu_user_annotation_common(
+        self, use_gpu_annotation: bool, expected_rows: int
+    ) -> None:
+        analyzer = self.ns_resolution_t
+        gpu_user_anno_df = analyzer.get_gpu_user_annotation_breakdown(
+            visualize=False, num_kernels=1000, use_gpu_annotation=use_gpu_annotation
+        )
+
+        self.assertEqual(len(gpu_user_anno_df), expected_rows)
+
+        annotation = "gpu_user_annotation" if use_gpu_annotation else "user_annotation"
+        idx = analyzer.t.symbol_table.sym_index[annotation]
+        trace_df = analyzer.t.get_trace(0)
+        analyzer.t.symbol_table.add_symbols_to_trace_df(trace_df, "name")
+        ref_sum_df = (
+            trace_df[trace_df.cat == idx][["name", "dur"]]
+            .groupby("name")["dur"]
+            .sum()
+            .reset_index()
+        )
+        ref_mean_df = (
+            trace_df[trace_df.cat == idx][["name", "dur"]]
+            .groupby("name")["dur"]
+            .mean()
+            .reset_index()
+        )
+        pd.testing.assert_frame_equal(
+            gpu_user_anno_df[["name", "sum (us)"]],
+            ref_sum_df.rename(columns={"dur": "sum (us)"}),
+            check_dtype=False,
+        )
+        pd.testing.assert_frame_equal(
+            gpu_user_anno_df[["name", "mean (us)"]],
+            ref_mean_df.rename(columns={"dur": "mean (us)"}),
+            check_dtype=False,
+        )
+
+    def test_gpu_user_annotation_breakdown(self):
+        self.__test_gpu_user_annotation_common(use_gpu_annotation=True, expected_rows=3)
+
+    def test_cpu_user_annotation_breakdown(self):
+        self.__test_gpu_user_annotation_common(
+            use_gpu_annotation=False, expected_rows=12
+        )
 
     def test_get_gpu_kernels_with_user_annotations(self):
         gpu_kernels_df = self.ns_resolution_t.get_gpu_kernels_with_user_annotations(
@@ -337,6 +377,12 @@ class TraceAnalysisTestCase(unittest.TestCase):
         self.assertEqual(
             row1["s_name"].item(), "at::native::::multi_tensor_apply_kernel"
         )
+
+        # Negative test as this trace does not have gpu user annotations
+        gpu_kernels_df = (
+            self.vision_transformer_t.get_gpu_kernels_with_user_annotations(rank=0)
+        )
+        self.assertIsNone(gpu_kernels_df)
 
     def test_get_queue_length_stats(self):
         qd_summary = self.vision_transformer_t.get_queue_length_summary(ranks=[0])
