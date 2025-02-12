@@ -302,16 +302,16 @@ class TraceAnalysisTestCase(unittest.TestCase):
         self.assertEqual(kernel_breakdown.iloc[11]["sum (us)"], 400892.0)
 
     def __test_gpu_user_annotation_common(
-        self, use_gpu_time: bool, expected_rows: int
+        self, use_gpu_annotation: bool, expected_rows: int
     ) -> None:
         analyzer = self.ns_resolution_t
         gpu_user_anno_df = analyzer.get_gpu_user_annotation_breakdown(
-            visualize=False, num_kernels=1000, use_gpu_time=use_gpu_time
+            visualize=False, num_kernels=1000, use_gpu_annotation=use_gpu_annotation
         )
 
         self.assertEqual(len(gpu_user_anno_df), expected_rows)
 
-        annotation = "gpu_user_annotation" if use_gpu_time else "user_annotation"
+        annotation = "gpu_user_annotation" if use_gpu_annotation else "user_annotation"
         idx = analyzer.t.symbol_table.sym_index[annotation]
         trace_df = analyzer.t.get_trace(0)
         analyzer.t.symbol_table.add_symbols_to_trace_df(trace_df, "name")
@@ -339,10 +339,12 @@ class TraceAnalysisTestCase(unittest.TestCase):
         )
 
     def test_gpu_user_annotation_breakdown(self):
-        self.__test_gpu_user_annotation_common(use_gpu_time=True, expected_rows=3)
+        self.__test_gpu_user_annotation_common(use_gpu_annotation=True, expected_rows=3)
 
     def test_cpu_user_annotation_breakdown(self):
-        self.__test_gpu_user_annotation_common(use_gpu_time=False, expected_rows=12)
+        self.__test_gpu_user_annotation_common(
+            use_gpu_annotation=False, expected_rows=12
+        )
 
     def test_get_gpu_kernels_with_user_annotations(self):
         gpu_kernels_df = self.ns_resolution_t.get_gpu_kernels_with_user_annotations(

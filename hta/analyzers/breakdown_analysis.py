@@ -346,16 +346,37 @@ class BreakdownAnalysis:
     def get_gpu_user_annotation_breakdown(
         cls,
         t: "Trace",
-        use_gpu_time: bool = True,
+        use_gpu_annotation: bool = True,
         visualize: bool = True,
         duration_ratio: float = 0.8,
-        num_kernels: int = 10,
-        image_renderer: str = "",
+        num_kernels: int = 1000,
+        image_renderer: Optional[str] = None,
     ) -> Optional[pd.DataFrame]:
         """
-        GPU user annotation breakdown implementation. See `get_gpu_user_annotation_breakdown` in `trace_analysis.py` for details.
+        Summarizes the time spent by each GPU user annotation. Outputs the following graphs:
+
+        1. Pie charts showing the most time consuming user annotations for each rank.
+        2. Bar graphs showing the average duration for the most time user annotations for each rank.
+
+        Args:
+            use_gpu_annotation (boolean): Use time on GPU for each user annotation, if false use the time on CPU instead. Default = True,
+            visualize (boolean): Set to True to display the graphs. Default = True.
+            duration_ratio (float): Floating point value between 0 and 1 specifying the ratio of time taken
+                                    by top user annotations. Default = 0.8.
+            num_kernels (int): Maximum number of user annotations to show. Default = 1000. Rest get grouped into "other".
+            image_renderer (str): Set to ``notebook`` when using jupyter and ``jupyterlab`` when using jupyter-lab.
+                To see all available options execute: ``import plotly; plotly.io.renderers`` in a python shell.
+
+        Returns:
+            Optional[pd.DataFrame]
+                Returns a dataframe that shows the min, max, mean, standard deviation, total time taken by each
+                user annotation on each rank. This dataframe will be summarized based on values of ``duration_ratio``
+                and ``num_kernels``. If both ``duration_ratio`` and ``num_kernels`` are specified,
+                ``num_kernels`` takes precedence.
+                If user_annotations are not present on CPU or GPU (according to use_gpu_annotation flag), return None.
         """
-        annotation = "gpu_user_annotation" if use_gpu_time else "user_annotation"
+        annotation = "gpu_user_annotation" if use_gpu_annotation else "user_annotation"
+        image_renderer = image_renderer or ""
 
         if (idx := t.symbol_table.sym_index.get(annotation, None)) is None:
             logger.warning(f"Trace does not contain any {annotation}")

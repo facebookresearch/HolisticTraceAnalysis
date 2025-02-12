@@ -187,11 +187,11 @@ class TraceAnalysis:
 
     def get_gpu_user_annotation_breakdown(
         self,
-        use_gpu_time: bool = True,
+        use_gpu_annotation: bool = True,
         visualize: bool = True,
         duration_ratio: float = 0.8,
-        num_kernels: int = 10,
-        image_renderer: str = "",
+        num_kernels: int = 1000,
+        image_renderer: Optional[str] = None,
     ) -> Optional[pd.DataFrame]:
         r"""
         Summarizes the time spent by each GPU user annotation. Outputs the following graphs:
@@ -200,11 +200,11 @@ class TraceAnalysis:
         2. Bar graphs showing the average duration for the most time user annotations for each rank.
 
         Args:
-            use_gpu_time (boolean): Use time on GPU for each user annotation, if false use the time on CPU instead. Default = True,
+            use_gpu_annotation (boolean): Use time on GPU for each user annotation, if false use the time on CPU instead. Default = True,
             visualize (boolean): Set to True to display the graphs. Default = True.
             duration_ratio (float): Floating point value between 0 and 1 specifying the ratio of time taken
                                     by top user annotations. Default = 0.8.
-            num_kernels (int): Maximum number of user annotations to show. Default = 10. Rest get grouped into "other".
+            num_kernels (int): Maximum number of user annotations to show. Default = 1000. Rest get grouped into "other".
             image_renderer (str): Set to ``notebook`` when using jupyter and ``jupyterlab`` when using jupyter-lab.
                 To see all available options execute: ``import plotly; plotly.io.renderers`` in a python shell.
 
@@ -214,12 +214,12 @@ class TraceAnalysis:
                 user annotation on each rank. This dataframe will be summarized based on values of ``duration_ratio``
                 and ``num_kernels``. If both ``duration_ratio`` and ``num_kernels`` are specified,
                 ``num_kernels`` takes precedence.
-                If user_annotations are not present on CPU or GPU (according to use_gpu_time flag), return None.
+                If user_annotations are not present on CPU or GPU (according to use_gpu_annotation flag), return None.
         """
 
         return BreakdownAnalysis.get_gpu_user_annotation_breakdown(
             self.t,
-            use_gpu_time,
+            use_gpu_annotation,
             visualize,
             duration_ratio,
             num_kernels,
