@@ -137,6 +137,11 @@ AVAILABLE_ARGS:
     raw_name: wait_on_cuda_event_record_corr_id
     value_type: Int
     default_value: -1
+  info::finished:
+    name: finished
+    raw_name: finished
+    value_type: String
+    default_value: ""
   info::labels:
     name: labels
     raw_name: labels
