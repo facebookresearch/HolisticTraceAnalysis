@@ -177,10 +177,20 @@ class TraceSymbolTable:
         mtiaLaunchKernel_id = self.sym_index.get(
             "runFunction - job_prep_and_submit_for_execution", self.NULL
         )
+        rocmLaunchKernel_id = self.sym_index.get("hipLaunchKernel", self.NULL)
+        rocmExtModuleLaunchKernel_id = self.sym_index.get(
+            "hipExtModuleLaunchKernel", self.NULL
+        )
+        rocmMemsetAsync_id = self.sym_index.get("hipMemsetAsync", self.NULL)
+        rocmMemcpyAsync_id = self.sym_index.get("hipMemcpyAsync", self.NULL)
+        rocmMemcpyWithStream_id = self.sym_index.get("hipMemcpyWithStream", self.NULL)
         return (
             f"((name == {cudaMemsetAsync_id}) or (name == {cudaMemcpyAsync_id}) or "
-            f" (name == {cudaLaunchKernel_id}) or (name == {cudaLaunchKernelExC_id})"
-            f" or (name == {cuLaunchKernel_id}) or (name == {mtiaLaunchKernel_id})) and (index_correlation > 0)"
+            f"(name == {cudaLaunchKernel_id}) or (name == {cudaLaunchKernelExC_id}) or "
+            f"(name == {cuLaunchKernel_id}) or (name == {mtiaLaunchKernel_id}) or "
+            f"(name == {rocmLaunchKernel_id}) or (name == {rocmExtModuleLaunchKernel_id}) or "
+            f"(name == {rocmMemcpyAsync_id}) or (name == {rocmMemsetAsync_id}) or "
+            f"(name == {rocmMemcpyWithStream_id})) and (index_correlation > 0)"
         )
 
 
