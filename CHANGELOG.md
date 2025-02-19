@@ -5,6 +5,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 #### Added
+- Added support for AMD GPUs.
 - Update pyproject.toml to workaround missing stub packages for yaml.
 - Add trace format validator
 - Added multiple trace filter classes and demos.
