@@ -346,6 +346,21 @@ class TraceAnalysisTestCase(unittest.TestCase):
             use_gpu_annotation=False, expected_rows=12
         )
 
+    def test_cpu_user_annotation_breakdown_with_allowlist(self):
+        """Test the allowlist mode"""
+        analyzer = self.ns_resolution_t
+        allowlist_patterns = ["Optimizer"]
+
+        cpu_user_anno_df = analyzer.get_gpu_user_annotation_breakdown(
+            visualize=False,
+            num_kernels=5,
+            use_gpu_annotation=False,
+            allowlist_patterns=allowlist_patterns,
+        )
+        # Expect 8 rows, 5 original + 2 for Optimizer + 1 others
+        self.assertEqual(len(cpu_user_anno_df), 8)
+        self.assertEqual(int(cpu_user_anno_df.name.str.contains("Optimizer").sum()), 2)
+
     def test_get_gpu_kernels_with_user_annotations(self):
         gpu_kernels_df = self.ns_resolution_t.get_gpu_kernels_with_user_annotations(
             rank=0,
