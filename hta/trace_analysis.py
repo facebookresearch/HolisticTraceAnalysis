@@ -191,6 +191,7 @@ class TraceAnalysis:
         visualize: bool = True,
         duration_ratio: float = 0.8,
         num_kernels: int = 1000,
+        allowlist_patterns: Optional[List[str]] = None,
         image_renderer: Optional[str] = None,
     ) -> Optional[pd.DataFrame]:
         r"""
@@ -223,6 +224,7 @@ class TraceAnalysis:
             visualize,
             duration_ratio,
             num_kernels,
+            allowlist_patterns,
             image_renderer,
         )
 
