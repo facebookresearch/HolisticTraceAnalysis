@@ -16,6 +16,10 @@ from hta.analyzers.cupti_counter_analysis import CuptiCounterAnalysis
 from hta.analyzers.straggler import find_stragglers_with_late_start_comm_kernels
 from hta.analyzers.straggler_analysis import StragglerAnalysis
 from hta.analyzers.trace_counters import TraceCounters
+from hta.analyzers.trace_memory_analysis import (
+    classify_torchtitan_calls,
+    MemoryAnalysis,
+)
 from hta.common.constants import CUDA_MAX_LAUNCH_QUEUE_PER_STREAM
 from hta.common.trace import Trace
 from hta.configs.config import logger
@@ -33,9 +37,12 @@ class TraceAnalysis:
         trace_files: Optional[Dict[int, str]] = None,
         trace_dir: str = DEFAULT_TRACE_DIR,
         include_last_profiler_step: Optional[bool] = False,
+        use_multiprocessing=True,
     ):
         self.t = Trace(trace_files, trace_dir)
-        self.t.load_traces(include_last_profiler_step)
+        self.t.load_traces(
+            include_last_profiler_step, use_multiprocessing=use_multiprocessing
+        )
         assert self.t.is_parsed is True
 
     def get_comm_comp_overlap(self, visualize: bool = True) -> pd.DataFrame:
@@ -339,6 +346,7 @@ class TraceAnalysis:
         time_series: Optional[TimeSeriesTypes] = None,
         ranks: Optional[List[int]] = None,
         output_suffix: str = "_with_counters",
+        custom_time_series=None,
     ) -> None:
         r"""
         Adds a set of time series to the trace in order to aid debugging traces. Creates a new trace file
@@ -397,6 +405,8 @@ class TraceAnalysis:
                 counter_name="Memcpy BW",
                 counter_col="memory_bw_gbps",
             )
+        if custom_time_series:
+            add_time_series(**custom_time_series)
 
         for rank, ev_list in counter_events.items():
             raw_trace_content = self.t.get_raw_trace_for_one_rank(rank=rank)
@@ -725,4 +735,63 @@ class TraceAnalysis:
             output_dir,
             only_show_critical_events,
             show_all_edges,
+        )
+
+    def get_memory_timeline(
+        self, rank: Optional[int] = None, visualize: bool = True
+    ) -> pd.DataFrame:
+        """Get memory usage timeline
+
+        This function analyzes memory allocation events in the trace to produce a
+        timeline of memory usage including both allocated and reserved memory.
+
+        Args:
+            rank (Optional[int]): Analyze specific rank. If None, use first available rank.
+            visualize (bool): Whether to display the memory timeline plot. Default=True.
+
+        Returns:
+            pd.DataFrame: DataFrame containing memory events with columns:
+                - ts: timestamp
+                - device_id: Device ID
+                - device_type: Device type (1=CPU, 2=CUDA)
+                - bytes_delta: Change in bytes
+                - total_allocated: Total allocated memory
+                - total_reserved: Total reserved memory
+                - addr: Memory address
+        """
+
+        analyzer = MemoryAnalysis(self.t)
+        return analyzer.get_memory_timeline(rank=rank, visualize=visualize)
+
+    def get_memory_timeline_per_category(
+        self,
+        rank: Optional[int] = None,
+        visualize: bool = True,
+        classification_func=classify_torchtitan_calls,
+    ):
+        """Get memory usage timeline from user supplied categories.
+
+        This function analyzes memory allocation events in the trace to produce a
+        timeline of allocated memory for different user-customisable categories.
+
+        Note: this function takes
+
+        Args:
+            rank (Optional[int]): Analyze specific rank. If None, use first available rank.
+            visualize (bool): Whether to display the memory timeline plot. Default=True.
+            classification_func (Callable[[MemoryEvent], str])
+
+        Returns:
+            pd.DataFrame: DataFrame containing memory events with columns:
+                - ts: timestamp in nano-second
+                - category: the category assigned to the event by the classification_func
+                - stack_name: a string containing the name of all the parent events of the
+                  allocation.
+                - <category columns>: a column for each category with the current total allocated
+                  for that category, or Nan if the timestep does not correspond to this data point.
+        """
+
+        analyzer = MemoryAnalysis(self.t)
+        return analyzer.get_classified_memory_timelines(
+            rank=rank, visualize=visualize, classification_func=classification_func
         )
