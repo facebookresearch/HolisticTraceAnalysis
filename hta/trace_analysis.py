@@ -206,6 +206,7 @@ class TraceAnalysis:
             duration_ratio (float): Floating point value between 0 and 1 specifying the ratio of time taken
                                     by top user annotations. Default = 0.8.
             num_kernels (int): Maximum number of user annotations to show. Default = 1000. Rest get grouped into "other".
+            allowlist_patterns (list(str)): if user annotations match any of the patterns in this list, they will not be aggregated into "other" catgory. This argument is meant to keep some events as distinct in the aggregation. Supports strings as well as regular expressions.
             image_renderer (str): Set to ``notebook`` when using jupyter and ``jupyterlab`` when using jupyter-lab.
                 To see all available options execute: ``import plotly; plotly.io.renderers`` in a python shell.
 

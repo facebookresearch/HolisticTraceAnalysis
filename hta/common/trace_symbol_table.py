@@ -109,7 +109,7 @@ class TraceSymbolTable:
         # Compile the patterns into a single regex pattern
         pattern = re.compile("|".join(re.escape(p) for p in patterns))
 
-        # Find the indices of matches
+        # Find the names of matches
         return [s for s in self.sym_table if pattern.search(s)]
 
     def add_symbols_to_trace_df(self, trace_df: pd.DataFrame, col: str) -> None:
