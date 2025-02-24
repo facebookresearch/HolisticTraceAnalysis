@@ -2,6 +2,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+import math
 import os
 import unittest
 
@@ -90,14 +91,19 @@ class TraceParseTestCase(unittest.TestCase):
     vision_transformer_raw_df: pd.DataFrame
     inference_t: Trace
     inference_raw_df: pd.DataFrame
+    triton_t: Trace
+    triton_raw_df: pd.DataFrame
 
     @classmethod
     def setUpClass(cls):
         super(TraceParseTestCase, cls).setUpClass()
         vision_transformer_trace_dir: str = "tests/data/vision_transformer"
         inference_trace_dir: str = "tests/data/inference_single_rank"
+        triton_trace_dir: str = "tests/data/triton_example"
+
         vision_transformer_rank_0_file: str = "rank-0.json.gz"
         inference_rank_0_file: str = "inference_rank_0.json.gz"
+        triton_example_file: str = "triton_example.json.gz"
         inference_trace_files = [
             os.path.join(inference_trace_dir, inference_rank_0_file)
         ]
@@ -119,11 +125,21 @@ class TraceParseTestCase(unittest.TestCase):
         cls.inference_raw_df = prepare_ground_truth_df(
             inference_trace_dir, inference_rank_0_file
         )
+        # Trace parser for triton
+        cls.triton_t: Trace = Trace(trace_dir=triton_trace_dir)
+        cls.triton_t.parse_traces(max_ranks=max_ranks, use_multiprocessing=True)
+        cls.triton_raw_df = prepare_ground_truth_df(
+            triton_trace_dir, triton_example_file
+        )
 
     def setUp(self) -> None:
-        self.traces = [self.vision_transformer_t, self.inference_t]
-        self.raw_dfs = [self.vision_transformer_raw_df, self.inference_raw_df]
-        self.total_ranks = [8, 1]
+        self.traces = [self.vision_transformer_t, self.inference_t, self.triton_t]
+        self.raw_dfs = [
+            self.vision_transformer_raw_df,
+            self.inference_raw_df,
+            self.triton_raw_df,
+        ]
+        self.total_ranks = [8, 1, 1]
 
     def test_trace_load(self) -> None:
         # run tests for each collection of traces
@@ -165,7 +181,9 @@ class TraceParseTestCase(unittest.TestCase):
             df = t.traces[0]
             sym_id_map = t.symbol_table.get_sym_id_map()
             iterations = {
-                f"ProfilerStep#{i}" for i in set(df["iteration"].unique()) if i != -1
+                f"ProfilerStep#{i}"
+                for i in set(df["iteration"].unique())
+                if i != -1 and not math.isnan(i)
             }
 
             valid_gpu_kernels = df.loc[
@@ -199,6 +217,27 @@ class TraceParseTestCase(unittest.TestCase):
             trace_meta["deviceProperties"][0], exp_meta["deviceProperties"][0]
         )
         # print(trace_meta)
+
+    def test_get_trace_start_unixtime_ns(self) -> None:
+        with self.assertRaises(KeyError):
+            # This trace metadata doesn't have the "baseTimeNanoseconds" field, so we expect a KeyError
+            self.vision_transformer_t.get_trace_start_unixtime_ns(0)
+
+        triton_trace_first_event_ts_ns = 2413669096100149
+        triton_trace_base_time_nanoseconds = 1727743122000000000
+        expected_triton_start_unixtime_ns = (
+            triton_trace_first_event_ts_ns + triton_trace_base_time_nanoseconds
+        )
+
+        actual_triton_start_unixtime_ns = self.triton_t.get_trace_start_unixtime_ns(0)
+
+        # Rounding of ns resolution events yields an imprecise result.
+        # We expect the difference to be less than 1us
+        self.assertAlmostEqual(
+            actual_triton_start_unixtime_ns,
+            expected_triton_start_unixtime_ns,
+            delta=1000,
+        )
 
 
 @unittest.skipIf(
