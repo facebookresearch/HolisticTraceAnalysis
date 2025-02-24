@@ -7,6 +7,7 @@ from __future__ import annotations
 import multiprocessing as mp
 
 import queue
+import re
 from typing import Any, Dict, Iterable, List
 
 import pandas as pd
@@ -78,6 +79,38 @@ class TraceSymbolTable:
 
     def get_sym_table(self) -> List[str]:
         return self.sym_table
+
+    def find_matches(self, patterns: List[str]) -> List[int]:
+        """
+        Get the indices in sym_table where any of the given patterns match.
+
+        Args:
+            patterns (List[str]): The list of patterns to match, can be regular expressions.
+
+        Returns:
+            List[int]: A list of indices where a pattern matches.
+        """
+        # Compile the patterns into a single regex pattern
+        pattern = re.compile("|".join(re.escape(p) for p in patterns))
+
+        # Find the indices of matches
+        return [i for i, s in enumerate(self.sym_table) if pattern.search(s)]
+
+    def find_matched_symbols(self, patterns: List[str]) -> List[str]:
+        """
+        Get symbols where any of the given patterns match.
+
+        Args:
+            patterns (List[str]): The list of patterns to match, can be regular expressions.
+
+        Returns:
+            List[str]: A list of symbols where the pattern matches
+        """
+        # Compile the patterns into a single regex pattern
+        pattern = re.compile("|".join(re.escape(p) for p in patterns))
+
+        # Find the names of matches
+        return [s for s in self.sym_table if pattern.search(s)]
 
     def add_symbols_to_trace_df(self, trace_df: pd.DataFrame, col: str) -> None:
         """

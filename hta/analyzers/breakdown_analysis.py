@@ -350,6 +350,7 @@ class BreakdownAnalysis:
         visualize: bool = True,
         duration_ratio: float = 0.8,
         num_kernels: int = 1000,
+        allowlist_patterns: Optional[List[str]] = None,
         image_renderer: Optional[str] = None,
     ) -> Optional[pd.DataFrame]:
         """
@@ -364,6 +365,7 @@ class BreakdownAnalysis:
             duration_ratio (float): Floating point value between 0 and 1 specifying the ratio of time taken
                                     by top user annotations. Default = 0.8.
             num_kernels (int): Maximum number of user annotations to show. Default = 1000. Rest get grouped into "other".
+            allowlist_patterns (list(str)): if user annotations match any of the patterns in this list, they will not be aggregated into "other" catgory. This argument is meant to keep some events as distinct in the aggregation. Supports strings as well as regular expressions.
             image_renderer (str): Set to ``notebook`` when using jupyter and ``jupyterlab`` when using jupyter-lab.
                 To see all available options execute: ``import plotly; plotly.io.renderers`` in a python shell.
 
@@ -393,6 +395,9 @@ class BreakdownAnalysis:
                 "rank": pd.Series(dtype="int"),
             }
         )
+        allowlist_names: Optional[List[str]] = None
+        if allowlist_patterns is not None:
+            allowlist_names = t.symbol_table.find_matched_symbols(allowlist_patterns)
 
         kernel_per_rank: Dict[int, pd.DataFrame] = {}
 
@@ -407,6 +412,7 @@ class BreakdownAnalysis:
                 gpu_user_annotation_kernels,
                 duration_ratio=duration_ratio,
                 num_kernels=num_kernels,
+                allowlist_names=allowlist_names,
             )
             gpu_kernel_time["rank"] = int(rank)
             kernel_per_rank[rank] = gpu_kernel_time
@@ -558,9 +564,27 @@ class BreakdownAnalysis:
     def _aggr_gpu_kernel_time(
         cls,
         gpu_kernel_time: pd.DataFrame,
-        duration_ratio: float = 0.8,
         num_kernels: int = 10,
+        duration_ratio: float = 0.8,
+        allowlist_names: Optional[List[str]] = None,
     ) -> pd.DataFrame:
+        """
+        Aggregates GPU kernel/events
+
+            @args: gpu_kernel_time: flat dataframe of events to consider
+            @args: num_kernels (int) : Max number of kernels to show in result. If the
+                aggregate exceeds this the rest of the kernels are grouped into "other",
+                by first sorting by duration in descending order.
+            @args: duration_ratio (float) : a quantile threshold above which kernels are grouped
+                into "other" category. For example, setting to 0.8 will result is all kernels
+                past > p80 to be grouped together.
+            @args: allowlist_names (list(str): if kernel names are in this list, they will not be aggregated into "other" catgory.
+                This argument is meant to keep some kernel/events as distinct in the aggregation
+
+        Returns:
+            aggregated pd.DataFrame by "name" column with ["sum", "max", "min", "mean", "std"]
+        """
+
         gpu_kernel_time = gpu_kernel_time.groupby(by=["name"])["dur"].agg(
             ["sum", "max", "min", "mean", "std"]
         )
@@ -572,15 +596,23 @@ class BreakdownAnalysis:
 
         # if there are more than num_kernels kernels, starting to aggregate kernels
         if gpu_kernel_time.shape[0] > num_kernels:
+            if allowlist_names is not None:
+                keep_idx = gpu_kernel_time.name.isin(allowlist_names)
+            else:
+                # always false
+                keep_idx = gpu_kernel_time["sum"] < 0
+
             gpu_kernel_time["cumsum"] = gpu_kernel_time["sum"].cumsum()
             quantiles = gpu_kernel_time["cumsum"].quantile(duration_ratio)
             # FIXME linter mismatch between fbcode and git T183519933
             # fmt: off
-            gpu_kernel_time.loc[gpu_kernel_time["cumsum"] > quantiles, "name"] = (
+            gpu_kernel_time.loc[~keep_idx & (gpu_kernel_time["cumsum"] > quantiles), "name"] = (
                 "others"
             )
             # fmt: on
-            gpu_kernel_time.loc[gpu_kernel_time.index >= num_kernels, "name"] = "others"
+            gpu_kernel_time.loc[
+                ~keep_idx & (gpu_kernel_time.index >= num_kernels), "name"
+            ] = "others"
             gpu_kernel_time = gpu_kernel_time.groupby(by=["name"])["sum"].agg(
                 ["sum", "max", "min", "mean", "std"]
             )
