@@ -36,6 +36,30 @@ PHASE_FLOW_START: str = "s"
 PHASE_FLOW_END: str = "f"
 
 
+def trace_event_timestamp_to_unixtime_ns(
+    trace_event_ts_us: float, trace_metadata: MetaData
+) -> int:
+    print(trace_event_ts_us)
+    """
+    Utility to convert a trace event timestamp (us) to unix time (ns).
+
+    Returns: Unixtime (nanoseconds) of trace event (int)
+
+    Raises: KeyError when baseTimeNanoseconds is not found in trace metadata.
+    """
+    if (
+        base_time_nanoseconds := trace_metadata.get("baseTimeNanoseconds", None)
+    ) is None:
+        err_msg: str = (
+            "'baseTimeNanoseconds' is not found in the trace metadata. Unable to convert trace event timestamp to unix time."
+        )
+        logger.warning(err_msg)
+        raise KeyError(err_msg)
+    # Convert to int to avoid loss of precision with float
+    trace_event_ts_ns = int(trace_event_ts_us * 1e3)
+    return trace_event_ts_ns + base_time_nanoseconds
+
+
 def transform_correlation_to_index(
     df: pd.DataFrame, symbol_table: TraceSymbolTable
 ) -> pd.DataFrame:
@@ -784,3 +808,20 @@ class Trace:
         if not is_start:
             res["bp"] = "e"
         return res
+
+    def get_trace_start_unixtime_ns(self, rank: int) -> int:
+        """
+        Get the start timestamp of the rank's trace in nanoseconds.
+        Start timestamp is the timestamp of the earliest event in the trace.
+
+        Returns: Unixtime (nanoseconds) of trace start (int)
+
+        Raises: ValueError when this Trace object doesn't have trace for the given rank.
+        """
+        if rank not in self.traces:
+            err_msg: str = f"No trace found for rank {rank}"
+            logger.warning(err_msg)
+            raise ValueError(err_msg)
+        rank_min_ts = self.traces[rank]["ts"].min()
+        rank_metadata = self.meta_data[rank]
+        return trace_event_timestamp_to_unixtime_ns(rank_min_ts, rank_metadata)
