@@ -39,7 +39,6 @@ PHASE_FLOW_END: str = "f"
 def trace_event_timestamp_to_unixtime_ns(
     trace_event_ts_us: float, trace_metadata: MetaData
 ) -> int:
-    print(trace_event_ts_us)
     """
     Utility to convert a trace event timestamp (us) to unix time (ns).
 
