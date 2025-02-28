@@ -249,6 +249,13 @@ def _compress_df(
     """
     cfg = cfg or ParserConfig.get_default_cfg()
 
+    # Keep memory events (which are instant events)
+    is_memory_event = (
+        (df["ph"] == "i")
+        & (df["name"] == "[memory]")
+        & (df["cat"] == "cpu_instant_event")
+    )
+    df.loc[is_memory_event, "dur"] = 0
     # drop rows with null values
     df.dropna(axis=0, subset=["dur", "cat"], inplace=True)
     df.drop(df[df["cat"] == "Trace"].index, inplace=True)
@@ -354,7 +361,6 @@ def _parse_trace_dataframe_json(
         # assign an index to each event
         df.reset_index(inplace=True)
         df["index"] = pd.to_numeric(df["index"], downcast="integer")
-
         df, local_symbol_table = _compress_df(df, cfg)
 
     return meta, df, local_symbol_table
