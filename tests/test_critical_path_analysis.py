@@ -50,6 +50,8 @@ class CriticalPathAnalysisTestCase(unittest.TestCase):
         )
         self.ns_resolution_trace_dir = critical_path_trace_dir5
         self.ns_resolution_trace = TraceAnalysis(trace_dir=critical_path_trace_dir5)
+        self.amd_trace_dir: str = os.path.join(self.base_data_dir, "amd_trace")
+        self.amd_trace = TraceAnalysis(trace_dir=self.amd_trace_dir)
 
     def test_critical_path_analysis(self):
         critical_path_t = self.simple_add_trace
@@ -556,6 +558,29 @@ class CriticalPathAnalysisTestCase(unittest.TestCase):
             set_default_trace_parsing_backend(ParserBackend.IJSON_BATCH_AND_COMPRESS)
 
             critical_path_t = TraceAnalysis(trace_dir=self.ns_resolution_trace_dir)
+            test()
+
+            set_default_trace_parsing_backend(old_backend)
+
+    def test_amd_trace(self):
+        """Check that AMD traces are compatible with Critical Path Analysis"""
+        annotation = "ProfilerStep"
+        instance_id = 1
+
+        def test():
+            cp_graph, success = critical_path_t.critical_path_analysis(
+                rank=0, annotation=annotation, instance_id=instance_id
+            )
+            self.assertTrue(success)
+
+        critical_path_t = self.amd_trace
+        test()
+
+        if _auto_detect_parser_backend() != ParserBackend.JSON:
+            old_backend = get_default_trace_parsing_backend()
+            set_default_trace_parsing_backend(ParserBackend.IJSON_BATCH_AND_COMPRESS)
+
+            critical_path_t = TraceAnalysis(trace_dir=self.amd_trace_dir)
             test()
 
             set_default_trace_parsing_backend(old_backend)
