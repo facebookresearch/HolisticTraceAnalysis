@@ -79,14 +79,17 @@ class ParserConfig:
         args: Optional[List[AttributeSpec]] = None,
         user_provide_trace_type: Optional[TraceType] = None,
         version: YamlVersion = DEFAULT_PARSE_VERSION,
+        parse_all_args: bool = False,
     ) -> None:
         self.args: List[AttributeSpec] = (
             args if args else self.get_default_args(version=version)
         )
-        self.parser_backend: Optional[ParserBackend] = None
+        self.parser_backend: Optional[ParserBackend] = ParserBackend.JSON
         self.trace_memory: bool = False
         self.user_provide_trace_type: Optional[TraceType] = user_provide_trace_type
         self.min_required_cols: List[str] = self.DEFAULT_MIN_REQUIRED_COLS
+        self.version: YamlVersion = version
+        self.parse_all_args: bool = parse_all_args
 
     @classmethod
     def get_default_cfg(cls) -> "ParserConfig":
@@ -142,8 +145,14 @@ class ParserConfig:
                 self.args.append(arg)
                 arg_set.add(arg.name)
 
+    def set_trace_memory(self, trace_memory: bool) -> None:
+        self.trace_memory = trace_memory
+
     def set_parser_backend(self, parser_backend: ParserBackend) -> None:
         self.parser_backend = parser_backend
+
+    def set_parse_all_args(self, parse_all_args: bool) -> None:
+        self.parse_all_args = parse_all_args
 
     @staticmethod
     def enable_communication_args(version: YamlVersion = DEFAULT_PARSE_VERSION) -> None:
@@ -176,6 +185,10 @@ class ParserConfig:
 
         global AVAILABLE_ARGS
         pprint(AVAILABLE_ARGS)
+
+    @staticmethod
+    def transform_arg_name(arg: str) -> str:
+        return arg.lower().replace(" ", "_").replace("-", "_").replace("/", "_")
 
 
 # Define a global ParserConfig variable for internal use. To access this variable,

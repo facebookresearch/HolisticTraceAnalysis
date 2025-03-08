@@ -1,7 +1,17 @@
 import unittest
 from typing import List, NamedTuple, Optional
+from unittest.mock import MagicMock, patch
 
-from hta.configs.parser_config import AttributeSpec, AVAILABLE_ARGS, ParserConfig
+from hta.configs.default_values import YamlVersion
+from hta.configs.parser_config import (
+    AttributeSpec,
+    AVAILABLE_ARGS,
+    ParserBackend,
+    ParserConfig,
+)
+from hta.utils.test_utils import data_provider
+
+_MODULE_NAME = "hta.configs.parser_config"
 
 
 class ParserConfigTestCase(unittest.TestCase):
@@ -59,3 +69,64 @@ class ParserConfigTestCase(unittest.TestCase):
                 ParserConfig.get_default_cfg().get_args(), custom_cfg.get_args()
             )
         )
+
+    @data_provider(
+        lambda: [
+            {
+                "arg_name": "Kernel Queued",
+                "expected_transformed": "kernel_queued",
+            },
+            {
+                "arg_name": "Cuda-Kernel/Queued",
+                "expected_transformed": "cuda_kernel_queued",
+            },
+        ]
+    )
+    def test_transform_arg_name(self, arg_name: str, expected_transformed: str) -> None:
+        self.assertEqual(
+            ParserConfig.transform_arg_name(arg_name), expected_transformed
+        )
+
+    def test_set_parse_all_args(self) -> None:
+        cfg = ParserConfig()
+        # Test default value is False
+        cfg.set_parse_all_args(False)
+
+        # Test setting to True
+        cfg.set_parse_all_args(True)
+        self.assertTrue(cfg.parse_all_args)
+
+        # Test setting to False
+        cfg.set_parse_all_args(False)
+        self.assertFalse(cfg.parse_all_args)
+
+    @patch(f"{_MODULE_NAME}.parse_event_args_yaml")
+    def test_set_global_parser_config_version(self, mock_yaml: MagicMock) -> None:
+        cfg = ParserConfig()
+        version = YamlVersion(1, 0, 0)
+        cfg.set_global_parser_config_version(version)
+        self.assertEqual(cfg.version.get_version_str(), "1.0.0")
+        self.assertEqual(
+            ParserConfig.get_default_cfg().version.get_version_str(), "1.0.0"
+        )
+        mock_yaml.assert_called_with(version)
+
+    def test_set_min_required_cols(self) -> None:
+        cfg = ParserConfig()
+        cols = ["a", "b", "c"]
+        cfg.set_min_required_cols(cols)
+        self.assertSetEqual(set(cfg.get_min_required_cols()), set(cols))
+
+    def test_set_trace_memory(self) -> None:
+        cfg = ParserConfig()
+        self.assertFalse(cfg.trace_memory)
+        cfg.set_trace_memory(True)
+        self.assertTrue(cfg.trace_memory)
+        cfg.set_trace_memory(False)
+        self.assertFalse(cfg.trace_memory)
+
+    def test_set_parser_backend(self) -> None:
+        cfg = ParserConfig()
+        for backend in ParserBackend:
+            cfg.set_parser_backend(backend)
+            self.assertEqual(cfg.parser_backend, backend)
