@@ -4,6 +4,7 @@
 
 import json
 import unittest
+from pathlib import Path
 
 from hta.configs.config import HtaConfig
 from hta.configs.default_values import DEFAULT_CONFIG_FILENAME
@@ -72,6 +73,10 @@ class HtaConfigTestCase(unittest.TestCase):
 
     def test_get_env_options(self):
         self.assertNotEqual(get_options(), "")
+
+    def test_get_test_data_path(self):
+        data_path = HtaConfig.get_test_data_path("h100")
+        self.assertTrue(Path(data_path).exists())
 
 
 if __name__ == "__main__":  # pragma: no cover
