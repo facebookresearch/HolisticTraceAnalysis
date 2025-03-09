@@ -98,6 +98,33 @@ class ParserConfigTestCase(unittest.TestCase):
             ParserConfig.transform_arg_name(arg_name), expected_transformed
         )
 
+    @data_provider(
+        lambda: [
+            {
+                "cfg": ParserConfig(args=ParserConfig.get_minimum_args()),
+                "args_selector": None,
+                "expected_args": ParserConfig.get_minimum_args(),
+            },
+            {
+                "cfg": ParserConfig(args=ParserConfig.get_minimum_args()),
+                "args_selector": ["stream"],
+                "expected_args": [
+                    AttributeSpec(
+                        "stream", "stream", ValueType.Int, -1, DEFAULT_PARSE_VERSION
+                    )
+                ],
+            },
+        ]
+    )
+    def test_args_selector(
+        self,
+        cfg: ParserConfig,
+        args_selector: Optional[List[str]],
+        expected_args: List[str],
+    ) -> None:
+        cfg.set_args_selector(args_selector)
+        self.assertListEqual(cfg.get_args(), expected_args)
+
     def test_set_parse_all_args(self) -> None:
         cfg = ParserConfig()
         # Test default value is False

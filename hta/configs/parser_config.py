@@ -83,6 +83,7 @@ class ParserConfig:
         user_provide_trace_type: Optional[TraceType] = None,
         version: YamlVersion = DEFAULT_PARSE_VERSION,
         parse_all_args: bool = False,
+        selected_arg_keys: Optional[List[str]] = None,
     ) -> None:
         self.args: List[AttributeSpec] = (
             args if args else self.get_default_args(version=version)
@@ -94,6 +95,7 @@ class ParserConfig:
         self.min_required_cols: List[str] = self.DEFAULT_MIN_REQUIRED_COLS
         self.version: YamlVersion = version
         self.parse_all_args: bool = parse_all_args
+        self.selected_arg_keys: Optional[List[str]] = None
 
     def clone(self) -> "ParserConfig":
         return copy.deepcopy(self)
@@ -136,6 +138,8 @@ class ParserConfig:
             self.add_args(args)
 
     def get_args(self) -> List[AttributeSpec]:
+        if self.selected_arg_keys is not None:
+            return [self.arg_map[arg] for arg in self.selected_arg_keys]
         return self.args
 
     def set_min_required_cols(self, cols: List[str]) -> None:
@@ -158,8 +162,15 @@ class ParserConfig:
     def set_parser_backend(self, parser_backend: ParserBackend) -> None:
         self.parser_backend = parser_backend
 
-    def set_parse_all_args(self, parse_all_args: bool) -> None:
+    def set_parse_all_args(self, parse_all_args: bool) -> "ParserConfig":
         self.parse_all_args = parse_all_args
+        return self
+
+    def set_args_selector(
+        self, selected_arg_keys: Optional[List[str]] = None
+    ) -> "ParserConfig":
+        self.selected_arg_keys = selected_arg_keys
+        return self
 
     @classmethod
     def enable_communication_args(
