@@ -1,5 +1,5 @@
 import unittest
-from typing import List, NamedTuple, Optional
+from typing import Dict, List, NamedTuple, Optional
 
 import pandas as pd
 
@@ -180,9 +180,18 @@ class ParserConfigTestCase(unittest.TestCase):
                 {"arg1": 1, "arg2": 1.0},
                 {"arg1": 2, "arg2": 2.0, "arg3": "abc"},
                 {"arg4": {"key": "value"}},
+                {"arg5": 3, "arg6": 3.0},
                 None,
             ]
         )
+        referrence_specs: Dict[str, AttributeSpec] = {
+            "ref::arg5": AttributeSpec(
+                "arg5_ref", "arg5", ValueType.Int, 0, DEFAULT_PARSE_VERSION
+            ),
+            "ref::arg6": AttributeSpec(
+                "arg6_ref", "arg6", ValueType.Float, 10.0, DEFAULT_PARSE_VERSION
+            ),
+        }
         expected_result = {
             "arg1": AttributeSpec(
                 "arg1", "arg1", ValueType.Int, 0, DEFAULT_PARSE_VERSION
@@ -196,6 +205,8 @@ class ParserConfigTestCase(unittest.TestCase):
             "arg4": AttributeSpec(
                 "arg4", "arg4", ValueType.Object, None, DEFAULT_PARSE_VERSION
             ),
+            "arg5": referrence_specs["ref::arg5"],
+            "arg6": referrence_specs["ref::arg6"],
         }
-        result = cfg.infer_attribute_specs(args)
+        result = cfg.infer_attribute_specs(args, referrence_specs=referrence_specs)
         self.assertDictEqual(result, expected_result)

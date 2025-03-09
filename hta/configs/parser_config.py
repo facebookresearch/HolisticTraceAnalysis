@@ -198,8 +198,19 @@ class ParserConfig:
         return re.sub(r"_+", "_", arg).strip("_")
 
     @classmethod
-    def infer_attribute_specs(cls, args: pd.Series) -> Dict[str, AttributeSpec]:
+    def infer_attribute_specs(
+        cls,
+        args: pd.Series,
+        referrence_specs: Optional[Dict[str, AttributeSpec]] = None,
+    ) -> Dict[str, AttributeSpec]:
         attribute_spec_map = {}
+
+        # Initialize the attribute_spec_map with the referrence_specs
+        referrence_specs = referrence_specs or {}
+        for spec_key, spec in referrence_specs.items():
+            attribute_spec_map[spec.raw_name] = spec
+
+        # Infer the attribute specs from the args
         for d in args.dropna():
             if isinstance(d, dict):
                 for arg_name, arg_value in d.items():
