@@ -84,7 +84,7 @@ class ParserConfig:
         self.args: List[AttributeSpec] = (
             args if args else self.get_default_args(version=version)
         )
-        self.parser_backend: Optional[ParserBackend] = ParserBackend.JSON
+        self.parser_backend: Optional[ParserBackend] = None
         self.trace_memory: bool = False
         self.user_provide_trace_type: Optional[TraceType] = user_provide_trace_type
         self.min_required_cols: List[str] = self.DEFAULT_MIN_REQUIRED_COLS

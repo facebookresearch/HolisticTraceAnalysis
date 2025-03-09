@@ -1,6 +1,5 @@
 import unittest
 from typing import List, NamedTuple, Optional
-from unittest.mock import MagicMock, patch
 
 from hta.configs.default_values import YamlVersion
 from hta.configs.parser_config import (
@@ -100,8 +99,7 @@ class ParserConfigTestCase(unittest.TestCase):
         cfg.set_parse_all_args(False)
         self.assertFalse(cfg.parse_all_args)
 
-    @patch(f"{_MODULE_NAME}.parse_event_args_yaml")
-    def test_set_global_parser_config_version(self, mock_yaml: MagicMock) -> None:
+    def test_set_global_parser_config_version(self) -> None:
         cfg = ParserConfig()
         version = YamlVersion(1, 0, 0)
         cfg.set_global_parser_config_version(version)
@@ -109,7 +107,6 @@ class ParserConfigTestCase(unittest.TestCase):
         self.assertEqual(
             ParserConfig.get_default_cfg().version.get_version_str(), "1.0.0"
         )
-        mock_yaml.assert_called_with(version)
 
     def test_set_min_required_cols(self) -> None:
         cfg = ParserConfig()
