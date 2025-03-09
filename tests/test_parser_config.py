@@ -1,10 +1,13 @@
 import unittest
 from typing import List, NamedTuple, Optional
 
-from hta.configs.default_values import YamlVersion
+import pandas as pd
+
+from hta.configs.default_values import ValueType, YamlVersion
 from hta.configs.parser_config import (
     AttributeSpec,
     AVAILABLE_ARGS,
+    DEFAULT_PARSE_VERSION,
     ParserBackend,
     ParserConfig,
 )
@@ -131,3 +134,68 @@ class ParserConfigTestCase(unittest.TestCase):
         for backend in ParserBackend:
             cfg.set_parser_backend(backend)
             self.assertEqual(cfg.parser_backend, backend)
+
+    @data_provider(
+        lambda: [
+            {
+                "arg_name": "arg1",
+                "arg_value": 1,
+                "arg_spec": AttributeSpec(
+                    "arg1", "arg1", ValueType.Int, 0, DEFAULT_PARSE_VERSION
+                ),
+            },
+            {
+                "arg_name": "arg2",
+                "arg_value": 1.0,
+                "arg_spec": AttributeSpec(
+                    "arg2", "arg2", ValueType.Float, 0.0, DEFAULT_PARSE_VERSION
+                ),
+            },
+            {
+                "arg_name": "arg3",
+                "arg_value": "1",
+                "arg_spec": AttributeSpec(
+                    "arg3", "arg3", ValueType.String, "", DEFAULT_PARSE_VERSION
+                ),
+            },
+            {
+                "arg_name": "arg4",
+                "arg_value": {},
+                "arg_spec": AttributeSpec(
+                    "arg4", "arg4", ValueType.Object, None, DEFAULT_PARSE_VERSION
+                ),
+            },
+        ]
+    )
+    def test_make_attribute_spec(
+        self, arg_name: str, arg_value: object, arg_spec: AttributeSpec
+    ) -> None:
+        result_spec = ParserConfig.make_attribute_spec(arg_name, arg_value)
+        self.assertEqual(result_spec, arg_spec)
+
+    def test_infer_attribute_specs(self) -> None:
+        cfg = ParserConfig()
+        args = pd.Series(
+            [
+                {"arg1": 1, "arg2": 1.0},
+                {"arg1": 2, "arg2": 2.0, "arg3": "abc"},
+                {"arg4": {"key": "value"}},
+                None,
+            ]
+        )
+        expected_result = {
+            "arg1": AttributeSpec(
+                "arg1", "arg1", ValueType.Int, 0, DEFAULT_PARSE_VERSION
+            ),
+            "arg2": AttributeSpec(
+                "arg2", "arg2", ValueType.Float, 0.0, DEFAULT_PARSE_VERSION
+            ),
+            "arg3": AttributeSpec(
+                "arg3", "arg3", ValueType.String, "", DEFAULT_PARSE_VERSION
+            ),
+            "arg4": AttributeSpec(
+                "arg4", "arg4", ValueType.Object, None, DEFAULT_PARSE_VERSION
+            ),
+        }
+        result = cfg.infer_attribute_specs(args)
+        self.assertDictEqual(result, expected_result)

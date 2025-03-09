@@ -3,9 +3,11 @@
 import copy
 import re
 from enum import Enum
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional, Set, Union
 
-from hta.configs.default_values import AttributeSpec, EventArgs
+import pandas as pd
+
+from hta.configs.default_values import AttributeSpec, EventArgs, ValueType
 from hta.configs.event_args_yaml_parser import (
     parse_event_args_yaml,
     v1_0_0,
@@ -187,11 +189,53 @@ class ParserConfig:
         global AVAILABLE_ARGS
         pprint(AVAILABLE_ARGS)
 
-    @staticmethod
-    def transform_arg_name(arg: str) -> str:
+    @classmethod
+    def transform_arg_name(cls, arg: str) -> str:
+        if arg == "name":
+            return "a_name"  # avoid conflict with the name column
         arg = re.sub(r"\([^)]*\)", "", arg)
         arg = re.sub(r"[ \-\/\.%]+", "_", arg.lower())
         return re.sub(r"_+", "_", arg).strip("_")
+
+    @classmethod
+    def infer_attribute_specs(cls, args: pd.Series) -> Dict[str, AttributeSpec]:
+        attribute_spec_map = {}
+        for d in args.dropna():
+            if isinstance(d, dict):
+                for arg_name, arg_value in d.items():
+                    if arg_name not in attribute_spec_map:
+                        attribute_spec_map[arg_name] = cls.make_attribute_spec(
+                            arg_name, arg_value
+                        )
+        return attribute_spec_map
+
+    @classmethod
+    def make_attribute_spec(
+        cls,
+        raw_name: str,
+        value: object,
+        min_supported_version: YamlVersion = DEFAULT_PARSE_VERSION,
+    ) -> AttributeSpec:
+        default_value: Union[int, float, str, object]
+        if isinstance(value, int):
+            value_type = ValueType.Int
+            default_value = 0
+        elif isinstance(value, float):
+            value_type = ValueType.Float
+            default_value = 0.0
+        elif isinstance(value, str):
+            value_type = ValueType.String
+            default_value = ""
+        else:
+            value_type = ValueType.Object
+            default_value = None
+        return AttributeSpec(
+            cls.transform_arg_name(raw_name),
+            raw_name,
+            value_type,
+            default_value,
+            min_supported_version,
+        )
 
 
 # Define a global ParserConfig variable for internal use. To access this variable,
