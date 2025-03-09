@@ -94,13 +94,16 @@ class ParserConfig:
         self.version: YamlVersion = version
         self.parse_all_args: bool = parse_all_args
 
+    def clone(self) -> "ParserConfig":
+        return copy.deepcopy(self)
+
     @classmethod
     def get_default_cfg(cls) -> "ParserConfig":
-        return copy.deepcopy(_DEFAULT_PARSER_CONFIG)
+        return _DEFAULT_PARSER_CONFIG.clone()
 
     @classmethod
     def get_versioned_cfg(cls, version: YamlVersion) -> "ParserConfig":
-        return copy.deepcopy(ParserConfig(version=version))
+        return ParserConfig(version=version).clone()
 
     @classmethod
     def set_default_cfg(cls, cfg: "ParserConfig") -> None:
@@ -157,11 +160,15 @@ class ParserConfig:
     def set_parse_all_args(self, parse_all_args: bool) -> None:
         self.parse_all_args = parse_all_args
 
-    @staticmethod
-    def enable_communication_args(version: YamlVersion = DEFAULT_PARSE_VERSION) -> None:
-        _DEFAULT_PARSER_CONFIG.add_args(
-            parse_event_args_yaml(version).ARGS_COMMUNICATION
-        )
+    @classmethod
+    def enable_communication_args(
+        cls,
+        cfg: Optional["ParserConfig"] = None,
+        version: YamlVersion = DEFAULT_PARSE_VERSION,
+    ) -> "ParserConfig":
+        cfg = cfg or _DEFAULT_PARSER_CONFIG
+        cfg.add_args(parse_event_args_yaml(version).ARGS_COMMUNICATION)
+        return cfg
 
     @staticmethod
     def set_global_parser_config_version(version: YamlVersion) -> None:

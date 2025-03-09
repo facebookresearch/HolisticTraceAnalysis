@@ -4,6 +4,7 @@ from typing import Dict, List, NamedTuple, Optional
 import pandas as pd
 
 from hta.configs.default_values import ValueType, YamlVersion
+from hta.configs.event_args_yaml_parser import parse_event_args_yaml
 from hta.configs.parser_config import (
     AttributeSpec,
     AVAILABLE_ARGS,
@@ -85,6 +86,10 @@ class ParserConfigTestCase(unittest.TestCase):
             {
                 "arg_name": "Kernel.a(.Queued)__b_%",
                 "expected_transformed": "kernel_a_b",
+            },
+            {
+                "arg_name": "name",
+                "expected_transformed": "a_name",
             },
         ]
     )
@@ -210,3 +215,13 @@ class ParserConfigTestCase(unittest.TestCase):
         }
         result = cfg.infer_attribute_specs(args, referrence_specs=referrence_specs)
         self.assertDictEqual(result, expected_result)
+
+    def test_enable_communication_args(self) -> None:
+        cfg = ParserConfig.get_versioned_cfg(DEFAULT_PARSE_VERSION)
+        cfg_1 = ParserConfig.enable_communication_args(cfg)
+        for arg in parse_event_args_yaml(DEFAULT_PARSE_VERSION).ARGS_COMMUNICATION:
+            self.assertIn(arg, cfg_1.get_args())
+
+        # Run the following two steps purely for test coverage
+        ParserConfig.show_available_args()
+        ParserConfig.get_info_args()
