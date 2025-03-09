@@ -3,7 +3,7 @@
 import copy
 import re
 from enum import Enum
-from typing import Dict, List, Optional, Set, Union
+from typing import Dict, List, Optional, Union
 
 import pandas as pd
 
@@ -87,6 +87,7 @@ class ParserConfig:
         self.args: List[AttributeSpec] = (
             args if args else self.get_default_args(version=version)
         )
+        self.arg_map = {arg.name: arg for arg in self.args}
         self.parser_backend: Optional[ParserBackend] = None
         self.trace_memory: bool = False
         self.user_provide_trace_type: Optional[TraceType] = user_provide_trace_type
@@ -131,6 +132,7 @@ class ParserConfig:
     def set_args(self, args: List[AttributeSpec]) -> None:
         if args != self.args:
             self.args.clear()
+            self.arg_map.clear()
             self.add_args(args)
 
     def get_args(self) -> List[AttributeSpec]:
@@ -145,11 +147,10 @@ class ParserConfig:
         return self.min_required_cols
 
     def add_args(self, args: List[AttributeSpec]) -> None:
-        arg_set: Set[str] = {arg.name for arg in self.args}
         for arg in args:
-            if arg.name not in arg_set:
+            if arg.name not in self.arg_map:
                 self.args.append(arg)
-                arg_set.add(arg.name)
+                self.arg_map[arg.name] = arg
 
     def set_trace_memory(self, trace_memory: bool) -> None:
         self.trace_memory = trace_memory
@@ -189,12 +190,15 @@ class ParserConfig:
         ).ARGS_COMMUNICATION
         ParserConfig.ARGS_DEFAULT = parse_event_args_yaml(version).ARGS_DEFAULT
 
-    @staticmethod
-    def show_available_args():
+    @classmethod
+    def get_all_available_args(cls) -> Dict[str, AttributeSpec]:
+        return AVAILABLE_ARGS
+
+    @classmethod
+    def show_available_args(cls) -> None:
         from pprint import pprint
 
-        global AVAILABLE_ARGS
-        pprint(AVAILABLE_ARGS)
+        pprint(cls.get_all_available_args())
 
     @classmethod
     def transform_arg_name(cls, arg: str) -> str:
