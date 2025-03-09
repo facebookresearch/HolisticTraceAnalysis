@@ -79,6 +79,10 @@ class ParserConfigTestCase(unittest.TestCase):
                 "arg_name": "Cuda-Kernel/Queued",
                 "expected_transformed": "cuda_kernel_queued",
             },
+            {
+                "arg_name": "Kernel.a(.Queued)__b_%",
+                "expected_transformed": "kernel_a_b",
+            },
         ]
     )
     def test_transform_arg_name(self, arg_name: str, expected_transformed: str) -> None:

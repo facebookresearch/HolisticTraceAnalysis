@@ -1,6 +1,7 @@
 # pyre-strict
 
 import copy
+import re
 from enum import Enum
 from typing import Dict, List, Optional, Set
 
@@ -188,7 +189,9 @@ class ParserConfig:
 
     @staticmethod
     def transform_arg_name(arg: str) -> str:
-        return arg.lower().replace(" ", "_").replace("-", "_").replace("/", "_")
+        arg = re.sub(r"\([^)]*\)", "", arg)
+        arg = re.sub(r"[ \-\/\.%]+", "_", arg.lower())
+        return re.sub(r"_+", "_", arg).strip("_")
 
 
 # Define a global ParserConfig variable for internal use. To access this variable,
