@@ -181,6 +181,9 @@ def _parse_trace_events_ijson_batched(
                 e[arg_name_map[arg]] = val
             elif e.get("cat", "") == "cuda_profiler_range":
                 e[arg] = val
+            elif cfg.parse_all_args:
+                e[cfg.transform_arg_name(arg)] = val
+
         e.pop("args", None)
         return e
 
@@ -278,6 +281,12 @@ def _compress_df(
         )
         logger.info(f"counter_names={counter_names}")
         logger.info(f"args={cfg.get_args()}")
+
+    if "args" in columns and cfg.parse_all_args:
+        cfg = cfg.clone()
+        arg_map = cfg.infer_attribute_specs(df["args"], cfg.get_all_available_args())
+        cfg.set_args(list(arg_map.values()))
+        logger.info("Inferred and set attribute specs from the values of args column")
 
     if "args" in columns:
         args_to_keep = cfg.get_args()
