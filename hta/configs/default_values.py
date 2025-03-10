@@ -63,6 +63,16 @@ class AttributeSpec(NamedTuple):
     # not break backwards compatibility with other fields (minor version bumps).
     min_supported_version: YamlVersion
 
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, AttributeSpec):
+            return False
+        return (
+            self.name == other.name
+            and self.raw_name == other.raw_name
+            and self.value_type == other.value_type
+            and self.default_value == other.default_value
+        )
+
 
 class EventArgs(NamedTuple):
     AVAILABLE_ARGS: Dict[str, AttributeSpec]
