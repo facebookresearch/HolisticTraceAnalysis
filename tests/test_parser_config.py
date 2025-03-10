@@ -89,7 +89,7 @@ class ParserConfigTestCase(unittest.TestCase):
             },
             {
                 "arg_name": "name",
-                "expected_transformed": "a_name",
+                "expected_transformed": "arg_name",
             },
         ]
     )
