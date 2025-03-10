@@ -70,6 +70,17 @@ class TraceSymbolTableTestCase(unittest.TestCase):
         ]
         self.assertTrue(all(is_consistent))
 
+    def test_symbol_pattern_match(self):
+        st = TraceSymbolTable()
+        st.add_symbols_mp(self.symbols_list)
+        patterns = ["b"]
+
+        expected_symbols = {"b", "b3", "b2", "b1"}
+        self.assertEqual(expected_symbols, set(st.find_matched_symbols(patterns)))
+
+        expected_idxs = {st.sym_index[s] for s in expected_symbols}
+        self.assertEqual(expected_idxs, set(st.find_matches(patterns)))
+
 
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()
