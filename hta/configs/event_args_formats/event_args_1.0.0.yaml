@@ -148,7 +148,7 @@ AVAILABLE_ARGS:
     value_type: String
     default_value: ""
   info::name:
-    name: name
+    name: arg_name
     raw_name: name
     value_type: Int
     default_value: -1

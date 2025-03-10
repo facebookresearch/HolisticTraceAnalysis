@@ -213,11 +213,12 @@ class ParserConfig:
 
     @classmethod
     def transform_arg_name(cls, arg: str) -> str:
-        if arg == "name":
-            return "a_name"  # avoid conflict with the name column
         arg = re.sub(r"\([^)]*\)", "", arg)
         arg = re.sub(r"[ \-\/\.%]+", "_", arg.lower())
-        return re.sub(r"_+", "_", arg).strip("_")
+        arg = re.sub(r"_+", "_", arg).strip("_")
+        if arg == "name":
+            arg = "arg_name"
+        return arg
 
     @classmethod
     def infer_attribute_specs(
