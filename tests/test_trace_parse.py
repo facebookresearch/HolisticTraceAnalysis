@@ -343,21 +343,25 @@ class TraceParseIjsonOthersTestCase(unittest.TestCase):
 
 class TraceParseConfigTestCase(unittest.TestCase):
     def setUp(self) -> None:
-        # Trace parser test file for nccl fields
-        resnet_nccl_trace: str = "tests/data/nccl_parser_config"
-        self.resnet_nccl_t: Trace = Trace(trace_dir=resnet_nccl_trace)
-
-        # Trace parser test file for Triton fields
-        triton_trace: str = "tests/data/triton_example"
-        self.triton_t: Trace = Trace(trace_dir=triton_trace)
-
         # Parse all nccl fields in the test
-        custom_cfg = ParserConfig(ParserConfig.get_minimum_args())
-        custom_cfg.add_args(
+        self.custom_cfg = ParserConfig(ParserConfig.get_minimum_args())
+        self.custom_cfg.add_args(
             [spec for (arg, spec) in AVAILABLE_ARGS.items() if arg.startswith("nccl")]
             + ParserConfig.ARGS_TRITON_KERNELS
         )
-        ParserConfig.set_default_cfg(custom_cfg)
+        # ParserConfig.set_default_cfg(custom_cfg)
+
+        # Trace parser test file for nccl fields
+        resnet_nccl_trace: str = "tests/data/nccl_parser_config"
+        self.resnet_nccl_t: Trace = Trace(
+            trace_dir=resnet_nccl_trace, parser_config=self.custom_cfg
+        )
+
+        # Trace parser test file for Triton fields
+        triton_trace: str = "tests/data/triton_example"
+        self.triton_t: Trace = Trace(
+            trace_dir=triton_trace, parser_config=self.custom_cfg
+        )
 
     def tearDown(self) -> None:
         ParserConfig.set_default_cfg(ParserConfig(ParserConfig.get_minimum_args()))
