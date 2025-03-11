@@ -263,6 +263,18 @@ def parse_trace_file(
     return meta, df, local_symbol_table
 
 
+class _TraceFileParserWrapper:
+    """A wrapper class for the parse_trace_file method."""
+
+    def __init__(self, cfg: ParserConfig) -> None:
+        self.cfg = cfg
+
+    def __call__(
+        self, trace_file: str
+    ) -> Tuple[MetaData, pd.DataFrame, TraceSymbolTable]:
+        return parse_trace_file(trace_file, self.cfg)
+
+
 def add_fwd_bwd_links(df: pd.DataFrame) -> None:
     t0 = time.perf_counter()
     if df.cat.eq("fwdbwd").sum() == 0:
@@ -327,31 +339,39 @@ class Trace:
         trace_path (str) : the path to the folder where the collected raw traces are stored. In other words,
             `trace_path = normalize_path(base_trace_dir)`.
         trace_files (Dict[int, str]) : a dictionary that maps the rank of a job's trainer to its trace file.
-        traces (Dict[int, pd.DataFrame) : a dictionary that maps the rank of a job's trainer to its trace data.
-        meta_data (Dict[int, MetaData) : a dictionary that maps the rank of a job's trainer to its meta_ata.
+        traces (Dict[int, pd.DataFrame]) : a dictionary that maps the rank of a job's trainer to its trace data.
+        meta_data (Dict[int, MetaData]) : a dictionary that maps the rank of a job's trainer to its meta_data.
         symbol_table (TraceSymbolTable) : a symbol table used to encode the symbols in the trace.
         is_parsed (bool) : a flag indicting whether the trace is parsed or not.
+        parser_config (ParserConfig) : a configuration object for customizing the parser.
     """
 
     def __init__(
         self,
-        trace_files: Union[List[str], Optional[Dict[int, str]]] = None,
+        trace_files: Optional[Union[List[str], Dict[int, str]]] = None,
         trace_dir: str = DEFAULT_TRACE_DIR,
+        parser_config: Optional[ParserConfig] = None,
     ) -> None:
         """
         The constructor of a Trace object.
         Args:
-            trace_files: Union[List[str], Dict[int, str] : either a list of trace file names or a map from rank to trace file names.
+            trace_files: Optional[Union[List[str], Dict[int, str]]]: either a list of trace file names or a map from rank to trace file names.
                 When a list is provided, HTA will infer the ranks by reading the trace file metadata.
                 The trace file names can be either relative to the path `trace_path` or absolute file paths.
             trace_dir (str) : a path used to derive `trace_path = normalize_path(trace_dir)`.
+            parser_config (ParserConfig) : a configuration object for customizing the
+                parser. Default value is None.
 
         Raises:
             AssertionError
         """
+        self.is_parsed: bool = False
         self.trace_path: str = normalize_path(trace_dir)
-        logger.info(f"{self.trace_path}")
+        self.parser_config: ParserConfig = (
+            parser_config or ParserConfig.get_default_cfg()
+        )
 
+        logger.info(f"{self.trace_path}")
         self.trace_files: Dict[int, str]
         if trace_files is None:
             self.trace_files = get_trace_files(self.trace_path)
@@ -374,14 +394,14 @@ class Trace:
         self.min_ts: int = 0
 
         self._normalize_trace_filenames()
-        assert self._validate_trace_files()
+        if not self._validate_trace_files():
+            raise ValueError("Trace files validation failed.")
         logger.debug(f"trace_path={self.trace_path}")
         logger.debug(f"# trace_files={len(self.trace_files)}")
         if len(self.trace_files) > 0:
             rank = next(iter(self.trace_files))
             trace_file = self.trace_files[rank]
             logger.debug(f"trace_files[{rank}] = {trace_file}")
-        self.is_parsed = False
 
     def load_traces(
         self,
@@ -416,7 +436,7 @@ class Trace:
                 self.meta_data[rank],
                 self.traces[rank],
                 local_symbol_table,
-            ) = parse_trace_file(trace_filepath)
+            ) = parse_trace_file(trace_filepath, self.parser_config)
             # update the global symbol table
             self.symbol_table.add_symbols(local_symbol_table.get_sym_table())
             # fix the encoding of the data frame
@@ -451,7 +471,7 @@ class Trace:
         if not use_multiprocessing:
             for rank in ranks:
                 logger.debug(f"parsing trace for rank-{rank}")
-                result = parse_trace_file(self.trace_files[rank])
+                result = parse_trace_file(self.trace_files[rank], self.parser_config)
                 self.meta_data[rank], self.traces[rank], local_symbol_tables[rank] = (
                     result[0],
                     result[1],
@@ -465,16 +485,15 @@ class Trace:
                 num_procs = min(len(ranks), mp.cpu_count())
             elif use_memory_profiling:
                 tracemalloc.start()
-                parse_trace_file(trace_paths[0])
+                parse_trace_file(trace_paths[0], self.parser_config)
                 current, peak = tracemalloc.get_traced_memory()
                 tracemalloc.stop()
                 num_procs = get_mp_pool_size(peak, len(ranks))
             logger.info(f"using {num_procs} processes for parsing.")
 
+            _parser = _TraceFileParserWrapper(self.parser_config)
             with mp.get_context("fork").Pool(num_procs) as pool:
-                results = pool.map(parse_trace_file, trace_paths)
-                pool.close()
-                pool.join()
+                results = pool.map(_parser, trace_paths, chunksize=1)
             logger.debug(f"finished parallel parsing using {num_procs} processes.")
 
             # collect the results
@@ -525,9 +544,8 @@ class Trace:
         logger.info(f"ranks={ranks}")
 
         if len(ranks) > 0:
-            self.parse_multiple_ranks(
-                ranks, use_multiprocessing and len(ranks) > 1, use_memory_profiling
-            )
+            use_multiprocessing = use_multiprocessing and len(ranks) > 1
+            self.parse_multiple_ranks(ranks, use_multiprocessing, use_memory_profiling)
 
             self.is_parsed = True
         else:
@@ -663,7 +681,7 @@ class Trace:
         Returns:
             success (bool) : True if all trace files in self.trace_files exist and are valid; False otherwise.
         """
-        for rank, filepath in self.trace_files.items():
+        for _, filepath in self.trace_files.items():
             if not (os.path.exists(filepath) and os.access(filepath, os.R_OK)):
                 logger.error(
                     f"Trace file '{filepath}' doesn't exist or is not readable."
