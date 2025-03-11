@@ -6,7 +6,7 @@ import math
 import os
 import unittest
 
-from typing import Any, Dict
+from typing import Any, Dict, Set
 
 # import unittest.mock as mock
 
@@ -17,10 +17,13 @@ from hta.common.trace_parser import (
     _open_trace_file,
     get_default_trace_parsing_backend,
     parse_metadata_ijson,
+    parse_trace_dataframe,
     ParserBackend,
     set_default_trace_parsing_backend,
 )
+from hta.configs.config import HtaConfig
 from hta.configs.parser_config import AVAILABLE_ARGS, ParserConfig
+from hta.utils.test_utils import data_provider
 
 JSON = Dict[str, Any]
 EXPECTED_META_VISION_TRANFORMER: JSON = {
@@ -409,6 +412,61 @@ class TraceParseConfigTestCase(unittest.TestCase):
             triton_op["kernel_hash"],
             "cqaokwf2bph4egogzevc22vluasiyuui4i54zpemp6knbsggfbuu",
         )
+
+    @data_provider(
+        lambda: (
+            {
+                "parse_all_args": False,
+                "expected_columns": {
+                    "name",
+                    "ts",
+                    "index",
+                    "tid",
+                    "stream",
+                    "cat",
+                    "dur",
+                    "end",
+                    "pid",
+                    "correlation",
+                },
+                "expected_missing_columns": {"block", "grid"},
+            },
+            {
+                "parse_all_args": True,
+                "expected_columns": {
+                    "index",
+                    "cat",
+                    "name",
+                    "pid",
+                    "tid",
+                    "ts",
+                    "dur",
+                    "end",
+                    "ev_idx",
+                    "external_id",
+                    "concrete_inputs",
+                    "fwd_thread_id",
+                    "input_dims",
+                    "input_type",
+                },
+                "expected_missing_columns": set(),
+            },
+        )
+    )
+    def test_parse_all_args(
+        self,
+        parse_all_args: bool,
+        expected_columns: Set[str],
+        expected_missing_columns: Set[str],
+    ) -> None:
+        """Tests if we can parse all args in the trace"""
+        trace_dir = HtaConfig.get_test_data_path("nccl_parser_config")
+        trace_file = os.path.join(trace_dir, "nccl_data.json.gz")
+        cfg = ParserConfig(ParserConfig.get_minimum_args())
+        cfg.set_parse_all_args(parse_all_args)
+        _, df, _ = parse_trace_dataframe(trace_file, cfg)
+        self.assertTrue(expected_columns.issubset(set(df.columns)))
+        self.assertTrue(expected_missing_columns.isdisjoint(set(df.columns)))
 
 
 if __name__ == "__main__":  # pragma: no cover
