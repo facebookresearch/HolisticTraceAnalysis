@@ -93,6 +93,7 @@ class ParserConfig:
         self.trace_memory: bool = False
         self.user_provide_trace_type: Optional[TraceType] = user_provide_trace_type
         self.min_required_cols: List[str] = self.DEFAULT_MIN_REQUIRED_COLS
+        self.drop_gpu_user_annotation: bool = True
         self.version: YamlVersion = version
         self.parse_all_args: bool = parse_all_args
         self.selected_arg_keys: Optional[List[str]] = None
@@ -113,6 +114,9 @@ class ParserConfig:
     def set_default_cfg(cls, cfg: "ParserConfig") -> None:
         _DEFAULT_PARSER_CONFIG.set_args(cfg.get_args())
         _DEFAULT_PARSER_CONFIG.set_min_required_cols(cfg.get_min_required_cols())
+        _DEFAULT_PARSER_CONFIG.set_drop_gpu_user_annotation(
+            cfg.drop_gpu_user_annotation
+        )
 
     @classmethod
     def get_minimum_args(
@@ -159,6 +163,9 @@ class ParserConfig:
 
     def set_trace_memory(self, trace_memory: bool) -> None:
         self.trace_memory = trace_memory
+
+    def set_drop_gpu_user_annotation(self, should_drop: bool) -> None:
+        self.drop_gpu_user_annotation = should_drop
 
     def set_parser_backend(self, parser_backend: ParserBackend) -> None:
         self.parser_backend = parser_backend
