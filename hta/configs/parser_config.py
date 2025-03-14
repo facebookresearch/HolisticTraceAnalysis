@@ -234,7 +234,20 @@ class ParserConfig:
         args: pd.Series,
         reference_specs: Optional[Dict[str, AttributeSpec]] = None,
     ) -> Dict[str, AttributeSpec]:
+        """Infer the attribute specs from the args series.
+
+        Args:
+            args (pd.Series): A series of dict objects from which to infer the attribute specs.StopAsyncIteration
+            reference_specs (Optional[Dict[str, AttributeSpec]]): A dictionary of reference attribute specs.
+                If provided, the inferred attribute specs will be merged with the reference specs.
+
+        Returns:
+            A dictionary of inferred attribute specs, which contains specs of all the attributes in the args series.
+            If an arg_name is found in the reference_specs, it will use the AttributeSpec from the reference_specs.
+            Otherwise, it will use the inferred AttributeSpec.
+        """
         attribute_spec_map = {}
+        attribute_set = set()
 
         # Initialize the attribute_spec_map with the reference_specs
         reference_specs = reference_specs or {}
@@ -245,11 +258,12 @@ class ParserConfig:
         for d in args.dropna():
             if isinstance(d, dict):
                 for arg_name, arg_value in d.items():
+                    attribute_set |= {arg_name}
                     if arg_name not in attribute_spec_map or arg_name == "name":
                         attribute_spec_map[arg_name] = cls.make_attribute_spec(
                             arg_name, arg_value
                         )
-        return attribute_spec_map
+        return {k: v for k, v in attribute_spec_map.items() if k in attribute_set}
 
     @classmethod
     def make_attribute_spec(
