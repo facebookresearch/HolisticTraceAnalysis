@@ -62,17 +62,35 @@ ARGS_COMMUNICATION_FUNC: Callable[[Dict[str, AttributeSpec]], List[AttributeSpec
         ]
     ]
 )
+
+ARGS_MEMORY_FUNC: Callable[[Dict[str, AttributeSpec]], List[AttributeSpec]] = (
+    lambda available_args: [
+        available_args[k]
+        for k in [
+            "memory::total_reserved",
+            "memory::total_allocated",
+            "memory::bytes",
+            "memory::addr",
+            "memory::device_id",
+            "memory::device_type",
+            "memory::ev_idx",
+        ]
+    ]
+)
+
 ARGS_TRITON_KERNELS_FUNC: Callable[[Dict[str, AttributeSpec]], List[AttributeSpec]] = (
     lambda available_args: [
         available_args[k] for k in ["cpu_op::kernel_backend", "cpu_op::kernel_hash"]
     ]
 )
+
 ARGS_DEFAULT_FUNC: Callable[[Dict[str, AttributeSpec]], List[AttributeSpec]] = (
     lambda available_args: (
         ARGS_MINIMUM_FUNC(available_args)
         + ARGS_BANDWIDTH_FUNC(available_args)
         + ARGS_SYNC_FUNC(available_args)
         + ARGS_INPUT_SHAPE_FUNC(available_args)
+        + ARGS_MEMORY_FUNC(available_args)
         + [available_args["index::external_id"]]
     )
 )
