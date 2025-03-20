@@ -39,7 +39,6 @@ PHASE_FLOW_END: str = "f"
 def trace_event_timestamp_to_unixtime_ns(
     trace_event_ts_us: float, trace_metadata: MetaData
 ) -> int:
-    print(trace_event_ts_us)
     """
     Utility to convert a trace event timestamp (us) to unix time (ns).
 
@@ -840,6 +839,5 @@ class Trace:
             err_msg: str = f"No trace found for rank {rank}"
             logger.warning(err_msg)
             raise ValueError(err_msg)
-        rank_min_ts = self.traces[rank]["ts"].min()
-        rank_metadata = self.meta_data[rank]
-        return trace_event_timestamp_to_unixtime_ns(rank_min_ts, rank_metadata)
+
+        return trace_event_timestamp_to_unixtime_ns(self.min_ts, self.meta_data[rank])
