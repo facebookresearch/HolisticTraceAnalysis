@@ -131,6 +131,7 @@ class TraceParseTestCase(unittest.TestCase):
         # Trace parser for triton
         cls.triton_t: Trace = Trace(trace_dir=triton_trace_dir)
         cls.triton_t.parse_traces(max_ranks=max_ranks, use_multiprocessing=True)
+        cls.triton_t.align_and_filter_trace()
         cls.triton_raw_df = prepare_ground_truth_df(
             triton_trace_dir, triton_example_file
         )
