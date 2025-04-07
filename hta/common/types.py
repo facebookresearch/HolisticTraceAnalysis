@@ -1,14 +1,7 @@
-from dataclasses import dataclass
 from enum import Enum
 from typing import Dict
 
 import pandas as pd
-
-
-@dataclass
-class OperationOutcome:
-    success: bool
-    reason: str
 
 
 class DeviceType(Enum):
