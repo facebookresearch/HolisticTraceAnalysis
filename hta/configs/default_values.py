@@ -15,6 +15,8 @@ DF_SYMBOL_COLUMNS: List[str] = ["cat", "name"]
 
 # Runtime configurations
 IS_DEBUG_ENABLED: bool = True
+# For non-compute-intensive tasks, do not use a large number of processes.
+MAX_NUM_PROCESSES_SMALL: int = 4
 MAX_NUM_PROCESSES: int = 32
 
 
