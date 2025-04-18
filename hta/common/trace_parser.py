@@ -122,7 +122,7 @@ def _open_trace_file(trace_file_path: str) -> io.BufferedIOBase:
 
 
 # @profile
-def _parse_trace_events_ijson(trace_file_path: str) -> pd.DataFrame:
+def _parse_trace_events_ijson(trace_file_path: str, cfg: ParserConfig) -> pd.DataFrame:
     """
     Parse the trace file using iterative json.
 
@@ -138,12 +138,12 @@ def _parse_trace_events_ijson(trace_file_path: str) -> pd.DataFrame:
 
     t_start = time.perf_counter()
     with _open_trace_file(trace_file_path) as fh:
-
         generator = ijson.items(fh, "traceEvents.item", use_float=True)
-
-        # Ignore python function tracer
-        # TODO make this filter configuration in ParserConfig
-        df = pd.DataFrame(e for e in generator if e.get("cat") != "python_function")
+        if len(cfg.skip_event_types) > 0:
+            generator = (
+                e for e in generator if e.get("cat") not in cfg.skip_event_types
+            )
+        df = pd.DataFrame(generator)
 
     t_end = time.perf_counter()
     logger.warning(
@@ -191,24 +191,21 @@ def _parse_trace_events_ijson_batched(
 
     t_start = time.perf_counter()
     with _open_trace_file(trace_file_path) as fh:
-        # TODO make events to skip configurable in ParserConfig
-        generator = (
-            e
-            for e in ijson.items(fh, "traceEvents.item", use_float=True)
-            if e.get("cat") != "python_function"
-        )
+        generator = (e for e in ijson.items(fh, "traceEvents.item", use_float=True))
+        if len(cfg.skip_event_types) > 0:
+            generator = (
+                e for e in generator if e.get("cat") not in cfg.skip_event_types
+            )
         if compress_on_fly:
             generator = (trim_event(e) for e in generator)
 
-        # XXX Currently using 1000 as batch size.
-        batch_size = 1000
         batch = []
         dfs = []
 
         # Iterate over filtered dictionaries and append to DataFrame in batches
         for item in generator:
             batch.append(item)
-            if len(batch) == batch_size:
+            if len(batch) == cfg.batch_size:
                 dfs.append(pd.DataFrame(batch))
                 batch = []
 
@@ -398,10 +395,13 @@ def _parse_trace_dataframe_ijson(
             f"{(t_end - t_start)/1000000:.2f} milli seconds"
         )
 
+    logger.info(
+        f"Parsing using ijson batched = {batched}, skip_events = {cfg.skip_event_types}"
+    )
     if batched:
         df = _parse_trace_events_ijson_batched(trace_file_path, cfg, compress_on_fly)
     else:
-        df = _parse_trace_events_ijson(trace_file_path)
+        df = _parse_trace_events_ijson(trace_file_path, cfg)
 
     round_down_time_stamps(df)
 
