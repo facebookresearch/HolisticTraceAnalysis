@@ -3,7 +3,7 @@
 import copy
 import re
 from enum import Enum
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Set, Union
 
 import pandas as pd
 
@@ -84,7 +84,10 @@ class ParserConfig:
         version: YamlVersion = DEFAULT_PARSE_VERSION,
         parse_all_args: bool = False,
         selected_arg_keys: Optional[List[str]] = None,
+        skip_event_types: Optional[Set[str]] = None,
     ) -> None:
+        """Initialize the ParserConfig object."""
+        # Note remember to update set_default_cfg() when adding new fields.
         self.args: List[AttributeSpec] = (
             args if args else self.get_default_args(version=version)
         )
@@ -92,11 +95,20 @@ class ParserConfig:
         self.parser_backend: Optional[ParserBackend] = None
         self.trace_memory: bool = False
         self.user_provide_trace_type: Optional[TraceType] = user_provide_trace_type
+
+        # Currently, this is only honored in the ijson backends.
+        self.skip_event_types: Set[str] = (
+            skip_event_types if skip_event_types is not None else {"python_function"}
+        )
+
         self.min_required_cols: List[str] = self.DEFAULT_MIN_REQUIRED_COLS
         self.drop_gpu_user_annotation: bool = True
         self.version: YamlVersion = version
         self.parse_all_args: bool = parse_all_args
         self.selected_arg_keys: Optional[List[str]] = None
+
+        # Json batched backend specific configs
+        self.batch_size = 1000
 
     def clone(self) -> "ParserConfig":
         return copy.deepcopy(self)
@@ -117,6 +129,11 @@ class ParserConfig:
         _DEFAULT_PARSER_CONFIG.set_drop_gpu_user_annotation(
             cfg.drop_gpu_user_annotation
         )
+        _DEFAULT_PARSER_CONFIG.set_trace_memory(cfg.trace_memory)
+        _DEFAULT_PARSER_CONFIG.set_parser_backend(cfg.parser_backend)
+        _DEFAULT_PARSER_CONFIG.set_parse_all_args(cfg.parse_all_args)
+        _DEFAULT_PARSER_CONFIG.set_args_selector(cfg.selected_arg_keys)
+        _DEFAULT_PARSER_CONFIG.set_skip_event_types(cfg.skip_event_types)
 
     @classmethod
     def get_minimum_args(
@@ -178,6 +195,12 @@ class ParserConfig:
         self, selected_arg_keys: Optional[List[str]] = None
     ) -> "ParserConfig":
         self.selected_arg_keys = selected_arg_keys
+        return self
+
+    def set_skip_event_types(
+        self, skip_event_types: Optional[Set[str]] = None
+    ) -> "ParserConfig":
+        self.skip_event_types = skip_event_types
         return self
 
     @classmethod

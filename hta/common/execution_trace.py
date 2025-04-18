@@ -23,16 +23,11 @@ try:
     # Import path in github due to submodule
     from et_replay.execution_trace import ExecutionTrace
 except ImportError:
-    try:
-        # Import path in fbcode
-        from param_bench.et_replay.execution_trace import ExecutionTrace
-    except ImportError:
-        IMPORT_EXECUTION_TRACE_SUCCESSFULLY = False
+    IMPORT_EXECUTION_TRACE_SUCCESSFULLY = False
 
-        class ExecutionTrace:  # type: ignore
-            pass
-
+    class ExecutionTrace:  # type: ignore
         pass
+
 
 # PyTorch Events types that are correlated in the Execution Trace
 EXECUTION_TRACE_SUPPORTED_EVENTS: List[str] = ["cpu_op", "user_annotation"]

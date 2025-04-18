@@ -66,12 +66,18 @@ class ParserConfigTestCase(unittest.TestCase):
     def test_global_cfg(self) -> None:
         custom_cfg = ParserConfig()
         custom_cfg.add_args([AVAILABLE_ARGS["kernel::queued"]])
+        custom_cfg.set_skip_event_types({"gpu_user_annotation"})
+        custom_cfg.set_trace_memory(True)
         ParserConfig.set_default_cfg(custom_cfg)
         self.assertTrue(
             self._compare_attributes(
                 ParserConfig.get_default_cfg().get_args(), custom_cfg.get_args()
             )
         )
+        self.assertEqual(
+            ParserConfig.get_default_cfg().skip_event_types, {"gpu_user_annotation"}
+        )
+        self.assertEqual(ParserConfig.get_default_cfg().trace_memory, True)
 
     @data_provider(
         lambda: [
@@ -160,6 +166,14 @@ class ParserConfigTestCase(unittest.TestCase):
         self.assertTrue(cfg.trace_memory)
         cfg.set_trace_memory(False)
         self.assertFalse(cfg.trace_memory)
+
+    def test_set_skip_event_types(self) -> None:
+        cfg = ParserConfig()
+        self.assertEqual(cfg.skip_event_types, {"python_function"})
+        cfg.set_skip_event_types({"foo"})
+        self.assertEqual(cfg.skip_event_types, {"foo"})
+        cfg.set_skip_event_types(set())
+        self.assertEqual(cfg.skip_event_types, set())
 
     def test_set_parser_backend(self) -> None:
         cfg = ParserConfig()
