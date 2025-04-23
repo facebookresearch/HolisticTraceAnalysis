@@ -1,9 +1,10 @@
 import unittest
 from typing import Dict, List, NamedTuple, Optional
+from unittest.mock import MagicMock, patch
 
 import pandas as pd
 
-from hta.configs.default_values import ValueType, YamlVersion
+from hta.configs.default_values import EventArgs, ValueType, YamlVersion
 from hta.configs.event_args_yaml_parser import parse_event_args_yaml
 from hta.configs.parser_config import (
     AttributeSpec,
@@ -15,6 +16,7 @@ from hta.configs.parser_config import (
 from hta.utils.test_utils import data_provider
 
 _MODULE_NAME = "hta.configs.parser_config"
+_MODULE_NAME_YAML = "hta.configs.event_args_yaml_parser"
 
 
 class ParserConfigTestCase(unittest.TestCase):
@@ -266,3 +268,24 @@ class ParserConfigTestCase(unittest.TestCase):
         # Run the following two steps purely for test coverage
         ParserConfig.show_available_args()
         ParserConfig.get_info_args()
+
+
+class TestParseEventArgsYaml(unittest.TestCase):
+    @data_provider(
+        lambda: (
+            {
+                "file_exists": True,
+            },
+            {
+                "file_exists": False,
+            },
+        )
+    )
+    @patch(f"{_MODULE_NAME_YAML}.os.path.exists")
+    def test_parse_event_args_yaml(
+        self, mock_file_exists: MagicMock, file_exists: bool
+    ) -> None:
+        mock_file_exists.return_value = file_exists
+        version = YamlVersion.from_string("1.0.0")
+        result = parse_event_args_yaml(version)
+        self.assertIsInstance(result, EventArgs)
