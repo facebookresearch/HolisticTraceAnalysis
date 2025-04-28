@@ -119,6 +119,20 @@ class TraceAnalysisTestCase(unittest.TestCase):
         )
         self.assertTrue(frequent_patterns_dfs.empty)
 
+    def test_get_mtia_aten_op_kernels_and_delay_inference_single_rank(self):
+        dataframe_list = self.mtia_single_rank_trace_t.get_aten_op_kernels_and_delay(
+            sort_by=["occurrence_count", "avg_aten_op_launch_delay"]
+        )
+        rank_0_df = dataframe_list[0]
+        row = rank_0_df.iloc[0]
+        self.assertEqual(row["kernel_sequence"], "customized_fba_mul_const-dtype_Float")
+        self.assertEqual(row["aten_op_name"], "aten::mul")
+        self.assertEqual(row["occurrence_count"].item(), 822)
+        self.assertAlmostEqual(
+            row["avg_aten_op_launch_delay"].item(), 1092.545, delta=2.0
+        )
+        self.assertAlmostEqual(row["avg_runtime_delay"].item(), 293.113, delta=2.0)
+
     def test_get_cuda_kernel_launch_stats_training_multiple_ranks(self):
         dataframe_dict = self.vision_transformer_t.get_cuda_kernel_launch_stats(
             ranks=[1, 7], visualize=False
