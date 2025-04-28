@@ -136,6 +136,12 @@ KERNEL_CATEGORY_PATTERN = GroupingPattern(
     re.compile("(kernel)|(gpu_mem.+)|(mtia_ccp_events)"), False, "GPU Kernels"
 )
 
+KERNEL_LAUNCH_CATEGORY_PATTERN = GroupingPattern(
+    re.compile(r"(cuda.*LaunchKernel)|(^runFunction)"),
+    inverse_match=False,
+    group_name="Kernel Launch",
+)
+
 CPU_OP_CATEGORY_PATTERN: GroupingPattern = GroupingPattern(
     re.compile("(cpu_op)|(user_annotation)"), False, "CPU Ops"
 )

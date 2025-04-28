@@ -16,6 +16,7 @@ from hta.common.types import (
     CPU_EVENTS_CATEGORY_PATTERN,
     GroupingPattern,
     KERNEL_CATEGORY_PATTERN,
+    KERNEL_LAUNCH_CATEGORY_PATTERN,
     MemoryKernelGroupingPattern,
     ProfilerStepGroupingPattern,
 )
@@ -350,6 +351,9 @@ class TraceSymbolTable:
 
     def get_memory_name_ids(self) -> List[int]:
         return list(self.get_symbol_ids(MemoryKernelGroupingPattern).values())
+
+    def get_kernel_launch_ids(self) -> List[int]:
+        return list(self.get_symbol_ids(KERNEL_LAUNCH_CATEGORY_PATTERN).values())
 
 
 def decode_symbol_id_to_symbol_name(
