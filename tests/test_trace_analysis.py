@@ -120,7 +120,7 @@ class TraceAnalysisTestCase(unittest.TestCase):
         self.assertTrue(frequent_patterns_dfs.empty)
 
     def test_get_mtia_aten_op_kernels_and_delay_inference_single_rank(self):
-        dataframe_list = self.mtia_single_rank_trace_t.get_aten_op_kernels_and_delay(
+        dataframe_list = self.mtia_single_rank_trace_t.get_op_kernels_and_delay(
             sort_by=["occurrence_count", "avg_aten_op_launch_delay"]
         )
         rank_0_df = dataframe_list[0]
