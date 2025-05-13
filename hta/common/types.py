@@ -137,7 +137,7 @@ KERNEL_CATEGORY_PATTERN = GroupingPattern(
 )
 
 KERNEL_LAUNCH_CATEGORY_PATTERN = GroupingPattern(
-    re.compile(r"(cuda.*LaunchKernel)|(^runFunction)"),
+    re.compile(r"(cuda.*LaunchKernel)|(cuLaunchKernel)|(^runFunction)"),
     inverse_match=False,
     group_name="Kernel Launch",
 )
