@@ -11,6 +11,7 @@ import hta.configs.env_options as hta_options
 from hta.analyzers.critical_path_analysis import (
     CPEdge,
     CPEdgeType,
+    CPGraph,
     CriticalPathAnalysis,
     restore_cpgraph,
 )
@@ -24,7 +25,7 @@ from hta.trace_analysis import TraceAnalysis
 
 
 class CriticalPathAnalysisTestCase(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         os.environ["CRITICAL_PATH_ADD_ZERO_WEIGHT_LAUNCH_EDGE"] = "1"
         self.base_data_dir = str(Path(__file__).parent.parent.joinpath("tests/data"))
         critical_path_trace_dir: str = os.path.join(
@@ -53,7 +54,7 @@ class CriticalPathAnalysisTestCase(unittest.TestCase):
         self.amd_trace_dir: str = os.path.join(self.base_data_dir, "amd_trace")
         self.amd_trace = TraceAnalysis(trace_dir=self.amd_trace_dir)
 
-    def test_critical_path_analysis(self):
+    def _critical_path_on_simple_add_trace(self) -> CPGraph:
         critical_path_t = self.simple_add_trace
 
         annotation = "[param|pytorch.model.alex_net|0|0|0|measure|forward]"
@@ -62,15 +63,13 @@ class CriticalPathAnalysisTestCase(unittest.TestCase):
             rank=0, annotation=annotation, instance_id=instance_id
         )
         self.assertTrue(success)
+        return cp_graph
 
+    def test_critical_path_basic_add(self):
+        critical_path_t = self.simple_add_trace
+        cp_graph = self._critical_path_on_simple_add_trace()
         trace_df = critical_path_t.t.get_trace(0)
         sym_table = critical_path_t.t.symbol_table.get_sym_table()
-
-        def get_node_name(nid):
-            if nid < 0:
-                return "ROOT"
-            trace_entry = trace_df.loc[nid].to_dict()
-            return sym_table[int(trace_entry["name"])]
 
         # Check the graph construction for the aten::relu_ operator
         # There are 3 stacked operators/runtime events here;
@@ -82,9 +81,9 @@ class CriticalPathAnalysisTestCase(unittest.TestCase):
         relu_idx = 286
         clamp_min_idx = 287
         cuda_launch_idx = 1005
-        self.assertEqual(get_node_name(relu_idx), "aten::relu_")
-        self.assertEqual(get_node_name(clamp_min_idx), "aten::clamp_min_")
-        self.assertEqual(get_node_name(cuda_launch_idx), "cudaLaunchKernel")
+        self.assertEqual(cp_graph._get_node_name(relu_idx), "aten::relu_")
+        self.assertEqual(cp_graph._get_node_name(clamp_min_idx), "aten::clamp_min_")
+        self.assertEqual(cp_graph._get_node_name(cuda_launch_idx), "cudaLaunchKernel")
 
         expected_node_ids = [(57, 62), (58, 61), (59, 60)]
 
@@ -145,7 +144,7 @@ class CriticalPathAnalysisTestCase(unittest.TestCase):
         fft_kernel_idx = 1051
         fft_runtime_idx = trace_df.index_correlation.loc[fft_kernel_idx]
         self.assertEqual(
-            get_node_name(fft_kernel_idx),
+            cp_graph._get_node_name(fft_kernel_idx),
             "void fft2d_r2c_32x32<float, false, 0u, false>(float2*, float const*, int, int, int, int, int, int,"
             " int, int, int, cudnn::reduced_divisor, bool, int2, int, int)",
         )
@@ -225,7 +224,11 @@ class CriticalPathAnalysisTestCase(unittest.TestCase):
         # Make sure critical path is as expected
         self.assertEqual(len(cp_graph.critical_path_nodes), 315)
 
-        # check overlaid trace matches up correctly
+    def test_critical_path_overlaid_trace(self) -> None:
+        """Check overlaid trace matches up correctly"""
+        critical_path_t = self.simple_add_trace
+        cp_graph = self._critical_path_on_simple_add_trace()
+
         with TemporaryDirectory(dir="/tmp") as tmpdir:
             overlaid_trace = critical_path_t.overlay_critical_path_analysis(
                 0,
@@ -258,11 +261,9 @@ class CriticalPathAnalysisTestCase(unittest.TestCase):
                     cp_graph.edges[u, v]["object"] for (u, v) in cp_graph.edges
                 )
                 if not hta_options.critical_path_show_zero_weight_launch_edges():
-                    cpgraph_edges = filter(
-                        lambda e: not CriticalPathAnalysis._is_zero_weight_launch_edge(
-                            e
-                        ),
-                        cpgraph_edges,
+                    cpgraph_edges = (
+                        e for e in cpgraph_edges
+                        if not CriticalPathAnalysis._is_zero_weight_launch_edge(e)
                     )
                 cpgraph_edge_counts = Counter(e.type for e in cpgraph_edges)
 
@@ -330,7 +331,13 @@ class CriticalPathAnalysisTestCase(unittest.TestCase):
         os.remove(overlaid_trace)
         os.removedirs(tmpdir)
 
-        # AlexNet has inter-stream synchronization using CUDA Events
+    def test_critical_path_inter_stream_sync(self):
+        """
+        AlexNet has inter-stream synchronization using CUDA Events.
+        Test that the dependency is added correctly.
+        """
+        annotation = "[param|pytorch.model.alex_net|0|0|0|measure|forward]"
+        instance_id = 1
         critical_path_t = self.alexnet_trace
 
         trace_df = critical_path_t.t.get_trace(0)
@@ -349,7 +356,7 @@ class CriticalPathAnalysisTestCase(unittest.TestCase):
         # IDs 5606 and 5629
         fft_src_kernel_idx = 1109
         self.assertEqual(
-            get_node_name(fft_src_kernel_idx),
+            cp_graph._get_node_name(fft_src_kernel_idx),
             "void fft2d_c2r_32x32<float, false, false, 0u, false, false>(float*, float2 const*, int, int, int, "
             "int, int, int, int, int, int, float, float, cudnn::reduced_divisor, bool, float*, float*, int2, int, int)",
         )
@@ -385,24 +392,24 @@ class CriticalPathAnalysisTestCase(unittest.TestCase):
         trace_df = critical_path_t.t.get_trace(0)
         sym_table = critical_path_t.t.symbol_table.get_sym_table()
 
-        def get_node_name(nid):
-            if nid < 0:
-                return "ROOT"
-            trace_entry = trace_df.loc[nid].to_dict()
-            return sym_table[int(trace_entry["name"])]
-
         cuda_kernel_idx = 33
         cuda_event_sync_idx = 41
         cuda_event_query_idx = 45
         cuda_device_sync_idx = 51
 
         self.assertEqual(
-            get_node_name(cuda_kernel_idx),
+            cp_graph._get_node_name(cuda_kernel_idx),
             "at::cuda::(anonymous namespace)::spin_kernel(long)",
         )
-        self.assertEqual(get_node_name(cuda_event_sync_idx), "cudaEventSynchronize")
-        self.assertEqual(get_node_name(cuda_event_query_idx), "cudaEventQuery")
-        self.assertEqual(get_node_name(cuda_device_sync_idx), "cudaDeviceSynchronize")
+        self.assertEqual(
+            cp_graph._get_node_name(cuda_event_sync_idx), "cudaEventSynchronize"
+        )
+        self.assertEqual(
+            cp_graph._get_node_name(cuda_event_query_idx), "cudaEventQuery"
+        )
+        self.assertEqual(
+            cp_graph._get_node_name(cuda_device_sync_idx), "cudaDeviceSynchronize"
+        )
 
         # There are two GPU -> CPU dependencies in this trace
         # both start at a CUDA kernel that precedes the CUDA event and ends in trace.
