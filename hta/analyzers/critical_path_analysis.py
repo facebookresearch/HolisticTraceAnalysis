@@ -1641,7 +1641,7 @@ class CriticalPathAnalysis:
         show_all_edges: bool,
         edge_types_to_viz: Optional[Set[CPEdgeType]] = None,
     ) -> str:
-        f"""
+        r"""
         Overlay the identified critical path on top of the trace file
         for visualization.
 
@@ -1660,7 +1660,8 @@ class CriticalPathAnalysis:
                 if only_show_critical_events is True.
                 Default value = False.
             edge_types_to_viz (Set): types of edges to add to the overlaid trace.
-                Default is {DEFAULT_EDGE_TYPES_IN_VIZ}
+                By default we only include Kernel launch edges and CPU/GPU sync
+                dependency edges.
 
         Returns: the overlaid_trace_file path.
 
@@ -1742,10 +1743,11 @@ class CriticalPathAnalysis:
                     if not CriticalPathAnalysis._is_zero_weight_launch_edge(e)
                 )
         else:
-            edges = (e for e in critical_path_graph.critical_path_edges_set)
-
-        if not show_all_edges:
-            edges = (e for e in edges if e in DEFAULT_EDGE_TYPES_IN_VIZ)
+            edges = (
+                e
+                for e in critical_path_graph.critical_path_edges_set
+                if e.type in edge_types_to_viz
+            )
 
         for e in edges:
             u, v = e.begin, e.end

@@ -3,11 +3,11 @@ import json
 import os
 import unittest
 from collections import Counter
+from dataclasses import dataclass, field
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Tuple
+from typing import Dict, Tuple
 
-import hta.configs.env_options as hta_options
 from hta.analyzers.critical_path_analysis import (
     CPEdge,
     CPEdgeType,
@@ -224,11 +224,45 @@ class CriticalPathAnalysisTestCase(unittest.TestCase):
         # Make sure critical path is as expected
         self.assertEqual(len(cp_graph.critical_path_nodes), 315)
 
+    @dataclass
+    class OverlaidTraceStats:
+        total_event_count: int = 0
+        marked_critical_events: int = 0
+        marked_critical_edges: int = 0
+        edge_count_per_type: Dict[str, int] = field(default_factory=dict)
+
+    def _check_overlaid_trace(self, overlaid_trace) -> OverlaidTraceStats:
+        stats = self.OverlaidTraceStats()
+        with gzip.open(overlaid_trace, "r") as ovf:
+            trace_events = json.load(ovf)["traceEvents"]
+            stats.total_event_count = sum(
+                1
+                for e in trace_events
+                if e["ph"] == "X"
+                and e.get("cat", "") not in {"user_annotation", "python_function"}
+            )
+            stats.marked_critical_events = sum(
+                e["args"].get("critical", 0)
+                for e in trace_events
+                if "args" in e and e["ph"] == "X"
+            )
+            stats.marked_critical_edges = sum(
+                e["args"].get("critical", 0)
+                for e in trace_events
+                if "args" in e and e["ph"] == "f"
+            )
+            stats.edge_count_per_type = Counter(
+                e["cat"] for e in trace_events if "critical_path" in e.get("cat", "")
+            )
+
+        return stats
+
     def test_critical_path_overlaid_trace(self) -> None:
         """Check overlaid trace matches up correctly"""
         critical_path_t = self.simple_add_trace
         cp_graph = self._critical_path_on_simple_add_trace()
 
+        # Overlaid trace with show_all_edges=True
         with TemporaryDirectory(dir="/tmp") as tmpdir:
             overlaid_trace = critical_path_t.overlay_critical_path_analysis(
                 0,
@@ -239,50 +273,55 @@ class CriticalPathAnalysisTestCase(unittest.TestCase):
             )
             self.assertTrue("overlaid_critical_path_" in overlaid_trace)
 
-            with gzip.open(overlaid_trace, "r") as ovf:
-                trace_events = json.load(ovf)["traceEvents"]
-                marked_critical_events = sum(
-                    e["args"].get("critical", 0)
-                    for e in trace_events
-                    if "args" in e and e["ph"] == "X"
-                )
-                self.assertEqual(marked_critical_events, 159)
+            stats = self._check_overlaid_trace(overlaid_trace)
+            self.assertEqual(stats.marked_critical_events, 159)
+            self.assertEqual(
+                stats.marked_critical_events, len(cp_graph.critical_path_events_set)
+            )
+
+            cpgraph_edges = (
+                cp_graph.edges[u, v]["object"] for (u, v) in cp_graph.edges
+            )
+            cpgraph_edge_counts = Counter(
+                e.type
+                for e in cpgraph_edges
+                if not CriticalPathAnalysis._is_zero_weight_launch_edge(e)
+            )
+
+            for etype in CPEdgeType:
                 self.assertEqual(
-                    marked_critical_events, len(cp_graph.critical_path_events_set)
+                    stats.edge_count_per_type[etype.value],
+                    cpgraph_edge_counts[etype] * 2,
                 )
 
-                trace_edge_counts = Counter(
-                    e["cat"]
-                    for e in trace_events
-                    if "critical_path" in e.get("cat", "")
-                )
+            self.assertEqual(stats.marked_critical_edges, 314)
+            self.assertEqual(
+                stats.marked_critical_edges,
+                len(cp_graph.critical_path_edges_set),
+            )
 
-                cpgraph_edges = (
-                    cp_graph.edges[u, v]["object"] for (u, v) in cp_graph.edges
-                )
-                if not hta_options.critical_path_show_zero_weight_launch_edges():
-                    cpgraph_edges = (
-                        e for e in cpgraph_edges
-                        if not CriticalPathAnalysis._is_zero_weight_launch_edge(e)
-                    )
-                cpgraph_edge_counts = Counter(e.type for e in cpgraph_edges)
+        # Overlaid trace with show_all_edges=False
+        # By default we only show CPU, GPU sync dependency and kernel launch
+        # edges
+        with TemporaryDirectory(dir="/tmp") as tmpdir:
+            overlaid_trace = critical_path_t.overlay_critical_path_analysis(
+                0,
+                cp_graph,
+                output_dir=tmpdir,
+                only_show_critical_events=False,
+                show_all_edges=False,
+            )
+            self.assertTrue("overlaid_critical_path_" in overlaid_trace)
 
-                for etype in CPEdgeType:
-                    self.assertEqual(
-                        trace_edge_counts[etype.value],
-                        cpgraph_edge_counts[etype] * 2,
-                    )
-                marked_critical_edges = sum(
-                    e["args"].get("critical", 0)
-                    for e in trace_events
-                    if "args" in e and e["ph"] == "f"
-                )
-                self.assertEqual(marked_critical_edges, 314)
-                self.assertEqual(
-                    marked_critical_edges,
-                    len(cp_graph.critical_path_edges_set),
-                )
+            stats = self._check_overlaid_trace(overlaid_trace)
+            self.assertEqual(stats.marked_critical_events, 159)
+            self.assertEqual(
+                stats.marked_critical_events, len(cp_graph.critical_path_events_set)
+            )
+            # only show CPU, GPU sync dependency and kernel launch edges
+            self.assertEqual(stats.marked_critical_edges, 21)
 
+        # Overlaid trace with only show critical events
         with TemporaryDirectory(dir="/tmp") as tmpdir:
             overlaid_trace = critical_path_t.overlay_critical_path_analysis(
                 0,
@@ -292,33 +331,14 @@ class CriticalPathAnalysisTestCase(unittest.TestCase):
                 show_all_edges=True,  # this should be overriden to false
             )
             self.assertTrue("overlaid_critical_path_" in overlaid_trace)
-            with gzip.open(overlaid_trace, "r") as ovf:
-                trace_events = json.load(ovf)["traceEvents"]
-                events_to_check = [
-                    e
-                    for e in trace_events
-                    if e["ph"] == "X"
-                    and e.get("cat", "") not in ["user_annotation", "python_function"]
-                ]
-                num_events_to_check = len(events_to_check)
-                marked_critical_events = sum(
-                    e["args"].get("critical", 0) for e in events_to_check if "args" in e
-                )
-                self.assertEqual(marked_critical_events, 159)
-                # Only critical events are written out to the trace
-                self.assertEqual(marked_critical_events, num_events_to_check)
 
-                trace_edge_counts = Counter(
-                    "critical" if e["args"].get("critical", 0) else "non_critical"
-                    for e in trace_events
-                    if "critical_path" in e.get("cat", "")
-                )
-                # Only critical edges are shown
-                self.assertEqual(
-                    trace_edge_counts["critical"], sum(trace_edge_counts.values())
-                )
+            stats = self._check_overlaid_trace(overlaid_trace)
+            self.assertEqual(stats.marked_critical_events, 159)
 
-        # is it resilient to missing overlaid path?
+            # Only critical events are written out to the trace
+            self.assertEqual(stats.marked_critical_events, stats.total_event_count)
+
+        # Is it resilient to missing overlaid path?
         tmpdir = "/tmp/path_does_not_exist"
         overlaid_trace = critical_path_t.overlay_critical_path_analysis(
             0,
