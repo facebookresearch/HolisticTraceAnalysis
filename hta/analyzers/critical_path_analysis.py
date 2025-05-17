@@ -81,6 +81,13 @@ class CPEdgeType(Enum):
     SYNC_DEPENDENCY = "critical_path_sync_dependency"
 
 
+DEFAULT_EDGE_TYPES_IN_VIZ: Set[CPEdgeType] = {
+    CPEdgeType.DEPENDENCY,
+    CPEdgeType.KERNEL_LAUNCH_DELAY,
+    CPEdgeType.SYNC_DEPENDENCY,
+}
+
+
 @dataclass(frozen=True)
 class CPEdge:
     """An edge in the critical path di-graph.
@@ -1632,6 +1639,7 @@ class CriticalPathAnalysis:
         output_dir: str,
         only_show_critical_events: bool,
         show_all_edges: bool,
+        edge_types_to_viz: Optional[Set[CPEdgeType]] = None,
     ) -> str:
         r"""
         Overlay the identified critical path on top of the trace file
@@ -1651,6 +1659,9 @@ class CriticalPathAnalysis:
                 for debugging the algorithm. The value will be forced to False
                 if only_show_critical_events is True.
                 Default value = False.
+            edge_types_to_viz (Set): types of edges to add to the overlaid trace.
+                By default we only include Kernel launch edges and CPU/GPU sync
+                dependency edges.
 
         Returns: the overlaid_trace_file path.
 
@@ -1663,6 +1674,8 @@ class CriticalPathAnalysis:
         """
         if only_show_critical_events:
             show_all_edges = False
+        if edge_types_to_viz is None:
+            edge_types_to_viz = DEFAULT_EDGE_TYPES_IN_VIZ
 
         path = Path(output_dir).expanduser()
         if not path.exists():
@@ -1730,7 +1743,11 @@ class CriticalPathAnalysis:
                     if not CriticalPathAnalysis._is_zero_weight_launch_edge(e)
                 )
         else:
-            edges = (e for e in critical_path_graph.critical_path_edges_set)
+            edges = (
+                e
+                for e in critical_path_graph.critical_path_edges_set
+                if e.type in edge_types_to_viz
+            )
 
         for e in edges:
             u, v = e.begin, e.end
