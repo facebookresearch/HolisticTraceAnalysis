@@ -5,6 +5,15 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 #### Added
+
+#### Changed
+
+#### Fixed
+
+
+## [0.5.0] - 2023-05-27
+
+#### Added
 - Added support for AMD GPUs.
 - Update pyproject.toml to workaround missing stub packages for yaml.
 - Add trace format validator
@@ -13,16 +22,21 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 - Added memory timeline view.
 - Added support for trace parser customization.
 - Added support for H100 traces.
-- (Experimental) Support to read PyTorch Execution Trace and correlate it with PyTorch Profiler Trace.
-- (Experimental) Added lightweight critical path analysis feature.
-- (Experimental) Critical path analysis features: event attribution and `summary()`
-- (Experimental) Critical path analysis fixes: fixing async memcpy and adding GPU to CPU event based synchronization.
-- (Experimental) Added save and restore feature for critical path graph.
 - Add nccl collective fields to parser config
 - Queue length analysis: Add feature to compute time blocked on a stream hitting max queue length.
 - Add `kernel_backend` to parser config for Triton / torch.compile() support.
 - Add analyses features for GPU user annotation attribution at trace and kernel level.
 - Add support to parse all trace event args.
+
+#### New Feature: Critical Path Analysis
+- Added lightweight critical path analysis feature.
+- Critical path analysis features: event attribution and `summary()`
+- Critical path analysis fixes: fixing async memcpy and adding GPU to CPU event based synchronization.
+- Added save and restore feature for critical path graph.
+- Added save and restore feature for critical path graph.
+- Fixes bug in Critical path analysis relating to listing out the edges on the critical path.
+- Updated critical path analysis with edge attribution.
+- Improvement: allow filtering of flow events in the overlaid trace.
 
 #### Changed
 - Change test data path in unittests from relative path to real path to support running test within IDEs.
@@ -32,15 +46,8 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 - Add an option for ns rounding and cover ijson loading with it.
 - Updated Trace() api to specify a list of files and auto figure out ranks.
 
-#### Deprecated
-- Deprecated 'call_stack'; use 'trace_call_stack' and 'trace_call_graph' instead.
-
-#### Removed
-
 #### Fixed
 - Fixed issue #65 to handle floating point counter values in cupti\_counter\_analysis.
-- Fixes bug in Critical path analysis relating to listing out the edges on the critical path.
-- Updated critical path analysis with edge attribution.
 
 ## [0.2.0] - 2023-05-22
 #### Added
