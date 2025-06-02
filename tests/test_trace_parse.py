@@ -2,10 +2,11 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+import math
 import os
 import unittest
 
-from typing import Any, Dict
+from typing import Any, Dict, Set
 
 # import unittest.mock as mock
 
@@ -16,10 +17,13 @@ from hta.common.trace_parser import (
     _open_trace_file,
     get_default_trace_parsing_backend,
     parse_metadata_ijson,
+    parse_trace_dataframe,
     ParserBackend,
     set_default_trace_parsing_backend,
 )
+from hta.configs.config import HtaConfig
 from hta.configs.parser_config import AVAILABLE_ARGS, ParserConfig
+from hta.utils.test_utils import data_provider
 
 JSON = Dict[str, Any]
 EXPECTED_META_VISION_TRANFORMER: JSON = {
@@ -90,14 +94,19 @@ class TraceParseTestCase(unittest.TestCase):
     vision_transformer_raw_df: pd.DataFrame
     inference_t: Trace
     inference_raw_df: pd.DataFrame
+    triton_t: Trace
+    triton_raw_df: pd.DataFrame
 
     @classmethod
     def setUpClass(cls):
         super(TraceParseTestCase, cls).setUpClass()
         vision_transformer_trace_dir: str = "tests/data/vision_transformer"
         inference_trace_dir: str = "tests/data/inference_single_rank"
+        triton_trace_dir: str = "tests/data/triton_example"
+
         vision_transformer_rank_0_file: str = "rank-0.json.gz"
         inference_rank_0_file: str = "inference_rank_0.json.gz"
+        triton_example_file: str = "triton_example.json.gz"
         inference_trace_files = [
             os.path.join(inference_trace_dir, inference_rank_0_file)
         ]
@@ -119,11 +128,22 @@ class TraceParseTestCase(unittest.TestCase):
         cls.inference_raw_df = prepare_ground_truth_df(
             inference_trace_dir, inference_rank_0_file
         )
+        # Trace parser for triton
+        cls.triton_t: Trace = Trace(trace_dir=triton_trace_dir)
+        cls.triton_t.parse_traces(max_ranks=max_ranks, use_multiprocessing=True)
+        cls.triton_t.align_and_filter_trace()
+        cls.triton_raw_df = prepare_ground_truth_df(
+            triton_trace_dir, triton_example_file
+        )
 
     def setUp(self) -> None:
-        self.traces = [self.vision_transformer_t, self.inference_t]
-        self.raw_dfs = [self.vision_transformer_raw_df, self.inference_raw_df]
-        self.total_ranks = [8, 1]
+        self.traces = [self.vision_transformer_t, self.inference_t, self.triton_t]
+        self.raw_dfs = [
+            self.vision_transformer_raw_df,
+            self.inference_raw_df,
+            self.triton_raw_df,
+        ]
+        self.total_ranks = [8, 1, 1]
 
     def test_trace_load(self) -> None:
         # run tests for each collection of traces
@@ -165,7 +185,9 @@ class TraceParseTestCase(unittest.TestCase):
             df = t.traces[0]
             sym_id_map = t.symbol_table.get_sym_id_map()
             iterations = {
-                f"ProfilerStep#{i}" for i in set(df["iteration"].unique()) if i != -1
+                f"ProfilerStep#{i}"
+                for i in set(df["iteration"].unique())
+                if i != -1 and not math.isnan(i)
             }
 
             valid_gpu_kernels = df.loc[
@@ -199,6 +221,27 @@ class TraceParseTestCase(unittest.TestCase):
             trace_meta["deviceProperties"][0], exp_meta["deviceProperties"][0]
         )
         # print(trace_meta)
+
+    def test_get_trace_start_unixtime_ns(self) -> None:
+        with self.assertRaises(KeyError):
+            # This trace metadata doesn't have the "baseTimeNanoseconds" field, so we expect a KeyError
+            self.vision_transformer_t.get_trace_start_unixtime_ns(0)
+
+        triton_trace_first_event_ts_ns = 2413669096100149
+        triton_trace_base_time_nanoseconds = 1727743122000000000
+        expected_triton_start_unixtime_ns = (
+            triton_trace_first_event_ts_ns + triton_trace_base_time_nanoseconds
+        )
+
+        actual_triton_start_unixtime_ns = self.triton_t.get_trace_start_unixtime_ns(0)
+
+        # Rounding of ns resolution events yields an imprecise result.
+        # We expect the difference to be less than 1us
+        self.assertAlmostEqual(
+            actual_triton_start_unixtime_ns,
+            expected_triton_start_unixtime_ns,
+            delta=1000,
+        )
 
 
 @unittest.skipIf(
@@ -301,21 +344,25 @@ class TraceParseIjsonOthersTestCase(unittest.TestCase):
 
 class TraceParseConfigTestCase(unittest.TestCase):
     def setUp(self) -> None:
-        # Trace parser test file for nccl fields
-        resnet_nccl_trace: str = "tests/data/nccl_parser_config"
-        self.resnet_nccl_t: Trace = Trace(trace_dir=resnet_nccl_trace)
-
-        # Trace parser test file for Triton fields
-        triton_trace: str = "tests/data/triton_example"
-        self.triton_t: Trace = Trace(trace_dir=triton_trace)
-
         # Parse all nccl fields in the test
-        custom_cfg = ParserConfig(ParserConfig.get_minimum_args())
-        custom_cfg.add_args(
+        self.custom_cfg = ParserConfig(ParserConfig.get_minimum_args())
+        self.custom_cfg.add_args(
             [spec for (arg, spec) in AVAILABLE_ARGS.items() if arg.startswith("nccl")]
             + ParserConfig.ARGS_TRITON_KERNELS
         )
-        ParserConfig.set_default_cfg(custom_cfg)
+        # ParserConfig.set_default_cfg(custom_cfg)
+
+        # Trace parser test file for nccl fields
+        resnet_nccl_trace: str = "tests/data/nccl_parser_config"
+        self.resnet_nccl_t: Trace = Trace(
+            trace_dir=resnet_nccl_trace, parser_config=self.custom_cfg
+        )
+
+        # Trace parser test file for Triton fields
+        triton_trace: str = "tests/data/triton_example"
+        self.triton_t: Trace = Trace(
+            trace_dir=triton_trace, parser_config=self.custom_cfg
+        )
 
     def tearDown(self) -> None:
         ParserConfig.set_default_cfg(ParserConfig(ParserConfig.get_minimum_args()))
@@ -370,6 +417,59 @@ class TraceParseConfigTestCase(unittest.TestCase):
             triton_op["kernel_hash"],
             "cqaokwf2bph4egogzevc22vluasiyuui4i54zpemp6knbsggfbuu",
         )
+
+    @data_provider(
+        lambda: (
+            {
+                "parse_all_args": False,
+                "expected_columns": {
+                    "name",
+                    "ts",
+                    "index",
+                    "tid",
+                    "stream",
+                    "cat",
+                    "dur",
+                    "end",
+                    "pid",
+                    "correlation",
+                },
+                "expected_missing_columns": {"block", "grid"},
+            },
+            {
+                "parse_all_args": True,
+                "expected_columns": {
+                    "index",
+                    "cat",
+                    "name",
+                    "pid",
+                    "tid",
+                    "ts",
+                    "dur",
+                    "end",
+                    "ev_idx",
+                    "external_id",
+                    "fwd_thread_id",
+                    "in_msg_nelems",
+                },
+                "expected_missing_columns": set(),
+            },
+        )
+    )
+    def test_parse_all_args(
+        self,
+        parse_all_args: bool,
+        expected_columns: Set[str],
+        expected_missing_columns: Set[str],
+    ) -> None:
+        """Tests if we can parse all args in the trace"""
+        trace_dir = HtaConfig.get_test_data_path("nccl_parser_config")
+        trace_file = os.path.join(trace_dir, "nccl_data.json.gz")
+        cfg = ParserConfig(ParserConfig.get_minimum_args())
+        cfg.set_parse_all_args(parse_all_args)
+        _, df, _ = parse_trace_dataframe(trace_file, cfg)
+        self.assertTrue(expected_columns.issubset(set(df.columns)))
+        self.assertTrue(expected_missing_columns.isdisjoint(set(df.columns)))
 
 
 if __name__ == "__main__":  # pragma: no cover

@@ -122,7 +122,7 @@ def compare_events(x: Event, y: Event) -> int:
                     result = 1 if x.dur < y.dur else -1
             else:
                 if x.dur == y.dur:
-                    result = 1 if x.idx < y.idx else -1 if x.idx < y.idx else 0
+                    result = 1 if x.idx < y.idx else -1 if x.idx > y.idx else 0
                 else:
                     result = -1 if x.dur < y.dur else 1
         else:
@@ -254,7 +254,7 @@ class CallStackGraph:
         else:
             df = df[["index", "ts", "dur"]].copy()
         df["dur"] = np.maximum(df["dur"], 0)
-        df["end"] = df["ts"] + df["dur"].astype(int)
+        df["end"] = df["ts"] + df["dur"]
 
         for row in df.itertuples():
             events.append(Event(row.index, row.ts, row.dur, EVENT_START))

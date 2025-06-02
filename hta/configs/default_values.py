@@ -15,6 +15,8 @@ DF_SYMBOL_COLUMNS: List[str] = ["cat", "name"]
 
 # Runtime configurations
 IS_DEBUG_ENABLED: bool = True
+# For non-compute-intensive tasks, do not use a large number of processes.
+MAX_NUM_PROCESSES_SMALL: int = 4
 MAX_NUM_PROCESSES: int = 32
 
 
@@ -62,6 +64,16 @@ class AttributeSpec(NamedTuple):
     # This property allows for addition of fields that do
     # not break backwards compatibility with other fields (minor version bumps).
     min_supported_version: YamlVersion
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, AttributeSpec):
+            return False
+        return (
+            self.name == other.name
+            and self.raw_name == other.raw_name
+            and self.value_type == other.value_type
+            and self.default_value == other.default_value
+        )
 
 
 class EventArgs(NamedTuple):

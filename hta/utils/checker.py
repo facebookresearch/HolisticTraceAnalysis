@@ -1,7 +1,12 @@
 import os
 import os.path
+from dataclasses import dataclass
 
-from hta.common.types import OperationOutcome
+
+@dataclass
+class OperationOutcome:
+    success: bool
+    reason: str
 
 
 def is_valid_directory(

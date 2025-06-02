@@ -140,7 +140,7 @@ class HtaConfig:
     def show(self):
         print(json.dumps(self.config, indent=4, sort_keys=True))
 
-    @classmethod
-    def get_test_data_path(cls, dataset: str) -> str:
-        test_data_path = Path.joinpath(package_path, "tests/data/", dataset)
+    @staticmethod
+    def get_test_data_path(dataset: str) -> str:
+        test_data_path = package_path.parent.joinpath("tests/data/", dataset)
         return str(test_data_path)

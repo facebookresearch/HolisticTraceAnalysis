@@ -117,9 +117,7 @@ class CallGraph:
         """
         t = Trace(trace_files={}, trace_dir="")
         t.symbol_table = (
-            symbol_table
-            if symbol_table
-            else TraceSymbolTable.create_symbol_table_from_df(df)
+            symbol_table if symbol_table else TraceSymbolTable.create_from_df(df)
         )
         t.traces[rank] = df.copy()
         t.is_parsed = True

@@ -3,11 +3,19 @@
 # LICENSE file in the root directory of this source tree.
 
 import json
+import os
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 
 from hta.configs.config import HtaConfig
 from hta.configs.default_values import DEFAULT_CONFIG_FILENAME
-from hta.configs.env_options import get_options
+from hta.configs.env_options import (
+    CP_LAUNCH_EDGE_ENV,
+    get_options,
+    HTA_DISABLE_NS_ROUNDING_ENV,
+    HTAEnvOptions,
+)
 
 
 class HtaConfigTestCase(unittest.TestCase):
@@ -27,7 +35,7 @@ class HtaConfigTestCase(unittest.TestCase):
             len(paths), 3, f"expect the default file paths to be 3 but got {len(paths)}"
         )
         self.assertTrue(
-            all([str(path).endswith(DEFAULT_CONFIG_FILENAME) for path in paths])
+            all(str(path).endswith(DEFAULT_CONFIG_FILENAME) for path in paths)
         )
 
     def test_constructor_no_config_file(self):
@@ -72,6 +80,96 @@ class HtaConfigTestCase(unittest.TestCase):
 
     def test_get_env_options(self):
         self.assertNotEqual(get_options(), "")
+
+    def test_get_test_data_path(self):
+        data_path = HtaConfig.get_test_data_path("h100")
+        self.assertTrue(Path(data_path).exists())
+
+
+class HTAEnvOptionsTestCase(unittest.TestCase):
+    def setUp(self) -> None:
+        # Reset the singleton instance before each test
+        HTAEnvOptions._instance = None
+        # Save original environment variables
+        self.original_env = os.environ.copy()
+
+    def tearDown(self) -> None:
+        # Reset the singleton instance after each test
+        HTAEnvOptions._instance = None
+        # Restore original environment variables
+        os.environ.clear()
+        os.environ.update(self.original_env)
+
+    def test_singleton_behavior(self):
+        """Test that instance() always returns the same instance."""
+        instance1 = HTAEnvOptions.instance()
+        instance2 = HTAEnvOptions.instance()
+        self.assertIs(instance1, instance2, "instance() should return the same object")
+
+    def test_get_set_options(self):
+        """Test getting and setting options."""
+        options = HTAEnvOptions.instance()
+
+        # Test default values
+        self.assertFalse(options.disable_ns_rounding())
+        self.assertFalse(options.disable_call_graph_depth())
+        self.assertFalse(options.critical_path_add_zero_weight_launch_edges())
+        self.assertFalse(options.critical_path_show_zero_weight_launch_edges())
+        self.assertFalse(options.critical_path_strict_negative_weight_check())
+
+        # Test setting values
+        options.set_disable_ns_rounding(True)
+        self.assertTrue(options.disable_ns_rounding())
+
+        options.set_critical_path_add_zero_weight_launch_edges(True)
+        self.assertTrue(options.critical_path_add_zero_weight_launch_edges())
+
+        # Test that other values remain unchanged
+        self.assertFalse(options.disable_call_graph_depth())
+        self.assertFalse(options.critical_path_show_zero_weight_launch_edges())
+        self.assertFalse(options.critical_path_strict_negative_weight_check())
+
+    def test_environment_variable_reading(self):
+        """Test that environment variables are correctly read."""
+        # Set environment variables
+        os.environ[HTA_DISABLE_NS_ROUNDING_ENV] = "1"
+        os.environ[CP_LAUNCH_EDGE_ENV] = "1"
+
+        # Create a new instance that should read these environment variables
+        HTAEnvOptions._instance = None
+        options = HTAEnvOptions.instance()
+
+        # Check that the environment variables were correctly read
+        self.assertTrue(options.disable_ns_rounding())
+        self.assertTrue(options.critical_path_add_zero_weight_launch_edges())
+        self.assertFalse(options.disable_call_graph_depth())  # Default value
+
+    def test_get_options_str(self):
+        """Test the get_options_str method."""
+        options = HTAEnvOptions.instance()
+        options_str = options.get_options_str()
+
+        # Check that the string contains all option names
+        self.assertIn("disable_ns_rounding", options_str)
+        self.assertIn("disable_call_graph_depth", options_str)
+        self.assertIn("critical_path_add_zero_weight_launch_edges", options_str)
+        self.assertIn("critical_path_show_zero_weight_launch_edges", options_str)
+        self.assertIn("critical_path_strict_negative_weight_check", options_str)
+
+    @patch.dict(os.environ, {HTA_DISABLE_NS_ROUNDING_ENV: "1"})
+    def test_legacy_functions(self):
+        """Test that legacy functions use the singleton instance."""
+        from hta.configs.env_options import (
+            disable_call_graph_depth,
+            disable_ns_rounding,
+        )
+
+        # Reset the singleton to ensure it reads the patched environment
+        HTAEnvOptions._instance = None
+
+        # Check that legacy functions return the correct values
+        self.assertTrue(disable_ns_rounding())
+        self.assertFalse(disable_call_graph_depth())
 
 
 if __name__ == "__main__":  # pragma: no cover

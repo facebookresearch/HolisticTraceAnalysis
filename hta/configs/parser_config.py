@@ -1,10 +1,13 @@
 # pyre-strict
 
 import copy
+import re
 from enum import Enum
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional, Set, Union
 
-from hta.configs.default_values import AttributeSpec, EventArgs
+import pandas as pd
+
+from hta.configs.default_values import AttributeSpec, EventArgs, ValueType
 from hta.configs.event_args_yaml_parser import (
     parse_event_args_yaml,
     v1_0_0,
@@ -79,27 +82,58 @@ class ParserConfig:
         args: Optional[List[AttributeSpec]] = None,
         user_provide_trace_type: Optional[TraceType] = None,
         version: YamlVersion = DEFAULT_PARSE_VERSION,
+        parse_all_args: bool = False,
+        selected_arg_keys: Optional[List[str]] = None,
+        skip_event_types: Optional[Set[str]] = None,
     ) -> None:
+        """Initialize the ParserConfig object."""
+        # Note remember to update set_default_cfg() when adding new fields.
         self.args: List[AttributeSpec] = (
             args if args else self.get_default_args(version=version)
         )
+        self.arg_map: Dict[str, AttributeSpec] = {arg.name: arg for arg in self.args}
         self.parser_backend: Optional[ParserBackend] = None
         self.trace_memory: bool = False
         self.user_provide_trace_type: Optional[TraceType] = user_provide_trace_type
+
+        # Currently, this is only honored in the ijson backends.
+        self.skip_event_types: Set[str] = (
+            skip_event_types if skip_event_types is not None else {"python_function"}
+        )
+
         self.min_required_cols: List[str] = self.DEFAULT_MIN_REQUIRED_COLS
+        self.drop_gpu_user_annotation: bool = True
+        self.version: YamlVersion = version
+        self.parse_all_args: bool = parse_all_args
+        self.selected_arg_keys: Optional[List[str]] = None
+
+        # Json batched backend specific configs
+        self.batch_size = 1000
+
+    def clone(self) -> "ParserConfig":
+        return copy.deepcopy(self)
 
     @classmethod
     def get_default_cfg(cls) -> "ParserConfig":
-        return copy.deepcopy(_DEFAULT_PARSER_CONFIG)
+        # return copy.deepcopy(_DEFAULT_PARSER_CONFIG)
+        return _DEFAULT_PARSER_CONFIG.clone()
 
     @classmethod
     def get_versioned_cfg(cls, version: YamlVersion) -> "ParserConfig":
-        return copy.deepcopy(ParserConfig(version=version))
+        return ParserConfig(version=version).clone()
 
     @classmethod
     def set_default_cfg(cls, cfg: "ParserConfig") -> None:
         _DEFAULT_PARSER_CONFIG.set_args(cfg.get_args())
         _DEFAULT_PARSER_CONFIG.set_min_required_cols(cfg.get_min_required_cols())
+        _DEFAULT_PARSER_CONFIG.set_drop_gpu_user_annotation(
+            cfg.drop_gpu_user_annotation
+        )
+        _DEFAULT_PARSER_CONFIG.set_trace_memory(cfg.trace_memory)
+        _DEFAULT_PARSER_CONFIG.set_parser_backend(cfg.parser_backend)
+        _DEFAULT_PARSER_CONFIG.set_parse_all_args(cfg.parse_all_args)
+        _DEFAULT_PARSER_CONFIG.set_args_selector(cfg.selected_arg_keys)
+        _DEFAULT_PARSER_CONFIG.set_skip_event_types(cfg.skip_event_types)
 
     @classmethod
     def get_minimum_args(
@@ -122,9 +156,12 @@ class ParserConfig:
     def set_args(self, args: List[AttributeSpec]) -> None:
         if args != self.args:
             self.args.clear()
+            self.arg_map.clear()
             self.add_args(args)
 
     def get_args(self) -> List[AttributeSpec]:
+        if self.selected_arg_keys is not None:
+            return [self.arg_map[arg] for arg in self.selected_arg_keys]
         return self.args
 
     def set_min_required_cols(self, cols: List[str]) -> None:
@@ -136,20 +173,45 @@ class ParserConfig:
         return self.min_required_cols
 
     def add_args(self, args: List[AttributeSpec]) -> None:
-        arg_set: Set[str] = {arg.name for arg in self.args}
         for arg in args:
-            if arg.name not in arg_set:
+            if arg.name not in self.arg_map:
                 self.args.append(arg)
-                arg_set.add(arg.name)
+                self.arg_map[arg.name] = arg
+
+    def set_trace_memory(self, trace_memory: bool) -> None:
+        self.trace_memory = trace_memory
+
+    def set_drop_gpu_user_annotation(self, should_drop: bool) -> None:
+        self.drop_gpu_user_annotation = should_drop
 
     def set_parser_backend(self, parser_backend: ParserBackend) -> None:
         self.parser_backend = parser_backend
 
-    @staticmethod
-    def enable_communication_args(version: YamlVersion = DEFAULT_PARSE_VERSION) -> None:
-        _DEFAULT_PARSER_CONFIG.add_args(
-            parse_event_args_yaml(version).ARGS_COMMUNICATION
-        )
+    def set_parse_all_args(self, parse_all_args: bool) -> "ParserConfig":
+        self.parse_all_args = parse_all_args
+        return self
+
+    def set_args_selector(
+        self, selected_arg_keys: Optional[List[str]] = None
+    ) -> "ParserConfig":
+        self.selected_arg_keys = selected_arg_keys
+        return self
+
+    def set_skip_event_types(
+        self, skip_event_types: Optional[Set[str]] = None
+    ) -> "ParserConfig":
+        self.skip_event_types = skip_event_types
+        return self
+
+    @classmethod
+    def enable_communication_args(
+        cls,
+        cfg: Optional["ParserConfig"] = None,
+        version: YamlVersion = DEFAULT_PARSE_VERSION,
+    ) -> "ParserConfig":
+        cfg = cfg or _DEFAULT_PARSER_CONFIG
+        cfg.add_args(parse_event_args_yaml(version).ARGS_COMMUNICATION)
+        return cfg
 
     @staticmethod
     def set_global_parser_config_version(version: YamlVersion) -> None:
@@ -170,12 +232,89 @@ class ParserConfig:
         ).ARGS_COMMUNICATION
         ParserConfig.ARGS_DEFAULT = parse_event_args_yaml(version).ARGS_DEFAULT
 
-    @staticmethod
-    def show_available_args():
+    @classmethod
+    def get_all_available_args(cls) -> Dict[str, AttributeSpec]:
+        return AVAILABLE_ARGS
+
+    @classmethod
+    def show_available_args(cls) -> None:
         from pprint import pprint
 
-        global AVAILABLE_ARGS
-        pprint(AVAILABLE_ARGS)
+        pprint(cls.get_all_available_args())
+
+    @classmethod
+    def transform_arg_name(cls, arg: str) -> str:
+        arg = re.sub(r"\([^)]*\)", "", arg)
+        arg = re.sub(r"[ \-\/\.%]+", "_", arg.lower())
+        arg = re.sub(r"_+", "_", arg).strip("_")
+        if arg == "name":
+            arg = "arg_name"
+        return arg
+
+    @classmethod
+    def infer_attribute_specs(
+        cls,
+        args: pd.Series,
+        reference_specs: Optional[Dict[str, AttributeSpec]] = None,
+    ) -> Dict[str, AttributeSpec]:
+        """Infer the attribute specs from the args series.
+
+        Args:
+            args (pd.Series): A series of dict objects from which to infer the attribute specs.StopAsyncIteration
+            reference_specs (Optional[Dict[str, AttributeSpec]]): A dictionary of reference attribute specs.
+                If provided, the inferred attribute specs will be merged with the reference specs.
+
+        Returns:
+            A dictionary of inferred attribute specs, which contains specs of all the attributes in the args series.
+            If an arg_name is found in the reference_specs, it will use the AttributeSpec from the reference_specs.
+            Otherwise, it will use the inferred AttributeSpec.
+        """
+        attribute_spec_map = {}
+        attribute_set = set()
+
+        # Initialize the attribute_spec_map with the reference_specs
+        reference_specs = reference_specs or {}
+        for _, spec in reference_specs.items():
+            attribute_spec_map[spec.raw_name] = spec
+
+        # Infer the attribute specs from the args
+        for d in args.dropna():
+            if isinstance(d, dict):
+                for arg_name, arg_value in d.items():
+                    attribute_set |= {arg_name}
+                    if arg_name not in attribute_spec_map or arg_name == "name":
+                        attribute_spec_map[arg_name] = cls.make_attribute_spec(
+                            arg_name, arg_value
+                        )
+        return {k: v for k, v in attribute_spec_map.items() if k in attribute_set}
+
+    @classmethod
+    def make_attribute_spec(
+        cls,
+        raw_name: str,
+        value: object,
+        min_supported_version: YamlVersion = DEFAULT_PARSE_VERSION,
+    ) -> AttributeSpec:
+        default_value: Union[int, float, str, object]
+        if isinstance(value, int):
+            value_type = ValueType.Int
+            default_value = 0
+        elif isinstance(value, float):
+            value_type = ValueType.Float
+            default_value = 0.0
+        elif isinstance(value, str):
+            value_type = ValueType.String
+            default_value = ""
+        else:
+            value_type = ValueType.Object
+            default_value = None
+        return AttributeSpec(
+            cls.transform_arg_name(raw_name),
+            raw_name,
+            value_type,
+            default_value,
+            min_supported_version,
+        )
 
 
 # Define a global ParserConfig variable for internal use. To access this variable,

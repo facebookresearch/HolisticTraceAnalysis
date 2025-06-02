@@ -63,7 +63,7 @@ This version of **Critical Path Analysis does not need Execution Traces.**
 Using Critical Path Analysis
 ----------------------------
 
-This `ipython notebook <https://github.com/facebookresearch/HolisticTraceAnalysis/blob/main/examples/experimental/critical_path_analysis.ipynb>`__
+This `ipython notebook <https://github.com/facebookresearch/HolisticTraceAnalysis/blob/main/examples/critical_path_analysis.ipynb>`__
 illustrates basic critical path analysis.
 
 Prerequisite
@@ -77,7 +77,7 @@ This was fixed in `PR1 <https://github.com/pytorch/pytorch/pull/105187>`__ and `
 Analysis:
 ^^^^^^^^^
 
-As shown in the `notebook <https://github.com/facebookresearch/HolisticTraceAnalysis/blob/main/examples/experimental/critical_path_analysis.ipynb>`__, use ``analyzer.critical_path_analysis()`` for trace events within a single rank.
+As shown in the `notebook <https://github.com/facebookresearch/HolisticTraceAnalysis/blob/main/examples/critical_path_analysis.ipynb>`__, use ``analyzer.critical_path_analysis()`` for trace events within a single rank.
 We can further reduce the region of interest by selecting a *trace annotation* and instance id.
 For example, you can use this to limit the analysis to one iteration by passing annotation 'ProfilerStep#500'.
 

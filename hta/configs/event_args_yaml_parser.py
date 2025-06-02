@@ -3,12 +3,13 @@
 # pyre-strict
 
 
+import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Callable, Dict, List
 
 import yaml
-
+from hta.configs.default_event_args import DEFAULT_EVENT_ARGS_YAML
 from hta.configs.default_values import AttributeSpec, EventArgs, ValueType, YamlVersion
 
 
@@ -102,8 +103,11 @@ def parse_event_args_yaml(version: YamlVersion) -> EventArgs:
     yaml_file = f"event_args_{version.get_version_str()}.yaml"
     local_yaml_data_filepath = str(pkg_path.joinpath("event_args_formats", yaml_file))
 
-    with open(local_yaml_data_filepath, "r") as f:
-        yaml_content = yaml.safe_load(f)
+    if os.path.exists(local_yaml_data_filepath):
+        with open(local_yaml_data_filepath, "r") as f:
+            yaml_content = yaml.safe_load(f)
+    else:
+        yaml_content = yaml.safe_load(DEFAULT_EVENT_ARGS_YAML)
 
     def parse_value_type(value: str) -> ValueType:
         return ValueType[value]

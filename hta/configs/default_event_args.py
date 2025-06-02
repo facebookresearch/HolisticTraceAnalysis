@@ -1,3 +1,4 @@
+DEFAULT_EVENT_ARGS_YAML: str = """
 version: 1.0.0
 
 AVAILABLE_ARGS:
@@ -239,41 +240,6 @@ AVAILABLE_ARGS:
     raw_name: Rank
     value_type: Int
     default_value: -1
-  memory::total_reserved:
-    name: total_reserved
-    raw_name: Total Reserved
-    value_type: Int
-    default_value: -1
-  memory::total_allocated:
-    name: total_allocated
-    raw_name: Total Allocated
-    value_type: Int
-    default_value: -1
-  memory::bytes:
-    name: bytes_delta
-    raw_name: Bytes
-    value_type: Int
-    default_value: 0
-  memory::addr:
-    name: addr
-    raw_name: Addr
-    value_type: Int
-    default_value: 0
-  memory::device_id:
-    name: device_id
-    raw_name: Device Id
-    value_type: Int
-    default_value: 0
-  memory::device_type:
-    name: device_type
-    raw_name: Device Type
-    value_type: Int
-    default_value: 0
-  memory::ev_idx:
-    name: ev_idx
-    raw_name: Ev Idx
-    value_type: Int
-    default_value: -1
   inference::batch_size:
     name: batch_size
     raw_name: batchSize
@@ -284,3 +250,4 @@ AVAILABLE_ARGS:
     raw_name: batchId
     value_type: String
     default_value: ""
+"""

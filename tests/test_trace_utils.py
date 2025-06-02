@@ -21,6 +21,7 @@ class TestTracUtils(unittest.TestCase):
                 "void at::native::vectorized_elementwise_kernel<4, at::native::CUDAFunctor_add<int>, at::detail::Array<char*, 3> >(int, at::native::CUDAFunctor_add<int>, at::detail::Array<char*, 3>)",
                 "at::native::vectorized_elementwise_kernel",
             ),
+            TC("Memcpy DtoD (Device -> Device)", "Memcpy DtoD (Device -> Device)"),
         ]
 
         for tc in test_cases:
