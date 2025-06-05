@@ -702,24 +702,67 @@ class Trace:
             trace_df["ts"] = trace_df["ts"] - self.min_ts
             self.traces[rank] = trace_df
 
+    def _fix_mtia_memory_kernels(self, trace_df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Fix the iteration and stream columns for memory kernels.
+
+        In current MTIA traces, the iteration and stream columns are not set correctly for memory kernels.
+        This function fixes the iteration and stream columns for memory kernels.
+
+        Args:
+            trace_df (pd.DataFrame): the DataFrame to be fixed.
+
+        Returns:
+            The DataFrame with fixed iteration and stream columns for memory kernels.
+        """
+        profiler_step_ids: List[int] = self.symbol_table.get_profiler_step_ids()
+        memory_name_ids: List[int] = self.symbol_table.get_memory_name_ids()
+
+        profiler_steps = trace_df[trace_df["name"].isin(profiler_step_ids)]
+        memory_kernels = trace_df[trace_df["name"].isin(memory_name_ids)]
+
+        fixed_indices = set()
+        for _, step in profiler_steps.iterrows():
+            within_time_range = memory_kernels["ts"].between(
+                step["ts"], step["ts"] + step["dur"]
+            )
+            memory_kernels_subset = memory_kernels[within_time_range]
+            # Fix iteration column
+            mask_iteration = memory_kernels_subset["iteration"] == -1
+            trace_df.loc[memory_kernels_subset.index[mask_iteration], "iteration"] = (
+                step["iteration"]
+            )
+
+            # Fix stream column
+            mask_stream = memory_kernels_subset["stream"] == -1
+            trace_df.loc[memory_kernels_subset.index[mask_stream], "stream"] = (
+                trace_df.loc[memory_kernels_subset.index[mask_stream], "tid"]
+            )
+
+            # Track modified indices
+            fixed_indices.update(memory_kernels_subset.index)
+        return trace_df.loc[list(fixed_indices)]
+
     def _filter_irrelevant_gpu_kernels(
         self, include_last_profiler_step: Optional[bool] = False
     ) -> None:
         """
         Filter out GPU kernels that are not launched by the CPU kernels in the traced iterations.
         """
-        sym_index = self.symbol_table.get_sym_id_map()
-        profiler_steps = [v for k, v in sym_index.items() if "ProfilerStep" in k]
+        cpu_op_cat_ids: List[int] = self.symbol_table.get_cpu_event_cat_ids()
+        gpu_kernel_cat_ids: List[int] = self.symbol_table.get_gpu_kernel_cat_ids()
+        profiler_step_ids: List[int] = self.symbol_table.get_profiler_step_ids()
+        device_type = self.get_device_type()
 
         def filter_gpu_kernels_for_one_rank(trace_df: pd.DataFrame) -> pd.DataFrame:
             cpu_kernels = CPUOperatorFilter()(trace_df, self.symbol_table)
             gpu_kernels = GPUKernelFilter()(trace_df, self.symbol_table)
-            last_profiler_start = cpu_kernels[cpu_kernels["name"].isin(profiler_steps)][
-                "ts"
-            ].max()
-            last_profiler_end = cpu_kernels[cpu_kernels["name"].isin(profiler_steps)][
-                "end"
-            ].max()
+            last_profiler_start = cpu_kernels[
+                cpu_kernels["name"].isin(profiler_step_ids)
+            ]["ts"].max()
+            last_profiler_end = cpu_kernels[
+                cpu_kernels["name"].isin(profiler_step_ids)
+            ]["end"].max()
 
             cpu_kernels = (
                 cpu_kernels[cpu_kernels["ts"] <= last_profiler_end]
@@ -731,17 +774,43 @@ class Trace:
             )
             return pd.concat([filtered_gpu_kernels, cpu_kernels], axis=0)
 
-        if not profiler_steps:
+        def filter_mtia_kernels_for_one_rank(trace_df: pd.DataFrame) -> pd.DataFrame:
+            cpu_events = trace_df[trace_df["cat"].isin(cpu_op_cat_ids)]
+            profiler_steps = cpu_events[cpu_events["name"].isin(profiler_step_ids)]
+            t_start = profiler_steps["ts"].min()
+            t_end = profiler_steps["end"].max()
+            cpu_kernels = cpu_events[
+                cpu_events["ts"].ge(t_start) & cpu_events["end"].le(t_end)
+            ]
+
+            cpu_correlation_ids = set(cpu_kernels["correlation"].unique())
+            cpu_correlation_ids.discard(-1)
+
+            mtia_kernels = trace_df[
+                trace_df["cat"].isin(gpu_kernel_cat_ids)
+                & trace_df["correlation"].isin(cpu_correlation_ids)
+            ]
+
+            memory_kernels = self._fix_mtia_memory_kernels(trace_df)
+
+            indices = set(memory_kernels.index).union(
+                set(cpu_kernels.index).union(set(mtia_kernels.index))
+            )
+            return trace_df.loc[list(indices)]
+
+        if not profiler_step_ids:
             logger.warning(
                 "ProfilerStep not found in the trace. The analysis result may not be accurate."
             )
-        elif len(profiler_steps) == 1:
+        elif len(profiler_step_ids) == 1:
             logger.warning(
                 "There is only one iteration in the trace. The analysis result may not be accurate."
             )
-        else:
-            for rank, trace_df in self.traces.items():
+        for rank, trace_df in self.traces.items():
+            if device_type != "MTIA":
                 self.traces[rank] = filter_gpu_kernels_for_one_rank(trace_df)
+            else:
+                self.traces[rank] = filter_mtia_kernels_for_one_rank(trace_df)
 
     def decode_symbol_ids(self, use_shorten_name: bool = True) -> None:
         """Decode the name and cat column to show the original string names.
@@ -755,6 +824,16 @@ class Trace:
             decode_symbol_id_to_symbol_name(
                 self.get_trace(rank), self.symbol_table, use_shorten_name
             )
+
+    def get_device_type(self) -> str:
+        """Get the device type of the trace.
+
+        Returns:
+            The device type parsed from the trace metadata. If the device type is not found, return "UNKNOWN".
+        """
+        rank = next(iter(self.traces))
+        device_type = self.meta_data[rank].get("device_type", "UNKNOWN")
+        return device_type
 
     def convert_time_series_to_events(
         self, series: pd.DataFrame, counter_name: str, counter_col: str
