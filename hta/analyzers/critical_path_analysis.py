@@ -457,17 +457,13 @@ class CPGraph(nx.DiGraph):
         for csg in cpu_call_stacks:
             self._construct_graph_from_call_stack(csg)
 
-    def _construct_graph_from_call_stack(
-        self, csg: CallStackGraph, link_operators: bool = True
-    ) -> None:
+    def _construct_graph_from_call_stack(self, csg: CallStackGraph) -> None:
         """Perform a depth first traversal of the Call Stack for CPU threads
         and generated CP node events.
 
             @args: csg (CallStackGraph): HTA CallStackGraph object for one CPU thread.
-            @args link_operators (bool): If set add an automatic dependency edge
-                between consecutive operators on a single thread.
 
-        To enable nested operators we basicaly add edges between start/end
+        To enable nested operators we basically add edges between start/end
         nodes for events. For example say we have op A and op B and C nested
              |----------------------- Op A ----------------------|
                         |--- Op B ---|        |-- Op C--|
@@ -496,7 +492,8 @@ class CPGraph(nx.DiGraph):
             if start_node is None or end_node is None:
                 return
 
-            if link_operators and op_depth == 0 and last_highlevel_op is not None:
+            # Links consecutive top-level operators
+            if op_depth == 0 and last_highlevel_op is not None:
                 self._add_edge_helper(
                     last_highlevel_op, start_node, CPEdgeType.DEPENDENCY
                 )
