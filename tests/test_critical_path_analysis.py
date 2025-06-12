@@ -69,7 +69,6 @@ class CriticalPathAnalysisTestCase(unittest.TestCase):
         critical_path_t = self.simple_add_trace
         cp_graph = self._critical_path_on_simple_add_trace()
         trace_df = critical_path_t.t.get_trace(0)
-        sym_table = critical_path_t.t.symbol_table.get_sym_table()
 
         # Check the graph construction for the aten::relu_ operator
         # There are 3 stacked operators/runtime events here;
@@ -360,9 +359,6 @@ class CriticalPathAnalysisTestCase(unittest.TestCase):
         instance_id = 1
         critical_path_t = self.alexnet_trace
 
-        trace_df = critical_path_t.t.get_trace(0)
-        sym_table = critical_path_t.t.symbol_table.get_sym_table()
-
         cp_graph, success = critical_path_t.critical_path_analysis(
             rank=0, annotation=annotation, instance_id=instance_id
         )
@@ -408,9 +404,6 @@ class CriticalPathAnalysisTestCase(unittest.TestCase):
             rank=0, annotation=annotation, instance_id=instance_id
         )
         self.assertTrue(success)
-
-        trace_df = critical_path_t.t.get_trace(0)
-        sym_table = critical_path_t.t.symbol_table.get_sym_table()
 
         cuda_kernel_idx = 33
         cuda_event_sync_idx = 41
@@ -572,7 +565,7 @@ class CriticalPathAnalysisTestCase(unittest.TestCase):
         instance_id = 1
 
         def test():
-            cp_graph, success = critical_path_t.critical_path_analysis(
+            _, success = critical_path_t.critical_path_analysis(
                 rank=0, annotation=annotation, instance_id=instance_id
             )
             self.assertTrue(success)
@@ -595,7 +588,7 @@ class CriticalPathAnalysisTestCase(unittest.TestCase):
         instance_id = 1
 
         def test():
-            cp_graph, success = critical_path_t.critical_path_analysis(
+            _, success = critical_path_t.critical_path_analysis(
                 rank=0, annotation=annotation, instance_id=instance_id
             )
             self.assertTrue(success)
