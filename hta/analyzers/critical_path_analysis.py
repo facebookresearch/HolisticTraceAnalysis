@@ -105,8 +105,8 @@ class CPEdge:
     # begin and end node indices
     begin: int
     end: int
+    type: CPEdgeType
     weight: int = 0
-    type: CPEdgeType = CPEdgeType.OPERATOR_KERNEL
 
 
 @dataclass(frozen=True)
@@ -228,7 +228,7 @@ class CPGraph(nx.DiGraph):
         self,
         src: CPNode,
         dest: CPNode,
-        type: CPEdgeType = CPEdgeType.OPERATOR_KERNEL,
+        type: CPEdgeType,
         zero_weight: bool = False,
     ) -> CPEdge:
         """Adds a edge between two nodes
@@ -248,7 +248,7 @@ class CPGraph(nx.DiGraph):
             else (dest.ts - src.ts)
         )
 
-        e = CPEdge(begin=src.idx, end=dest.idx, weight=weight, type=type)
+        e = CPEdge(begin=src.idx, end=dest.idx, type=type, weight=weight)
         self._add_edge(e)
         return e
 
@@ -501,7 +501,9 @@ class CPGraph(nx.DiGraph):
             op_depth += 1
 
             if last_node is not None:
-                e = self._add_edge_helper(last_node, start_node)
+                e = self._add_edge_helper(
+                    last_node, start_node, CPEdgeType.OPERATOR_KERNEL
+                )
                 self._attribute_edge(e, last_ev_parent)
             last_node = start_node
             last_ev_parent = csnode.parent
@@ -535,7 +537,12 @@ class CPGraph(nx.DiGraph):
                         "Zeroing weight for synchronization runtime call "
                         f"id = {ev_id}"
                     )
-                e = self._add_edge_helper(last_node, end_node, zero_weight=zero_weight)
+                e = self._add_edge_helper(
+                    last_node,
+                    end_node,
+                    CPEdgeType.OPERATOR_KERNEL,
+                    zero_weight=zero_weight,
+                )
                 self._attribute_edge(e, last_ev_parent)
 
             if op_depth == 0:
@@ -869,7 +876,7 @@ class CPGraph(nx.DiGraph):
             logger.debug(
                 f"Adding a GPU->CPU sync edge between nodes {gpu_node} -> {end_node}"
             )
-        self._add_edge_helper(gpu_node, end_node, type=CPEdgeType.SYNC_DEPENDENCY)
+        self._add_edge_helper(gpu_node, end_node, CPEdgeType.SYNC_DEPENDENCY)
 
     def _add_kernel_launch_delay_edge(
         self, runtime_index: int, kernel_start_node: CPNode, zero_weight: bool = False
@@ -886,7 +893,7 @@ class CPGraph(nx.DiGraph):
         self._add_edge_helper(
             runtime_start,
             kernel_start_node,
-            type=CPEdgeType.KERNEL_LAUNCH_DELAY,
+            CPEdgeType.KERNEL_LAUNCH_DELAY,
             zero_weight=zero_weight,
         )
         return True
@@ -1061,7 +1068,7 @@ class CPGraph(nx.DiGraph):
                 )
 
             start_node, end_node = self.get_nodes_for_event(eid)
-            e = self._add_edge_helper(start_node, end_node)
+            e = self._add_edge_helper(start_node, end_node, CPEdgeType.OPERATOR_KERNEL)
             self._attribute_edge(e, -1)
 
             kernel_sync_index = kernel_sync.get(eid)
@@ -1084,7 +1091,7 @@ class CPGraph(nx.DiGraph):
                 else:
                     # note that the sync dependency has 0 weight
                     self._add_edge_helper(
-                        kernel_sync_end, start_node, type=CPEdgeType.SYNC_DEPENDENCY
+                        kernel_sync_end, start_node, CPEdgeType.SYNC_DEPENDENCY
                     )
                     if logger.isEnabledFor(logging.DEBUG):
                         logger.debug(
@@ -1139,7 +1146,7 @@ class CPGraph(nx.DiGraph):
                 # If neither launch nor CUDA event sync occurs it is a kernel-kernel
                 # delay
                 e = self._add_edge_helper(
-                    last_node[stream], start_node, type=CPEdgeType.KERNEL_KERNEL_DELAY
+                    last_node[stream], start_node, CPEdgeType.KERNEL_KERNEL_DELAY
                 )
                 self._attribute_edge(e, -1)
                 edge_added = True
