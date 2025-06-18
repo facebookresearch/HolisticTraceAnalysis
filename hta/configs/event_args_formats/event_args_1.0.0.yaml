@@ -268,12 +268,7 @@ AVAILABLE_ARGS:
     name: device_type
     raw_name: Device Type
     value_type: Int
-    default_value: 0
-  memory::ev_idx:
-    name: ev_idx
-    raw_name: Ev Idx
-    value_type: Int
-    default_value: -1
+    default_value: 0s
   inference::batch_size:
     name: batch_size
     raw_name: batchSize

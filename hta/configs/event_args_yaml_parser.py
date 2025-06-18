@@ -74,7 +74,7 @@ ARGS_MEMORY_FUNC: Callable[[Dict[str, AttributeSpec]], List[AttributeSpec]] = (
             "memory::addr",
             "memory::device_id",
             "memory::device_type",
-            "memory::ev_idx",
+            "index::ev_idx",
         ]
     ]
 )
