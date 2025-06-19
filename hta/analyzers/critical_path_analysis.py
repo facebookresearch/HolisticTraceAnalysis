@@ -58,8 +58,8 @@ class CPNode:
     or end of an operator or a kernel.
     """
 
-    idx: int = -1
-    ev_idx: int = -1
+    idx: int = -1  # Identifies this node in the constructed graph's node list.
+    ev_idx: int = -1  # Identifies the corresponding event in the trace dataframe.
     ts: int = 0
     is_start: bool = False
     # Cache the is blocking calls in the object
@@ -74,11 +74,11 @@ class CPNode:
 
 
 class CPEdgeType(Enum):
-    OPERATOR_KERNEL = "critical_path_operator"
-    DEPENDENCY = "critical_path_dependency"
-    KERNEL_LAUNCH_DELAY = "critical_path_kernel_launch_delay"
-    KERNEL_KERNEL_DELAY = "critical_path_kernel_kernel_delay"
-    SYNC_DEPENDENCY = "critical_path_sync_dependency"
+    OPERATOR_KERNEL = "critical_path_operator"  # Edge between start and end nodes for a single CPU operator or GPU kernel.
+    DEPENDENCY = "critical_path_dependency"  # Edge between nested CPU operators.
+    KERNEL_LAUNCH_DELAY = "critical_path_kernel_launch_delay"  # Edge between CPU launch and GPU kernel start.
+    KERNEL_KERNEL_DELAY = "critical_path_kernel_kernel_delay"  # Edge between successive kernels on the same GPU.
+    SYNC_DEPENDENCY = "critical_path_sync_dependency"  # Synchronization or control dependency between events.
 
 
 DEFAULT_EDGE_TYPES_IN_VIZ: Set[CPEdgeType] = {
@@ -91,14 +91,15 @@ DEFAULT_EDGE_TYPES_IN_VIZ: Set[CPEdgeType] = {
 @dataclass(frozen=True)
 class CPEdge:
     """An edge in the critical path di-graph.
-    This represents either a
-    1) span of time i.e. duration of an operator/kernel.
+
+    This represents either one of:
+    1) a span of time i.e. duration of an operator/kernel.
     2) a dependency among operators/kernels.
     3) a kernel launch or kernel-kernel delay.
-    3) synchronization delay.
-
-    The weight represents time in the graph, cases 1) and 3)
+    4) a synchronization delay.
+    The weight represents time in the graph. Cases 1) and 3)
     above have non-zero weights.
+
     Once we initialize the edge we should not modify the data members below.
     """
 
@@ -162,8 +163,9 @@ class CPGraph(nx.DiGraph):
     def __init__(
         self, t: Optional["Trace"], t_full: "Trace", rank: int, G=None
     ) -> None:
-        """Initialize a critical path graph object. This can be done in two
-        ways
+        """Initialize a critical path graph object.
+
+        This can be done in two ways:
             1) Generate critical path analysis graph from scatch.
             2) Restore a serialized CPGraph object.
 
@@ -179,7 +181,9 @@ class CPGraph(nx.DiGraph):
         self.t = t
         self.t_full = t_full
         self.full_trace_df: pd.DataFrame = self.t_full.get_trace(rank)
-        self.sym_table = t_full.symbol_table.get_sym_table()
+        self.sym_table = (
+            t_full.symbol_table.get_sym_table()
+        )  # List of symbols, where index is the symbol ID
         self.symbol_table = t_full.symbol_table
 
         # init networkx DiGraph
@@ -231,8 +235,17 @@ class CPGraph(nx.DiGraph):
         type: CPEdgeType,
         zero_weight: bool = False,
     ) -> CPEdge:
-        """Adds a edge between two nodes
-        Args: src, dest (CPNode): node objects for source and dest."""
+        """Adds a edge between two nodes.
+
+        Args:
+            src (CPNode): node object for source.
+            dest (CPNode): node object for destination.
+            type: (CPEdgeType): type of edge.
+            zero_weight (bool): if True, the edge is added with zero weight.
+
+        Returns:
+            CPEdge: The added edge.
+        """
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug(
                 f"Adding an edge between nodes {src.idx} -> {dest.idx}"
@@ -253,14 +266,14 @@ class CPGraph(nx.DiGraph):
         return e
 
     def _attribute_edge(self, e: CPEdge, src_parent: int) -> None:
-        """Attribute an edge to nearest matching event idx.
-        This function updates the edge_to_event_map.
+        """Attribute an edge to nearest matching event by updating edge_to_event_map.
+
         Args:
             e (CPEdge): Edge to attribute
             src_parent (int): Parent event of the src node.
 
-        The src_parent is required when we consider nested operators,
-        see the explanation below for more details.
+        The src_parent is required when we consider nested operators.
+        See the explanation below for more details.
         """
         # Edge attribution is only applicable for edges representing
         # operator or kernel spans or delay spans
@@ -332,9 +345,11 @@ class CPGraph(nx.DiGraph):
     def get_nodes_for_event(
         self, ev_id: int
     ) -> Tuple[Optional[CPNode], Optional[CPNode]]:
-        """Lookup corresponding nodes for an event id in the trace dataframe
+        """Lookup corresponding nodes for an event id in the trace dataframe.
+
         Args:
             ev_id (int): index of the event in trace dataframe.
+
         Returns:
             Tuple[Optional[CPNode], Optional[CPNode]]
                 Pair of CPNodes aka start and end CPNode for the event.
@@ -347,12 +362,13 @@ class CPGraph(nx.DiGraph):
         )
 
     def get_events_for_edge(self, edge: CPEdge) -> Tuple[int, int]:
-        """Lookup corresponding event nodes for an edge
+        """Lookup corresponding event nodes for an edge.
+
         Args:
-            edge (CPEdge): edge object that is part of the di-graph
+            edge (CPEdge): edge object that is part of the di-graph.
+
         Returns:
-            Tuple[int, int]
-                Pair of event ids representing src and dest of the edge.
+            Tuple[int, int]: Pair of event ids representing src and dest of the edge.
         """
         start_node, end_node = edge.begin, edge.end
         return int(self.node_list[start_node].ev_idx), int(
@@ -360,9 +376,11 @@ class CPGraph(nx.DiGraph):
         )
 
     def get_event_attribution_for_edge(self, edge: CPEdge) -> Optional[int]:
-        """Helper to look up event attributed to an edge
+        """Helper to look up event attributed to an edge.
+
         Args:
             edge (CPEdge): edge object that is part of the di-graph
+
         Returns:
             Optional[int]: Event id attributed to this edge.
                 Note only operator/kernel events have attribution.
@@ -371,11 +389,13 @@ class CPGraph(nx.DiGraph):
         return self.edge_to_event_map.get((edge.begin, edge.end), None)
 
     def get_edges_attributed_to_event(self, ev_idx: int) -> List[CPEdge]:
-        """Helper to look up edges attributed to a specific event
+        """Helper to look up edges attributed to a specific event.
+
         Args:
             ev_idx (int): Index of event to lookup attributed edges for.
+
         Returns:
-            List[CPEdge]: List of edges attributed to this event in the graph
+            List[CPEdge]: List of edges attributed to this event in the graph.
         """
         return self._event_to_attributed_edges_map.get(ev_idx, [])
 
@@ -461,14 +481,15 @@ class CPGraph(nx.DiGraph):
         """Perform a depth first traversal of the Call Stack for CPU threads
         and generated CP node events.
 
-            @args: csg (CallStackGraph): HTA CallStackGraph object for one CPU thread.
-
         To enable nested operators we basically add edges between start/end
         nodes for events. For example say we have op A and op B and C nested
              |----------------------- Op A ----------------------|
                         |--- Op B ---|        |-- Op C--|
         Critical graph
              (OpA.b)--->(ObB.b)----->(OpB.e)->(OpC.b)-->(OpC.e)->(OpA.e)
+
+        Args:
+            csg (CallStackGraph): HTA CallStackGraph object for one CPU thread.
         """
 
         # Track the stack of last seen events
@@ -560,13 +581,18 @@ class CPGraph(nx.DiGraph):
 
     def _get_cuda_runtime_calls_df(self, retain_index: bool = True) -> pd.DataFrame:
         """Returns a dataframe of CUDA launch runtime calls and associated CUDA stream
-        The returned dataframe has addtional columns
+
+        The returned dataframe has additional columns
         * stream_kernel: for the CUDA stream the runtime event launched on
         * gpu_kernel: for the GPU ID the runtime event launched on
         * launch id: is a sequential number for each kernel/memx launch. This is useful
                      in CUDA event synchronization algorithms
 
-        @args: retain_index - keep the original trace index
+        Args:
+            retain_index - keep the original trace index
+
+        Returns:
+            pd.DataFrame: Dataframe of CUDA launch runtime calls
         """
         gpu_kernels = self.full_trace_df.query("stream != -1 and index_correlation > 0")
 
@@ -882,10 +908,13 @@ class CPGraph(nx.DiGraph):
         self, runtime_index: int, kernel_start_node: CPNode, zero_weight: bool = False
     ) -> bool:
         """Add a kernel launch delay edge from CUDA runtime launch event to a GPU kernel.
-        @args runtime_index(int): event index of the runtime
-        @args kernel_start_node(CPNode): start node of the GPU kernel
 
-        Return (boool) false if runtime event could not be looked up
+        Arguments:
+            runtime_index(int): event index of the runtime
+            kernel_start_node(CPNode): start node of the GPU kernel
+
+        Returns:
+            (bool) false if runtime event could not be looked up
         """
         runtime_start, _ = self.get_nodes_for_event(runtime_index)
         if runtime_start is None:
@@ -1180,7 +1209,14 @@ class CPGraph(nx.DiGraph):
             logger.info("  neighbors = ", ",".join((str(n) for n in self.neighbors(n))))
 
     def critical_path(self) -> bool:
-        """Calculates the critical path across nodes"""
+        """Calculates the critical path across nodes.
+
+        Returns:
+            (bool) True if critical path was calculated successfully
+
+        Raises:
+            ValueError: If the graph is not valid for critical path calculation
+        """
         t0 = time.perf_counter()
         if not self._validate_graph():
             raise ValueError(
@@ -1219,12 +1255,12 @@ class CPGraph(nx.DiGraph):
         return True
 
     def _validate_graph(self) -> bool:
-        """Validate the graph can be trusted for analysis"""
+        """Validate whether the graph can be trusted for analysis"""
         # check for negative values and invalid sync edges
         negative_weights: bool = False
         sync_on_same_stream: bool = False
 
-        # print heler
+        # print helper
         def show_src_dest(src: CPNode, dest: CPNode) -> None:
             logger.error(
                 f" Source node idx {src.ev_idx}, "
@@ -1290,8 +1326,7 @@ class CPGraph(nx.DiGraph):
         return True
 
     def get_critical_path_breakdown(self) -> Optional[pd.DataFrame]:
-        r"""
-        Returns a breakdown of the critical path with each edge in the
+        """Returns a breakdown of the critical path with each edge in the
         path attributed to an event in the trace.
 
         Returns: pd.Dataframe
@@ -1300,7 +1335,7 @@ class CPGraph(nx.DiGraph):
                 event_id - Index of the event in original trace dataframe
                 s_name - Shortened string name of the event.
                 duration - Duration or weight of the edge in critical path
-                type - Type of edge. Could be one of TODO
+                type - String representing of type of edge (see CPEdgeType)
                 cat, pid, tid, stream - Columns corresponding to similar values
                     in the original t/race dataframe
                 bound_by - This column classifies the edges in the critical path
