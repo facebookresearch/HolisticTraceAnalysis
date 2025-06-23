@@ -181,9 +181,6 @@ class CPGraph(nx.DiGraph):
         self.t = t
         self.t_full = t_full
         self.full_trace_df: pd.DataFrame = self.t_full.get_trace(rank)
-        self.sym_table = (
-            t_full.symbol_table.get_sym_table()
-        )  # List of symbols, where index is the symbol ID
         self.symbol_table = t_full.symbol_table
 
         # init networkx DiGraph
@@ -340,7 +337,7 @@ class CPGraph(nx.DiGraph):
         if ev_id < 0:
             return "ROOT"
         name_id = self.trace_df.name.loc[ev_id]
-        return self.sym_table[name_id]
+        return self.symbol_table.get_sym_table()[name_id]
 
     def get_nodes_for_event(
         self, ev_id: int
