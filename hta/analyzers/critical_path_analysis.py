@@ -1759,10 +1759,11 @@ class CriticalPathAnalysis:
                 ),
                 is_start=is_start,
                 name="critical_path",
-                cat=str(edge.type.value),
+                cat="critical_path",
                 args={
                     "weight": int(edge.weight),
                     "critical": is_critical,
+                    "type": str(edge.type.value),
                 },
             )
 
