@@ -248,7 +248,7 @@ def parse_trace_file(
     meta, df, local_symbol_table = parse_trace_dataframe(trace_file_path, cfg)
 
     # add fwd bwd links between CPU ops
-    add_fwd_bwd_links(df)
+    add_fwd_bwd_links(df, local_symbol_table)
 
     df = transform_correlation_to_index(df, local_symbol_table)
 
@@ -274,9 +274,10 @@ class _TraceFileParserWrapper:
         return parse_trace_file(trace_file, self.cfg)
 
 
-def add_fwd_bwd_links(df: pd.DataFrame) -> None:
+def add_fwd_bwd_links(df: pd.DataFrame, symbol_table: TraceSymbolTable) -> None:
     t0 = time.perf_counter()
-    if df.cat.eq("fwdbwd").sum() == 0:
+    fwdbwd_sym_id = symbol_table.get_sym_id_map().get("fwdbwd", None)
+    if df.cat.eq(fwdbwd_sym_id).sum() == 0:
         return
 
     # Initialize the fwdbwd columns to -1
@@ -285,14 +286,14 @@ def add_fwd_bwd_links(df: pd.DataFrame) -> None:
     df["key"] = list(zip(df["ts"], df["tid"], df["pid"]))
 
     # Get the fwdbwd events. Only the "id" and "key" columns are needed for merging.
-    df_fwdbwd = df.loc[df.cat.eq("fwdbwd")]
+    df_fwdbwd = df.loc[df.cat.eq(fwdbwd_sym_id)]
     df_fwdbwd_start = df_fwdbwd.query("ph == 's'")[["id", "key"]]
     df_fwdbwd_end = df_fwdbwd.query("ph == 'f' and bp == 'e'")[["id", "key"]]
 
     # The "index" column for the cpu event will be used when merging with the fwdbwd events.
     # The "key" column will be used for the merge.
-    df_cpu = df.loc[df.cat.eq("cpu_op")][["index", "key"]]
-
+    cpu_op_sym_id = symbol_table.get_sym_id_map().get("cpu_op", None)
+    df_cpu = df.loc[df.cat.eq(cpu_op_sym_id)][["index", "key"]]
     # Merge the fwdbwd events with the cpu events.
     # We will be using the index of last cpu event when multiple cpu events start from the same ts.
     df_fwdbwd_start_events = (
@@ -322,6 +323,10 @@ def add_fwd_bwd_links(df: pd.DataFrame) -> None:
     df.loc[start_indices, "fwdbwd"] = 0
     df.loc[end_indices, "fwdbwd"] = 1
     df.drop(columns=["key"], inplace=True)
+
+    df.dropna(axis=0, subset=["dur"], inplace=True)
+    columns_to_drop = {"ph", "id", "bp", "s"}.intersection(set(df.columns))
+    df.drop(list(columns_to_drop), axis=1, inplace=True)
     t1 = time.perf_counter()
     logger.debug(f"Time taken to add fwd_bwd links: {t1 - t0 :.2f} seconds")
 
