@@ -12,7 +12,6 @@ class TraceFWDBWDLinkTestCase(unittest.TestCase):
         test_data_path = Path(__file__).parent.parent.joinpath(
             "tests/data/h100/h100_trace.json"
         )
-        print(f'test_data_path: {test_data_path}')
         self.trace = Trace(
             trace_files={0: str(test_data_path)},
             trace_dir="",
