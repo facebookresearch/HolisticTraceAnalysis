@@ -28,7 +28,6 @@ class TraceFWDBWDLinkTestCase(unittest.TestCase):
         )
 
     def test_fwdbwd_symbol_and_id(self):
-        print(f'trace symbol table: {self.trace.symbol_table}')
         self.assertIn(
             "fwdbwd",
             self.trace.symbol_table.sym_index,
