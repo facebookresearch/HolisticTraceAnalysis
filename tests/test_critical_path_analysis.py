@@ -251,7 +251,11 @@ class CriticalPathAnalysisTestCase(unittest.TestCase):
                 if "args" in e and e["ph"] == "f"
             )
             stats.edge_count_per_type = Counter(
-                e["cat"] for e in trace_events if "critical_path" in e.get("cat", "")
+                e["args"]["type"]
+                for e in trace_events
+                if "args" in e
+                and "type" in e["args"]
+                and "critical_path" in e["args"]["type"]
             )
 
         return stats
