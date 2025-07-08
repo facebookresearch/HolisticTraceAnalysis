@@ -491,13 +491,11 @@ class CPGraph(nx.DiGraph):
 
         # Track the stack of last seen events
         last_node: Optional[CPNode] = None
-        last_highlevel_op: Optional[CPNode] = None
         op_depth = 0
         last_ev_parent: Optional[int] = None
 
         def enter_func(ev_id, csnode):
             nonlocal last_node
-            nonlocal last_highlevel_op
             nonlocal op_depth
             nonlocal last_ev_parent
             if logger.isEnabledFor(logging.DEBUG):
@@ -510,21 +508,17 @@ class CPGraph(nx.DiGraph):
             if start_node is None or end_node is None:
                 return
 
-            # Links consecutive top-level operators
-            if op_depth == 0 and last_highlevel_op is not None:
-                self._add_edge_helper(
-                    last_highlevel_op, start_node, CPEdgeType.DEPENDENCY
-                )
-
-            op_depth += 1
-
             if last_node is not None:
-                e = self._add_edge_helper(
-                    last_node, start_node, CPEdgeType.OPERATOR_KERNEL
-                )
+                if op_depth == 0:  # Links consecutive top-level operators
+                    edge_type = CPEdgeType.DEPENDENCY
+                else:
+                    edge_type = CPEdgeType.OPERATOR_KERNEL
+                e = self._add_edge_helper(last_node, start_node, edge_type)
                 self._attribute_edge(e, last_ev_parent)
+
             last_node = start_node
             last_ev_parent = csnode.parent
+            op_depth += 1
 
             if logger.isEnabledFor(logging.DEBUG):
                 logger.debug(
@@ -533,7 +527,6 @@ class CPGraph(nx.DiGraph):
 
         def exit_func(ev_id, csnode):
             nonlocal last_node
-            nonlocal last_highlevel_op
             nonlocal op_depth
             nonlocal last_ev_parent
             if logger.isEnabledFor(logging.DEBUG):
@@ -545,8 +538,6 @@ class CPGraph(nx.DiGraph):
             start_node, end_node = self.get_nodes_for_event(ev_id)
             if start_node is None or end_node is None:
                 return
-
-            op_depth -= 1
 
             if last_node is not None:
                 zero_weight = start_node.is_blocking
@@ -563,12 +554,10 @@ class CPGraph(nx.DiGraph):
                 )
                 self._attribute_edge(e, last_ev_parent)
 
-            if op_depth == 0:
-                last_node = None
-                last_highlevel_op = end_node
-            else:
-                last_node = end_node
-                last_ev_parent = csnode.parent
+            last_node = end_node
+            last_ev_parent = csnode.parent
+            op_depth -= 1
+
             if logger.isEnabledFor(logging.DEBUG):
                 logger.debug(
                     "=" * csnode.depth + f"Op depth = {op_depth} last_node={last_node}"
