@@ -461,6 +461,7 @@ class CallGraph:
         trace: Trace,
         ranks: Optional[List[int]] = None,
         filter_func: Optional[Filter] = None,
+        thread_merge_func: Optional[Callable[[int, int], int]] = None,
     ) -> None:
         """Construct a CallGraph from a Trace object <trace_data>
 
@@ -468,6 +469,8 @@ class CallGraph:
             trace (Trace): the trace data used to construct this CallGraph object.
             ranks (List[int]) : filter the traces using the given set of ranks. Using all ranks if None.
             filter_func (Callable) : used to preprocess the trace events and filter events out. Please see filters in hta/common/trace_filter.py for details.
+            thread_merge_func (Callable) : used to merge threads in the traces. Takes in a tuple of (rank, thread_id) and returns the target thread id for use in the graph
+
         Raises:
             ValueError: the trace data is invalid.
         """
@@ -476,10 +479,13 @@ class CallGraph:
         self.call_stacks: List[CallStackGraph] = []
 
         _ranks = [k for k in trace.get_all_traces()] if ranks is None else ranks
-        self._construct_call_graph(_ranks, filter_func)
+        self._construct_call_graph(_ranks, filter_func, thread_merge_func)
 
     def _construct_call_graph(
-        self, ranks: List[int], filter_func: Optional[Filter]
+        self,
+        ranks: List[int],
+        filter_func: Optional[Filter],
+        thread_remap_func: Optional[Callable[[int, int], int]] = None,
     ) -> None:
         """
         Construct the call graph from the traces of a distributed training job.
@@ -490,10 +496,19 @@ class CallGraph:
         """
         call_stack_ids: List[CallStackIdentity] = []
         t0 = perf_counter()
+
+        groupby_key = ["pid", "tid"]
+
         # construct a call stack graph for each thread/stream
         for rank in ranks:
             df = self.trace_data.get_trace(rank)
-            for (pid, tid), df_thread in df.groupby(["pid", "tid"]):
+            if thread_remap_func:
+                df.loc[:, "tid"] = df["tid"].map(
+                    lambda x, rank=rank: thread_remap_func(rank, x)
+                )
+            for row_group, df_thread in df.groupby(groupby_key):
+                pid, tid = row_group
+
                 if df_thread.stream.gt(0).any():
                     # Filter out gpu annotations and sync events
                     df_thread = df_thread[df_thread["stream"].gt(0)]
