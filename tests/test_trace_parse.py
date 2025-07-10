@@ -6,7 +6,7 @@ import math
 import os
 import unittest
 
-from typing import Any, Dict, Set
+from typing import Any, Dict, Optional, Set
 
 # import unittest.mock as mock
 
@@ -16,11 +16,13 @@ from hta.common.trace_parser import (
     _auto_detect_parser_backend,
     _open_trace_file,
     get_default_trace_parsing_backend,
+    infer_gpu_type,
     parse_metadata_ijson,
     parse_trace_dataframe,
     ParserBackend,
     set_default_trace_parsing_backend,
 )
+from hta.common.trace_symbol_table import TraceSymbolTable
 from hta.configs.config import HtaConfig
 from hta.configs.parser_config import AVAILABLE_ARGS, ParserConfig
 from hta.utils.test_utils import data_provider
@@ -342,6 +344,47 @@ class TraceParseIjsonOthersTestCase(unittest.TestCase):
     #     self.assertEqual(_auto_detect_parser_backend(), "ijson_batch_and_compress")
 
 
+class TestMtiaAlignAndFilter(unittest.TestCase):
+    def test_align_and_filter_mtia(self) -> None:
+        # Trace parser for MTIA
+        mtia_trace_dir: str = (
+            os.environ.get("TEST_DATA_PREFIX_PATH", "")
+            + "tests/data/mtia_trace_single_rank"
+        )
+        t: Trace = Trace(trace_dir=mtia_trace_dir)
+        t.parse_traces()
+        t.align_and_filter_trace()
+        t.decode_symbol_ids(use_shorten_name=False)
+
+        # Ensure that the trace is MTIA trace
+        self.assertEqual(t.get_device_type(), "MTIA")
+        self.assertGreaterEqual(len(t.get_ranks()), 1)
+
+        # Ensure that the trace has the correct iterations
+        result_df = t.get_trace(t.get_ranks()[0])
+        self.assertTrue(result_df["ts"].ge(0).all())
+        self.assertTrue(result_df["iteration"].ge(0).all())
+
+        # Ensure that cpu ops has the correct stream
+        cpu_cat_ids = t.symbol_table.get_cpu_event_cat_ids()
+        cpu_ops = result_df[result_df["cat"].isin(cpu_cat_ids)]
+        self.assertTrue(len(cpu_ops) > 0)
+        self.assertTrue(cpu_ops["stream"].le(0).all())
+
+        # Ensure that cuda ops has the correct stream
+        memory_kernels = result_df[
+            result_df["name"].isin(t.symbol_table.get_memory_name_ids())
+        ]
+        self.assertTrue(len(memory_kernels) > 0)
+        self.assertTrue(memory_kernels["stream"].ge(0).all())
+        self.assertTrue(memory_kernels["iteration"].ge(0).all())
+
+        mtia_kernels = result_df[
+            result_df["stream"].ge(0) & result_df["correlation"].gt(0)
+        ]
+        self.assertTrue(len(mtia_kernels) > 0)
+
+
 class TraceParseConfigTestCase(unittest.TestCase):
     def setUp(self) -> None:
         # Parse all nccl fields in the test
@@ -470,6 +513,88 @@ class TraceParseConfigTestCase(unittest.TestCase):
         _, df, _ = parse_trace_dataframe(trace_file, cfg)
         self.assertTrue(expected_columns.issubset(set(df.columns)))
         self.assertTrue(expected_missing_columns.isdisjoint(set(df.columns)))
+
+    # pyre-ignore[56]
+    @data_provider(
+        lambda: (
+            {
+                "metadata": {
+                    "distributedInfo": {"backend": "mtia:hccl"},
+                },
+                "df": pd.DataFrame({"name": ["some_event"]}),
+                "expected_device_type": "MTIA",
+            },
+            {
+                "metadata": None,
+                "df": pd.DataFrame(
+                    {
+                        "name": [
+                            "some_event",
+                            "runFunction - job_prep_and_submit_for_execution",
+                        ]
+                    }
+                ),
+                "expected_device_type": "MTIA",
+            },
+            {
+                "metadata": None,
+                "df": pd.DataFrame({"name": ["cudaLaunchKernel", "other_event"]}),
+                "expected_device_type": "NVIDIA GPU",
+            },
+            {
+                "metadata": None,
+                "df": pd.DataFrame({"name": ["hipLaunchKernel", "another_event"]}),
+                "expected_device_type": "AMD GPU",
+            },
+            {
+                "metadata": None,
+                "df": pd.DataFrame({"name": ["some_event"]}),
+                "expected_device_type": "UNKNOWN GPU",
+            },
+        )
+    )
+    def test_infer_gpu_type(
+        self,
+        df: pd.DataFrame,
+        metadata: Optional[Dict[str, object]],
+        expected_device_type: str,
+    ) -> None:
+        self.assertEqual(infer_gpu_type(df, metadata), expected_device_type)
+
+    def test_fix_mtia_memory_kernels(self) -> None:
+        df = pd.DataFrame(
+            {
+                "index": [0, 1, 2, 3, 4],
+                "name": [1001, 2001, 2001, 2001, 2004],
+                "ts": [0, 10, 20, 30, 40],
+                "dur": [50, 10, 10, 10, 10],
+                "iteration": [1, -1, 1, -1, 1],
+                "stream": [-1, 3, -1, 4, 1],
+                "tid": [1, 2, 3, 4, 5],
+            }
+        )
+        symbol_table = TraceSymbolTable.create_from_symbol_id_map(
+            {
+                "ProfilerStep#1": 1001,
+                "dma_request": 2001,
+                "aten::add": 2004,
+            }
+        )
+        # Create a Trace object
+        t = Trace(trace_dir="", trace_files={})
+        t.traces[0] = df.copy()
+        t.symbol_table = symbol_table
+
+        # Expected result after applying fix
+        expected_df = df.copy()
+        expected_df.loc[[1, 3], "iteration"] = 1
+        expected_df.loc[[2], "stream"] = expected_df.loc[[2], "tid"]
+
+        t._fix_mtia_memory_kernels(t.get_trace(0))
+        fixed_df = t.get_trace(0)
+
+        # Validate results
+        pd.testing.assert_frame_equal(fixed_df, expected_df)
 
 
 if __name__ == "__main__":  # pragma: no cover
