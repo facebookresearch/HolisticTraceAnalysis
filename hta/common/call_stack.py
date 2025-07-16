@@ -461,6 +461,7 @@ class CallGraph:
         trace: Trace,
         ranks: Optional[List[int]] = None,
         filter_func: Optional[Filter] = None,
+        remapped_tids: Dict[int, Dict[int, int]] | None = None,
     ) -> None:
         """Construct a CallGraph from a Trace object <trace_data>
 
@@ -468,6 +469,9 @@ class CallGraph:
             trace (Trace): the trace data used to construct this CallGraph object.
             ranks (List[int]) : filter the traces using the given set of ranks. Using all ranks if None.
             filter_func (Callable) : used to preprocess the trace events and filter events out. Please see filters in hta/common/trace_filter.py for details.
+            remapped_tids (Dict[Dict[int, int]]) : a dictionary that stores per-rank thread ID remappings.
+                For example: { 0: { 300: 400}} means that on rank 0, thread ID 300 is remapped to 400.
+                This is useful for training jobs, where the backward thread can typically be merged into the main trainer thread.
         Raises:
             ValueError: the trace data is invalid.
         """
@@ -476,10 +480,28 @@ class CallGraph:
         self.call_stacks: List[CallStackGraph] = []
 
         _ranks = [k for k in trace.get_all_traces()] if ranks is None else ranks
-        self._construct_call_graph(_ranks, filter_func)
+        self._construct_call_graph(_ranks, filter_func, remapped_tids)
+
+    def _remap_tids(
+        self, df: pd.DataFrame, remapped_tids: Dict[int, int]
+    ) -> pd.DataFrame:
+        """Returns a dataframe where threads IDs have been mapped to new values.
+
+        Args:
+            df (pd.DataFrame): dataframe to update
+            remapped_tids: a mapping from <old_tid, new_tid>
+
+        Returns:
+            The updated dataframe.
+        """
+        df["tid"] = df["tid"].map(remapped_tids).fillna(df["tid"])
+        return df
 
     def _construct_call_graph(
-        self, ranks: List[int], filter_func: Optional[Filter]
+        self,
+        ranks: List[int],
+        filter_func: Optional[Filter],
+        remapped_tids: Dict[int, Dict[int, int]] | None = None,
     ) -> None:
         """
         Construct the call graph from the traces of a distributed training job.
@@ -487,12 +509,17 @@ class CallGraph:
         Args:
             ranks (List[int]) : a list ranks to select traces for construct the call stacks.
             filter_func (Callable) : used to preprocess the trace events and filter events out. Please see filters in hta/common/trace_filter.py for details.
+            remapped_tids (Dict[Dict[int, int]]) : a dictionary that stores per-rank thread ID remappings.
+                For example: { 0: { 300: 400}} means that on rank 0, thread ID 300 is remapped to 400.
+                This is useful for training jobs, where the backward thread can typically be merged into the main trainer thread.
         """
         call_stack_ids: List[CallStackIdentity] = []
         t0 = perf_counter()
         # construct a call stack graph for each thread/stream
         for rank in ranks:
-            df = self.trace_data.get_trace(rank)
+            df = self.trace_data.get_trace(rank).copy()
+            if remapped_tids and rank in remapped_tids:
+                df = self._remap_tids(df, remapped_tids[rank])
             for (pid, tid), df_thread in df.groupby(["pid", "tid"]):
                 if df_thread.stream.gt(0).any():
                     # Filter out gpu annotations and sync events
