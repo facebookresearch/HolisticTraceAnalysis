@@ -33,6 +33,9 @@ from hta.utils.utils import is_comm_kernel
 
 
 PROFILE_TIMES = {}
+CUDA_RUNTIME_EVENTS = frozenset(
+    ["cudaHostAlloc", "cudaLaunchKernel", "cudaMemcpyAsync"]
+)
 
 
 # Enable per function timing
@@ -404,6 +407,8 @@ class CPGraph(nx.DiGraph):
 
         self._create_event_nodes()
 
+        self._construct_graph_from_cuda_runtime_events()
+
         self._construct_graph_from_call_stacks()
 
         self._construct_graph_from_kernels()
@@ -439,7 +444,7 @@ class CPGraph(nx.DiGraph):
 
         nodes_df = (
             pd.concat([ops_df_start, ops_df_end])
-            .sort_values(by="ts", axis=0)
+            .sort_values(by=["ts", "ev_idx"], axis=0)
             .reset_index(drop=True)
             .reset_index(names="idx")
         )
@@ -462,6 +467,123 @@ class CPGraph(nx.DiGraph):
         _df = nodes_df[~nodes_df.is_start]
         self.event_to_end_node_map = dict(zip(_df["ev_idx"], _df["idx"]))
         assert len(self.event_to_start_node_map) == len(self.event_to_end_node_map)
+
+    def _has_nodes(self, ev_id: int) -> bool:
+        """Checks if a node exists for an event id.
+
+        Args:
+            ev_id (int): event id to check for.
+
+        Returns:
+            bool: True if node exists for the event id.
+        """
+        start_node, end_node = self.get_nodes_for_event(ev_id)
+        return start_node is not None and end_node is not None
+
+    def _is_cuda_runtime_event_node(self, node: CPNode) -> bool:
+        """Checks if a node is a locking event node.
+
+        Args:
+            node (CPNode): node object
+
+        Returns:
+            bool: True if node is a locking event node.
+        """
+        event_name = self._get_node_name(node.ev_idx)
+        return event_name in CUDA_RUNTIME_EVENTS
+
+    def _shares_cuda_runtime_lock(
+        self, first_node: CPNode, second_node: CPNode
+    ) -> bool:
+        """
+        Returns True if two consecutive nodes share a cuda runtime lock.
+
+        Two consecutive nodes share a cuda runtime lock if they're both
+        cuda runtime events AND they're not a pair of (end, start) nodes.
+
+        A pair of (end, start) nodes would represent non-overlapping events
+        as shown below.
+
+        |---cudaLaunchKernel---|    |---cudaLaunchKernel---|
+                               ^    ^
+                            (end,  start)
+        """
+        return (
+            self._is_cuda_runtime_event_node(first_node)
+            and self._is_cuda_runtime_event_node(second_node)
+            and (first_node.is_start or not second_node.is_start)
+        )
+
+    @timeit
+    def _construct_graph_from_cuda_runtime_events(self) -> None:
+        """Constructs the graph from CUDA runtime events.
+
+        Specific events acquire the cuda runtime lock, such that only
+        one of these events can make progress at a time. This is a
+        type of cross-thread dependency that we need to model into our
+        graph.
+
+        For example, consider the following:
+
+        Thread 0:               |(A)-- cudaHostAlloc --(B)|
+
+        Thread 1:         |(C)-- cudaHostAlloc --(D)|
+
+        Thread 2:     |(E)------------------------------ aten::clamp_min  ----------------------- (F)|
+                             |(G)--- cudaLaunchKernel ------(H)|  |(I)-- cudaLaunchKernel --(J)|
+
+
+        The cudaHostAlloc and cudaLaunchKernels all require acquiring the cuda
+        runtime lock, so only one of them is able to make progress at a time.
+        We assume that when overlapping events share a lock, we can track lock
+        ownership by checking which event completed first. In the above instance,
+        the order of completion events is (D) -> (B) -> (H) -> (J), so we assume that
+        1. cudaHostAlloc on thread 1 acquired lock first
+        2. cudaHostAlloc on thread 0 acquired lock next
+        3. first cudaLaunchKernel on thread 2 acquired lock next
+        4. second cudaLaunchKernel on thread 2 acquired lock last.
+
+        The goal of this function is to create edges such that cross-thread events
+        are blocked on the lock path. In other words, we want to create:
+        1. lock paths, by tracing flow of completion events.
+            - (D)->(B)->(H)
+        2. a path from every start node to the lock path. In this case:
+            - (C, A, G) -> (D)
+            - (I) -> (J)
+
+        The final result should contain all these edges.
+
+        Note: This function is responsible for creating edges between events that share a
+        cuda runtime lock. The edges between (E)->(G), (H)->(I), and (J)->(F) will be computed
+        separately along with other call-stack edges in _construct_graph_from_call_stacks().
+        """
+        start_nodes = []
+        last_node = None
+        # Sort node_list by timestamp and then by event index to ensure consistent ordering
+        # sorted_nodes = sorted(self.node_list, key=lambda node: (node.ts, node.ev_idx))
+        for node in self.node_list:  # requires node_list to be sorted
+            if not (
+                self._is_cuda_runtime_event_node(node) and self._has_nodes(node.ev_idx)
+            ):
+                continue
+            if node.is_start:
+                start_nodes.append(node)
+            else:  # end node
+                while start_nodes:
+                    previous_node = start_nodes.pop()
+                    if previous_node.ev_idx == node.ev_idx:
+                        e = self._add_edge_helper(
+                            previous_node, node, CPEdgeType.OPERATOR_KERNEL
+                        )
+                        self._attribute_edge(e, node.ev_idx)
+                    else:
+                        self._add_edge_helper(
+                            previous_node, node, CPEdgeType.DEPENDENCY
+                        )
+                if not last_node.is_start:
+                    self._add_edge_helper(last_node, node, CPEdgeType.DEPENDENCY)
+
+            last_node = node
 
     @timeit
     def _construct_graph_from_call_stacks(self) -> None:
@@ -546,6 +668,9 @@ class CPGraph(nx.DiGraph):
 
         Args:
             csg (CallStackGraph): HTA CallStackGraph object for one CPU thread.
+
+        Note: This will ignore edges between events sharing a cuda runtime
+        lock, since that is handled in _construct_graph_from_cuda_runtime_events.
         """
 
         # Track the stack of last seen events
@@ -567,7 +692,9 @@ class CPGraph(nx.DiGraph):
             if start_node is None or end_node is None:
                 return
 
-            if last_node is not None:
+            if last_node is not None and not self._shares_cuda_runtime_lock(
+                last_node, start_node
+            ):
                 if op_depth == 0:  # Links consecutive top-level operators
                     edge_type = CPEdgeType.DEPENDENCY
                 else:
@@ -598,7 +725,9 @@ class CPGraph(nx.DiGraph):
             if start_node is None or end_node is None:
                 return
 
-            if last_node is not None:
+            if last_node is not None and not self._shares_cuda_runtime_lock(
+                last_node, end_node
+            ):
                 zero_weight = start_node.is_blocking
                 if zero_weight and logger.isEnabledFor(logging.DEBUG):
                     logger.debug(
