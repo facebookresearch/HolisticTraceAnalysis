@@ -319,6 +319,7 @@ class TraceSymbolTable:
         cudaLaunchKernel_id = self.sym_index.get("cudaLaunchKernel", self.NULL)
         cudaLaunchKernelExC_id = self.sym_index.get("cudaLaunchKernelExC", self.NULL)
         cuLaunchKernel_id = self.sym_index.get("cuLaunchKernel", self.NULL)
+        cuLaunchKernelEx_id = self.sym_index.get("cuLaunchKernelEx", self.NULL)
         cudaMemcpyAsync_id = self.sym_index.get("cudaMemcpyAsync", self.NULL)
         cudaMemsetAsync_id = self.sym_index.get("cudaMemsetAsync", self.NULL)
         mtiaLaunchKernel_id = self.sym_index.get(
@@ -337,7 +338,8 @@ class TraceSymbolTable:
             f"(name == {cuLaunchKernel_id}) or (name == {mtiaLaunchKernel_id}) or "
             f"(name == {rocmLaunchKernel_id}) or (name == {rocmExtModuleLaunchKernel_id}) or "
             f"(name == {rocmMemcpyAsync_id}) or (name == {rocmMemsetAsync_id}) or "
-            f"(name == {rocmMemcpyWithStream_id})) and (index_correlation > 0)"
+            f"(name == {rocmMemcpyWithStream_id}) or (name == {cuLaunchKernelEx_id})) "
+            "and (index_correlation > 0)"
         )
 
     def get_cpu_event_cat_ids(self) -> List[int]:
