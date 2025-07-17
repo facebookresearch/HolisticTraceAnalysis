@@ -465,7 +465,21 @@ class CPGraph(nx.DiGraph):
 
     @timeit
     def _construct_graph_from_call_stacks(self) -> None:
-        cg = CallGraph(self.t, ranks=[self.rank])
+
+        # For training jobs, backward pass usually happens on a separate thread.
+        # But backward and forward pass events are typically non-overlapping.
+        # To make sure our critical path correctly flows through backward
+        # passes, if we detect a forward and backward pass thread, we'll remap
+        # all the backward pass events to the forward pass thread.
+        fwd_thread_tid = self._get_fwd_tid(self.trace_df)
+        bwd_thread_tid = self._get_bwd_tid(self.trace_df)
+
+        if fwd_thread_tid and bwd_thread_tid and fwd_thread_tid != bwd_thread_tid:
+            logging.info("Merging backward pass thread into forward thread")
+            remapped_tids = {self.rank: {bwd_thread_tid: fwd_thread_tid}}
+        else:
+            remapped_tids = None
+        cg = CallGraph(self.t, ranks=[self.rank], remapped_tids=remapped_tids)
 
         cpu_call_stacks = (
             csg for csg in cg.call_stacks if csg.device_type == DeviceType.CPU
@@ -473,6 +487,51 @@ class CPGraph(nx.DiGraph):
 
         for csg in cpu_call_stacks:
             self._construct_graph_from_call_stack(csg)
+
+    def _get_bwd_tid(self, trace_df: pd.DataFrame) -> int | None:
+        """Get the thread id for the backward pass, or None is one cannot be identified.
+
+        We identify the backward pass as the thread which contains "autograd" events. If
+        there is not exactly one such thread, we fail to identify the backward pass, and
+        return None.
+
+        Args:
+            trace_df (pd.DataFrame): Trace dataframe.
+
+        Returns:
+            Optional[int]: Thread id for the backward pass.
+        """
+
+        return self._get_tid_for_event(trace_df, "autograd")
+
+    def _get_fwd_tid(self, trace_df: pd.DataFrame) -> int | None:
+        """Get the thread id for the forward pass, or None is one cannot be identified.
+
+        We identify the forward pass as the thread which contains
+        "forward" events. If there is not exactly one such thread,
+        we fail to identify the forward pass, and return None.
+
+        Args:
+            trace_df (pd.DataFrame): Trace dataframe.
+
+        Returns:
+            Optional[int]: Thread id for the forward pass.
+        """
+        return self._get_tid_for_event(trace_df, "forward")
+
+    def _get_tid_for_event(self, trace_df: pd.DataFrame, ev_name: str) -> int | None:
+        events = [sym for sym in self.symbol_table.sym_table if ev_name in sym]
+        event_ids = [self.symbol_table.sym_index[candidate] for candidate in events]
+        cpu_op_id = self.symbol_table.sym_index.get("cpu_op", -1)
+        user_annotation_id = self.symbol_table.sym_index.get("user_annotation", -1)
+        tids = set(
+            trace_df.query(
+                f"name in {event_ids} and (cat == {cpu_op_id} or cat == {user_annotation_id})"
+            ).tid
+        )
+        if len(tids) == 1:
+            return next(iter(tids))
+        return None
 
     def _construct_graph_from_call_stack(self, csg: CallStackGraph) -> None:
         """Perform a depth first traversal of the Call Stack for CPU threads
