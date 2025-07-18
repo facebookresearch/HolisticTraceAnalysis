@@ -11,6 +11,16 @@ AVAILABLE_ARGS:
     raw_name: External id
     value_type: Int
     default_value: -1
+  index::python_id:
+    name: python_id
+    raw_name: Python id
+    value_type: Int
+    default_value: -1
+  index::python_parent_id:
+    name: python_parent_id
+    raw_name: Python parent id
+    value_type: Int
+    default_value: -1
   cpu_op::concrete_inputs:
     name: concrete_inputs
     raw_name: Concrete Inputs
