@@ -417,12 +417,20 @@ class CPGraph(nx.DiGraph):
     def _create_event_nodes(self) -> None:
         """Generates a start and end node for every event we would like
         to represent in our graph"""
-        events_df = (
-            self.trace_df.query(
-                self.symbol_table.get_operator_or_cuda_runtime_query()
-                + " or (stream != -1 and index_correlation >= 0)"
-            )[["index", "ts", "dur", "name"]]
-        ).rename(columns={"index": "ev_idx"})
+
+        operator_or_runtime_events_mask = (
+            self.symbol_table.get_operator_or_cuda_runtime_mask(self.trace_df)
+        )
+        gpu_events_mask = (self.trace_df["stream"] != -1) & (
+            self.trace_df["index_correlation"] >= 0
+        )
+
+        # We only care about CPU op/runtime events and GPU events.
+        events_mask = operator_or_runtime_events_mask | gpu_events_mask
+
+        events_df = (self.trace_df[events_mask][["index", "ts", "dur", "name"]]).rename(
+            columns={"index": "ev_idx"}
+        )
 
         blocking_calls = {
             s
@@ -772,9 +780,9 @@ class CPGraph(nx.DiGraph):
 
         runtime_calls = (
             (
-                self.full_trace_df.query(
-                    self.symbol_table.get_runtime_launch_events_query()
-                )
+                self.full_trace_df[
+                    self.symbol_table.get_runtime_launch_events_mask(self.full_trace_df)
+                ]
                 .copy()
                 .sort_values(by="ts", axis=0)
             )
