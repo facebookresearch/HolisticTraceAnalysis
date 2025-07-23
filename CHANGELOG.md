@@ -5,7 +5,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 #### Added
-
+- Improved critical path visualization by filtering out non-essential intermediate nodes, for clearer and more readable trace overlays.
 #### Changed
 
 #### Fixed
