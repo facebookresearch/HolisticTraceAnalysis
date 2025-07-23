@@ -4,6 +4,7 @@
 
 import logging
 import os
+import re
 import sys
 import time
 from collections import defaultdict
@@ -82,6 +83,15 @@ class CPEdgeType(Enum):
     KERNEL_LAUNCH_DELAY = "critical_path_kernel_launch_delay"  # Edge between CPU launch and GPU kernel start.
     KERNEL_KERNEL_DELAY = "critical_path_kernel_kernel_delay"  # Edge between successive kernels on the same GPU.
     SYNC_DEPENDENCY = "critical_path_sync_dependency"  # Synchronization or control dependency between events.
+
+
+class BoundType(Enum):
+    GPU_KERNEL_KERNEL_OVERHEAD = "gpu_kernel_kernel_overhead"
+    GPU_KERNEL_LAUNCH_OVERHEAD = "gpu_kernel_launch_overhead"
+    DATA_LOADING = "data_loading"
+    CPU_BOUND = "cpu_bound"
+    GPU_COMPUTE_BOUND = "gpu_compute_bound"
+    GPU_COMMUNICATION_BOUND = "gpu_communication_bound"
 
 
 DEFAULT_EDGE_TYPES_IN_VIZ: Set[CPEdgeType] = {
@@ -1521,6 +1531,31 @@ class CPGraph(nx.DiGraph):
 
         return True
 
+    # TODO optimize using itertuple
+    def bound_by(self, row: Dict[str, Any]) -> str:
+        """Function to classify the bounding resource for an edge on the critical path"""
+        if row["type"] == CPEdgeType.KERNEL_KERNEL_DELAY.value:
+            return BoundType.GPU_KERNEL_KERNEL_OVERHEAD.value
+        if row["type"] == CPEdgeType.KERNEL_LAUNCH_DELAY.value:
+            return BoundType.GPU_KERNEL_LAUNCH_OVERHEAD.value
+        if row["type"] in [
+            CPEdgeType.DEPENDENCY.value,
+            CPEdgeType.SYNC_DEPENDENCY.value,
+        ]:
+            return ""
+
+        assert not pd.isna(row["s_name"]), f"name of edge is na : row = {row}"
+
+        if row["stream"] < 0:
+            if self.data_load_events and any(
+                re.search(pattern, row["s_name"]) for pattern in self.data_load_events
+            ):
+                return BoundType.DATA_LOADING.value
+            return BoundType.CPU_BOUND.value
+        if is_comm_kernel(row["s_name"]):
+            return BoundType.GPU_COMMUNICATION_BOUND.value
+        return BoundType.GPU_COMPUTE_BOUND.value
+
     def get_critical_path_breakdown(self) -> Optional[pd.DataFrame]:
         """Returns a breakdown of the critical path with each edge in the
         path attributed to an event in the trace.
@@ -1535,7 +1570,7 @@ class CPGraph(nx.DiGraph):
                 cat, pid, tid, stream - Columns corresponding to similar values
                     in the original t/race dataframe
                 bound_by - This column classifies the edges in the critical path
-                    as bounded by "cpu_bound", "gpu_compute_bound",
+                    as bounded by "cpu_bound", "data_loading", "gpu_compute_bound",
                     "gpu_kernel_kernel_overhead" (gaps between kernels)
                     "gpu_kernel_launch_overhead" (delay between CPU to GPU launch)
         """
@@ -1568,12 +1603,13 @@ class CPGraph(nx.DiGraph):
         )
 
         # Add column to classify boundedness
-        edge_events_df["bound_by"] = edge_events_df.apply(bound_by, axis=1)
+        edge_events_df["bound_by"] = edge_events_df.apply(self.bound_by, axis=1)
         return edge_events_df
 
     def summary(self) -> pd.core.series.Series:
         """Displays a summary or breakdown of the critical path into one of the following
         - cpu_bound
+        - data_loading
         - gpu_compute_bound
         - gpu_communication_bound (NCCL Collectives)
         - gpu_kernel_kernel_overhead (Gaps between GPU kernels)
@@ -1707,25 +1743,6 @@ def restore_cpgraph(zip_filename: str, t_full: "Trace", rank: int) -> CPGraph:
     restored_instance.edge_to_event_map = pickled_obj.edge_to_event_map
 
     return restored_instance
-
-
-# TODO optimize using itertuple
-def bound_by(row: Dict[str, Any]) -> str:
-    """Function to classify the bounding resource for an edge on the critical path"""
-    if row["type"] == "critical_path_kernel_kernel_delay":
-        return "gpu_kernel_kernel_overhead"
-    if row["type"] == "critical_path_kernel_launch_delay":
-        return "gpu_kernel_launch_overhead"
-    if row["type"] in ["critical_path_dependency", "critical_path_sync_dependency"]:
-        return ""
-
-    assert not pd.isna(row["s_name"]), f"name of edge is na : row = {row}"
-
-    if row["stream"] < 0:
-        return "cpu_bound"
-    if is_comm_kernel(row["s_name"]):
-        return "gpu_communication_bound"
-    return "gpu_compute_bound"
 
 
 class CriticalPathAnalysis:
