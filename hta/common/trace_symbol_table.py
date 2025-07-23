@@ -356,6 +356,14 @@ class TraceSymbolTable:
         # Add the index_correlation > 0 condition
         return name_mask & (df["index_correlation"] > 0)
 
+    def get_events_mask(self, df: pd.DataFrame, events: list[str] | None) -> pd.Series:
+        """Returns a boolean mask you can use with pandas dataframes
+        to filter for events that are in the given events list (regex supported)."""
+        if events is None:
+            return pd.Series(False, index=df.index)
+        event_ids = self.find_matches(events)
+        return df["name"].isin(event_ids)
+
     def get_cpu_event_cat_ids(self) -> List[int]:
         return list(self.get_symbol_ids(CPU_EVENTS_CATEGORY_PATTERN).values())
 

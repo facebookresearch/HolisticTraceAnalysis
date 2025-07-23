@@ -164,7 +164,12 @@ class CPGraph(nx.DiGraph):
         return hta_options.critical_path_add_zero_weight_launch_edges()
 
     def __init__(
-        self, t: Optional["Trace"], t_full: "Trace", rank: int, G=None
+        self,
+        t: Optional["Trace"],
+        t_full: "Trace",
+        rank: int,
+        G=None,
+        data_load_events=None,
     ) -> None:
         """Initialize a critical path graph object.
 
@@ -179,12 +184,16 @@ class CPGraph(nx.DiGraph):
             t_full (Trace): Full Trace object.
             rank (int): Rank to perform analysis on.
             G (networkx.DiGraph): An optional DiGraph object.
+            data_load_events (List[str]): List of events (regex) to be considered as
+                data load events. Different traces may use different annotations to
+                indicate data loading, so we allow the caller to pass in the list.
         """
         self.rank: int = rank
         self.t = t
         self.t_full = t_full
         self.full_trace_df: pd.DataFrame = self.t_full.get_trace(rank)
         self.symbol_table = t_full.symbol_table
+        self.data_load_events = data_load_events
 
         # init networkx DiGraph
         super(CPGraph, self).__init__(G)
@@ -421,12 +430,17 @@ class CPGraph(nx.DiGraph):
         operator_or_runtime_events_mask = (
             self.symbol_table.get_operator_or_cuda_runtime_mask(self.trace_df)
         )
+        data_loading_events_mask = self.symbol_table.get_events_mask(
+            self.trace_df, self.data_load_events
+        )
         gpu_events_mask = (self.trace_df["stream"] != -1) & (
             self.trace_df["index_correlation"] >= 0
         )
 
-        # We only care about CPU op/runtime events and GPU events.
-        events_mask = operator_or_runtime_events_mask | gpu_events_mask
+        # We only care about CPU op/runtime events, data loading events, and GPU events.
+        events_mask = (
+            operator_or_runtime_events_mask | data_loading_events_mask | gpu_events_mask
+        )
 
         events_df = (self.trace_df[events_mask][["index", "ts", "dur", "name"]]).rename(
             columns={"index": "ev_idx"}
@@ -1726,6 +1740,7 @@ class CriticalPathAnalysis:
         rank: int,
         annotation: str,
         instance_id: Union[Optional[int], Tuple[int, int]],
+        data_load_events: Optional[List[str]] = None,
     ) -> Tuple[CPGraph, bool]:
         r"""
         Perform critical path analysis for trace events within a rank.
@@ -1746,6 +1761,9 @@ class CriticalPathAnalysis:
                         Defaults to the first instance.
                 (Tuple(int, int)) - considers a range of annotation instances start to end,
                         inclusive of both start and end instance.
+            data_load_events (List[str]): List of events (regex) to be considered as
+                data load events. Different traces may use different annotations to
+                indicate data loading, so we allow the caller to pass in the list.
 
         Returns: Tuple[CPGraph, bool] a pair of CPGraph object and a success or
             fail boolean value. True indicates that the critical path analysis
@@ -1838,7 +1856,7 @@ class CriticalPathAnalysis:
         t1 = time.perf_counter()
         logger.info(f"Preprocessing took {t1 - t0:.2f} seconds")
 
-        cp_graph = CPGraph(t_copy, t, rank)
+        cp_graph = CPGraph(t_copy, t, rank, data_load_events=data_load_events)
         t2 = time.perf_counter()
         logger.info(f"CPGraph construction took {t2 - t1:.2f} seconds")
 
