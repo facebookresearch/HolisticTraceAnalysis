@@ -4,6 +4,7 @@
 
 import logging
 import os
+import re
 import sys
 import time
 from collections import defaultdict
@@ -82,6 +83,15 @@ class CPEdgeType(Enum):
     KERNEL_LAUNCH_DELAY = "critical_path_kernel_launch_delay"  # Edge between CPU launch and GPU kernel start.
     KERNEL_KERNEL_DELAY = "critical_path_kernel_kernel_delay"  # Edge between successive kernels on the same GPU.
     SYNC_DEPENDENCY = "critical_path_sync_dependency"  # Synchronization or control dependency between events.
+
+
+class BoundType(Enum):
+    GPU_KERNEL_KERNEL_OVERHEAD = "gpu_kernel_kernel_overhead"
+    GPU_KERNEL_LAUNCH_OVERHEAD = "gpu_kernel_launch_overhead"
+    DATA_LOADING = "data_loading"
+    CPU_BOUND = "cpu_bound"
+    GPU_COMPUTE_BOUND = "gpu_compute_bound"
+    GPU_COMMUNICATION_BOUND = "gpu_communication_bound"
 
 
 DEFAULT_EDGE_TYPES_IN_VIZ: Set[CPEdgeType] = {
@@ -164,7 +174,12 @@ class CPGraph(nx.DiGraph):
         return hta_options.critical_path_add_zero_weight_launch_edges()
 
     def __init__(
-        self, t: Optional["Trace"], t_full: "Trace", rank: int, G=None
+        self,
+        t: Optional["Trace"],
+        t_full: "Trace",
+        rank: int,
+        G=None,
+        data_load_events=None,
     ) -> None:
         """Initialize a critical path graph object.
 
@@ -179,12 +194,16 @@ class CPGraph(nx.DiGraph):
             t_full (Trace): Full Trace object.
             rank (int): Rank to perform analysis on.
             G (networkx.DiGraph): An optional DiGraph object.
+            data_load_events (List[str]): List of events (regex) to be considered as
+                data load events. Different traces may use different annotations to
+                indicate data loading, so we allow the caller to pass in the list.
         """
         self.rank: int = rank
         self.t = t
         self.t_full = t_full
         self.full_trace_df: pd.DataFrame = self.t_full.get_trace(rank)
         self.symbol_table = t_full.symbol_table
+        self.data_load_events = data_load_events
 
         # init networkx DiGraph
         super(CPGraph, self).__init__(G)
@@ -421,12 +440,17 @@ class CPGraph(nx.DiGraph):
         operator_or_runtime_events_mask = (
             self.symbol_table.get_operator_or_cuda_runtime_mask(self.trace_df)
         )
+        data_loading_events_mask = self.symbol_table.get_events_mask(
+            self.trace_df, self.data_load_events
+        )
         gpu_events_mask = (self.trace_df["stream"] != -1) & (
             self.trace_df["index_correlation"] >= 0
         )
 
-        # We only care about CPU op/runtime events and GPU events.
-        events_mask = operator_or_runtime_events_mask | gpu_events_mask
+        # We only care about CPU op/runtime events, data loading events, and GPU events.
+        events_mask = (
+            operator_or_runtime_events_mask | data_loading_events_mask | gpu_events_mask
+        )
 
         events_df = (self.trace_df[events_mask][["index", "ts", "dur", "name"]]).rename(
             columns={"index": "ev_idx"}
@@ -588,7 +612,7 @@ class CPGraph(nx.DiGraph):
                         self._add_edge_helper(
                             previous_node, node, CPEdgeType.DEPENDENCY
                         )
-                if not last_node.is_start:
+                if last_node and not last_node.is_start:
                     self._add_edge_helper(last_node, node, CPEdgeType.DEPENDENCY)
 
             last_node = node
@@ -618,7 +642,7 @@ class CPGraph(nx.DiGraph):
         for csg in cpu_call_stacks:
             self._construct_graph_from_call_stack(csg)
 
-    def _get_bwd_tid(self, trace_df: pd.DataFrame) -> int | None:
+    def _get_bwd_tid(self, trace_df: pd.DataFrame) -> Optional[int]:
         """Get the thread id for the backward pass, or None is one cannot be identified.
 
         We identify the backward pass as the thread which contains "autograd" events. If
@@ -634,7 +658,7 @@ class CPGraph(nx.DiGraph):
 
         return self._get_tid_for_event(trace_df, "autograd")
 
-    def _get_fwd_tid(self, trace_df: pd.DataFrame) -> int | None:
+    def _get_fwd_tid(self, trace_df: pd.DataFrame) -> Optional[int]:
         """Get the thread id for the forward pass, or None is one cannot be identified.
 
         We identify the forward pass as the thread which contains
@@ -649,7 +673,7 @@ class CPGraph(nx.DiGraph):
         """
         return self._get_tid_for_event(trace_df, "forward")
 
-    def _get_tid_for_event(self, trace_df: pd.DataFrame, ev_name: str) -> int | None:
+    def _get_tid_for_event(self, trace_df: pd.DataFrame, ev_name: str) -> Optional[int]:
         events = [sym for sym in self.symbol_table.sym_table if ev_name in sym]
         event_ids = [self.symbol_table.sym_index[candidate] for candidate in events]
         cpu_op_id = self.symbol_table.sym_index.get("cpu_op", -1)
@@ -1507,6 +1531,31 @@ class CPGraph(nx.DiGraph):
 
         return True
 
+    # TODO optimize using itertuple
+    def bound_by(self, row: Dict[str, Any]) -> str:
+        """Function to classify the bounding resource for an edge on the critical path"""
+        if row["type"] == CPEdgeType.KERNEL_KERNEL_DELAY.value:
+            return BoundType.GPU_KERNEL_KERNEL_OVERHEAD.value
+        if row["type"] == CPEdgeType.KERNEL_LAUNCH_DELAY.value:
+            return BoundType.GPU_KERNEL_LAUNCH_OVERHEAD.value
+        if row["type"] in [
+            CPEdgeType.DEPENDENCY.value,
+            CPEdgeType.SYNC_DEPENDENCY.value,
+        ]:
+            return ""
+
+        assert not pd.isna(row["s_name"]), f"name of edge is na : row = {row}"
+
+        if row["stream"] < 0:
+            if self.data_load_events and any(
+                re.search(pattern, row["s_name"]) for pattern in self.data_load_events
+            ):
+                return BoundType.DATA_LOADING.value
+            return BoundType.CPU_BOUND.value
+        if is_comm_kernel(row["s_name"]):
+            return BoundType.GPU_COMMUNICATION_BOUND.value
+        return BoundType.GPU_COMPUTE_BOUND.value
+
     def get_critical_path_breakdown(self) -> Optional[pd.DataFrame]:
         """Returns a breakdown of the critical path with each edge in the
         path attributed to an event in the trace.
@@ -1521,7 +1570,7 @@ class CPGraph(nx.DiGraph):
                 cat, pid, tid, stream - Columns corresponding to similar values
                     in the original t/race dataframe
                 bound_by - This column classifies the edges in the critical path
-                    as bounded by "cpu_bound", "gpu_compute_bound",
+                    as bounded by "cpu_bound", "data_loading", "gpu_compute_bound",
                     "gpu_kernel_kernel_overhead" (gaps between kernels)
                     "gpu_kernel_launch_overhead" (delay between CPU to GPU launch)
         """
@@ -1554,12 +1603,13 @@ class CPGraph(nx.DiGraph):
         )
 
         # Add column to classify boundedness
-        edge_events_df["bound_by"] = edge_events_df.apply(bound_by, axis=1)
+        edge_events_df["bound_by"] = edge_events_df.apply(self.bound_by, axis=1)
         return edge_events_df
 
     def summary(self) -> pd.core.series.Series:
         """Displays a summary or breakdown of the critical path into one of the following
         - cpu_bound
+        - data_loading
         - gpu_compute_bound
         - gpu_communication_bound (NCCL Collectives)
         - gpu_kernel_kernel_overhead (Gaps between GPU kernels)
@@ -1695,25 +1745,6 @@ def restore_cpgraph(zip_filename: str, t_full: "Trace", rank: int) -> CPGraph:
     return restored_instance
 
 
-# TODO optimize using itertuple
-def bound_by(row: Dict[str, Any]) -> str:
-    """Function to classify the bounding resource for an edge on the critical path"""
-    if row["type"] == "critical_path_kernel_kernel_delay":
-        return "gpu_kernel_kernel_overhead"
-    if row["type"] == "critical_path_kernel_launch_delay":
-        return "gpu_kernel_launch_overhead"
-    if row["type"] in ["critical_path_dependency", "critical_path_sync_dependency"]:
-        return ""
-
-    assert not pd.isna(row["s_name"]), f"name of edge is na : row = {row}"
-
-    if row["stream"] < 0:
-        return "cpu_bound"
-    if is_comm_kernel(row["s_name"]):
-        return "gpu_communication_bound"
-    return "gpu_compute_bound"
-
-
 class CriticalPathAnalysis:
     def __init__(self):
         # dict of critical path nodes, node id -> CPNode
@@ -1726,6 +1757,7 @@ class CriticalPathAnalysis:
         rank: int,
         annotation: str,
         instance_id: Union[Optional[int], Tuple[int, int]],
+        data_load_events: Optional[List[str]] = None,
     ) -> Tuple[CPGraph, bool]:
         r"""
         Perform critical path analysis for trace events within a rank.
@@ -1746,6 +1778,9 @@ class CriticalPathAnalysis:
                         Defaults to the first instance.
                 (Tuple(int, int)) - considers a range of annotation instances start to end,
                         inclusive of both start and end instance.
+            data_load_events (List[str]): List of events (regex) to be considered as
+                data load events. Different traces may use different annotations to
+                indicate data loading, so we allow the caller to pass in the list.
 
         Returns: Tuple[CPGraph, bool] a pair of CPGraph object and a success or
             fail boolean value. True indicates that the critical path analysis
@@ -1838,7 +1873,7 @@ class CriticalPathAnalysis:
         t1 = time.perf_counter()
         logger.info(f"Preprocessing took {t1 - t0:.2f} seconds")
 
-        cp_graph = CPGraph(t_copy, t, rank)
+        cp_graph = CPGraph(t_copy, t, rank, data_load_events=data_load_events)
         t2 = time.perf_counter()
         logger.info(f"CPGraph construction took {t2 - t1:.2f} seconds")
 

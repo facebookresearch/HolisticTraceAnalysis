@@ -676,7 +676,10 @@ class EndToEndTestCase(unittest.TestCase):
             )
             rank = 0
             cp_graph, success = critical_path_t.critical_path_analysis(
-                rank=rank, annotation="", instance_id=0
+                rank=rank,
+                annotation="",
+                instance_id=0,
+                data_load_events=["data_load"],
             )
             self.assertTrue(success)
             with TemporaryDirectory(dir="/tmp") as tmpdir:
