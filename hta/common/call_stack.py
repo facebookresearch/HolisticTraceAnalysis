@@ -4,8 +4,7 @@
 
 import functools
 import logging
-import queue
-from collections import namedtuple
+from collections import defaultdict, deque, namedtuple
 from enum import Enum
 from time import perf_counter
 from typing import Callable, Dict, List, NamedTuple, Optional
@@ -522,7 +521,9 @@ class CallGraph:
         # construct a call stack graph for each thread/stream
         for rank in ranks:
             if self.pre_process_trace_data:
-                self.trim_trace_events(self.trace_data.get_trace(rank))
+                self.constrain_child_time_withinin_parent(
+                    self.trace_data.get_trace(rank)
+                )
             df = self.trace_data.get_trace(rank).copy()
             if remapped_tids and rank in remapped_tids:
                 df = self._remap_tids(df, remapped_tids[rank])
@@ -618,43 +619,70 @@ class CallGraph:
         df_stack = df.reindex(stack_nodes)
         return df_stack
 
-    def trim_trace_events(self, df: pd.DataFrame) -> None:
+    def constrain_child_time_withinin_parent(self, df: pd.DataFrame) -> None:
         """Trim the trace events to not exceed the duration of the parent event if exist. The original DataFrame is modified in place.
 
         Args:
             df (pd.DataFrame): the trace data frame.
         """
-        adj: Dict[int, List[int]] = {}
-        python_id_event_idx_map: Dict[int, int] = {}
+        # Skip processing if dataframe is empty or missing required columns
+        if df.empty or "python_id" not in df.columns:
+            return
+
+        # Filter relevant rows to avoid unnecessary processing
+        mask = df["python_id"] > -1
+        if not mask.any():
+            return
+
+        # Create filtered view with only relevant rows
+        filtered_df = df[mask]
+
+        # Extract necessary columns as Series for faster access
+        python_ids = filtered_df["python_id"]
+        indices = filtered_df.index
+
+        # Create mapping from python_id to dataframe index
+        python_id_event_idx_map = dict(zip(python_ids, indices))
+
+        # Use defaultdict to avoid repetitive dict.get() operations
+        adj = defaultdict(list)
         roots = []
-        for row in df.itertuples():
-            if hasattr(row, "python_id") and row.python_id > -1:
-                python_id_event_idx_map[row.python_id] = row.index
-                if (
-                    hasattr(row, "python_parent_id")
-                    and row.python_parent_id > -1
-                    and df.loc[python_id_event_idx_map[row.python_parent_id]]["tid"]
-                    == row.tid
-                ):
-                    children = adj.get(row.python_parent_id, [])
-                    children.append(row.python_id)
-                    adj[row.python_parent_id] = children
+
+        # Extract parent IDs and thread IDs as Series for vectorized operations
+        if "python_parent_id" in filtered_df.columns:
+            parent_ids = filtered_df["python_parent_id"]
+            tids = filtered_df["tid"]
+
+            # Process each row to build adjacency list and calculate depths
+            for py_id, parent_id, tid in zip(python_ids, parent_ids, tids):
+                if parent_id > -1 and parent_id in python_id_event_idx_map:
+                    parent_idx = python_id_event_idx_map[parent_id]
+                    # Check if parent and child are in the same thread
+                    if df.at[parent_idx, "tid"] == tid:
+                        adj[parent_id].append(py_id)
+                    else:
+                        roots.append(py_id)
                 else:
-                    roots.append(row.python_id)
-        for root in roots:
-            # BFS trim event duration
-            q: queue.Queue[int] = queue.Queue()
-            q.put(root)
-            while not q.empty():
-                cur_py_id = q.get()
-                if cur_py_id in adj:
-                    cur_id = python_id_event_idx_map[cur_py_id]
-                    for child_py_id in adj[cur_py_id]:
-                        child_id = python_id_event_idx_map[child_py_id]
-                        df.at[child_id, "dur"] = min(
-                            df.at[child_id, "dur"],
-                            df.at[cur_id, "ts"]
-                            + df.at[cur_id, "dur"]
-                            - df.at[child_id, "ts"],
-                        )
-                        q.put(child_py_id)
+                    roots.append(py_id)
+        else:
+            # If no parent IDs, all are roots
+            roots = list(python_ids)
+
+        queue = deque(roots)
+        while queue:
+            cur_py_id = queue.popleft()
+            if cur_py_id in adj:
+                cur_id = python_id_event_idx_map[cur_py_id]
+                parent_ts = df.at[cur_id, "ts"]
+                parent_end = parent_ts + df.at[cur_id, "dur"]
+                for child_py_id in adj[cur_py_id]:
+                    child_id = python_id_event_idx_map[child_py_id]
+                    child_ts = df.at[child_id, "ts"]
+                    child_dur = df.at[child_id, "dur"]
+
+                    # Calculate new duration
+                    new_dur = min(child_dur, parent_end - child_ts)
+                    if new_dur != child_dur:
+                        df.at[child_id, "dur"] = new_dur
+
+                    queue.append(child_py_id)
