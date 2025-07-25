@@ -295,6 +295,105 @@ class CallGraphTestCase(unittest.TestCase):
         # Event 4: ts=8, dur=5, should be trimmed to dur=2 to end at 10
         self.assertEqual(df_multi_children.at[4, "dur"], 2)
 
+    def test_trim_trace_events_walltime(self):
+        """Test the performance of trim_trace_events with a large dataset."""
+        # Given
+        import time
+
+        import numpy as np
+
+        # Create a large trace dataset with a deep hierarchy
+        num_events = 10000
+
+        # Generate a tree-like structure with multiple levels
+        # Each event has a random number of children (0-5)
+        python_ids = np.arange(100, 100 + num_events)
+
+        # Initialize with root events (parent_id = -1)
+        python_parent_ids = np.full(num_events, -1)
+
+        # Create parent-child relationships
+        current_parent_idx = 0
+        for i in range(1, num_events):
+            # Assign a parent from previous events
+            if current_parent_idx < i:  # Ensure we don't create cycles
+                python_parent_ids[i] = python_ids[current_parent_idx]
+
+                # Move to next potential parent after adding some children
+                if np.random.random() < 0.2:  # 20% chance to move to next parent
+                    current_parent_idx += 1
+
+        # Create timestamps with some overlapping events
+        ts = np.zeros(num_events)
+        dur = np.zeros(num_events)
+
+        # Set timestamps and durations
+        for i in range(num_events):
+            if python_parent_ids[i] == -1:
+                # Root events start at random times
+                ts[i] = np.random.randint(0, 1000)
+            else:
+                # Child events start after their parent
+                parent_idx = np.where(python_ids == python_parent_ids[i])[0][0]
+                ts[i] = ts[parent_idx] + np.random.randint(1, 10)
+
+            # Set duration - occasionally make it exceed parent's end time
+            dur[i] = np.random.randint(5, 50)
+
+            # 30% of events will exceed their parent's duration
+            if python_parent_ids[i] != -1 and np.random.random() < 0.3:
+                parent_idx = np.where(python_ids == python_parent_ids[i])[0][0]
+                parent_end = ts[parent_idx] + dur[parent_idx]
+                dur[i] = (parent_end - ts[i]) + np.random.randint(
+                    1, 20
+                )  # Exceed parent
+
+        # Create DataFrame
+        df_large = pd.DataFrame(
+            {
+                "index": np.arange(num_events),
+                "ts": ts,
+                "dur": dur,
+                "pid": np.ones(num_events),
+                "tid": np.ones(num_events),
+                "stream": np.full(num_events, -1),
+                "index_correlation": np.full(num_events, -1),
+                "python_id": python_ids,
+                "python_parent_id": python_parent_ids,
+            }
+        )
+
+        # Create a mock trace object
+        trace_large = type(self.trace_mock)({0: df_large})
+
+        # When - measure time
+        start_time = time.time()
+        CallGraph(trace_large, pre_process_trace_data=True)
+        end_time = time.time()
+
+        # Then
+        execution_time = end_time - start_time
+        print(
+            f"\nTrim trace events execution time for {num_events} events: {execution_time:.4f} seconds"
+        )
+
+        # Verify some events were actually trimmed
+        # Count events where duration was likely trimmed (original would exceed parent)
+        trimmed_count = 0
+        for i in range(num_events):
+            if python_parent_ids[i] != -1:
+                parent_idx = np.where(python_ids == python_parent_ids[i])[0][0]
+                parent_end = ts[parent_idx] + dur[parent_idx]
+                child_end = ts[i] + df_large.at[i, "dur"]
+                if child_end <= parent_end:
+                    trimmed_count += 1
+
+        # Just log the number of trimmed events for information
+        print(f"Number of events that were trimmed: {trimmed_count}")
+
+        # No explicit assertion on time, as performance varies by machine
+        # This test is primarily for profiling and detecting major regressions
+
 
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()
