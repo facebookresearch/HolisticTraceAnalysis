@@ -1864,6 +1864,10 @@ class CriticalPathAnalysis:
         # Only consider GPU kernels whose runtime events are in the correct
         # time window
         gpu_kernels = trace_df[trace_df["stream"].ne(-1)]
+
+        if "l0queue" in trace_df and gpu_kernels.empty:
+            gpu_kernels = trace_df[trace_df["l0queue"].ne(-1)]
+
         cpu_kernels = cpu_kernels.copy().set_index("index_correlation")
         b = (
             gpu_kernels[["ts", "dur", "correlation", "name"]]

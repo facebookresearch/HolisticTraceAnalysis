@@ -40,7 +40,7 @@ ARGS_SYNC_FUNC: Callable[[Dict[str, AttributeSpec]], List[AttributeSpec]] = (
 )
 ARGS_MINIMUM_FUNC: Callable[[Dict[str, AttributeSpec]], List[AttributeSpec]] = (
     lambda available_args: [
-        available_args[k] for k in ["cuda::stream", "correlation::cpu_gpu"]
+        available_args[k] for k in ["cuda::stream", "correlation::cpu_gpu", "xpu::l0queue"]
     ]
 )
 ARGS_COMPLETE_FUNC: Callable[[Dict[str, AttributeSpec]], List[AttributeSpec]] = (

@@ -77,6 +77,10 @@ class BreakdownAnalysis:
         kernel_per_rank: Dict[str, Dict] = defaultdict(dict)
         for rank, trace_df in t.traces.items():
             gpu_kernels = trace_df[trace_df["stream"].ne(-1)].copy()
+
+            if "l0queue" in trace_df and gpu_kernels.empty:
+                gpu_kernels = trace_df[trace_df["l0queue"].ne(-1)].copy()
+
             gpu_kernels["kernel_type"] = gpu_kernels[["name"]].apply(
                 lambda x: get_kernel_type(sym_table[x["name"]]), axis=1
             )
@@ -648,6 +652,10 @@ class BreakdownAnalysis:
         def idle_time_per_rank(trace_df: pd.DataFrame) -> Tuple[int, int, int, int]:
             """returns idle_time (us) , compute_time (us), non_compute_time (us), total_time (us)"""
             gpu_kernels = trace_df[trace_df["stream"].ne(-1)].copy()
+
+            if "l0queue" in trace_df and gpu_kernels.empty:
+                gpu_kernels = trace_df[trace_df["l0queue"].ne(-1)].copy()
+
             idle_time, kernel_time = cls._get_idle_time_for_kernels(gpu_kernels)
 
             gpu_kernels["kernel_type"] = gpu_kernels[["name"]].apply(
@@ -840,7 +848,7 @@ class BreakdownAnalysis:
         kernel_cat_ids = [sym_id_map.get(cat, -1000) for cat in kernel_cats]
 
         gpu_kernels_pre = (
-            trace_df[trace_df["stream"].ne(-1) & trace_df["cat"].isin(kernel_cat_ids)]
+            trace_df[(trace_df["stream"].ne(-1) | trace_df["l0queue"].ne(-1)) & trace_df["cat"].isin(kernel_cat_ids)]
             .copy()
             .set_index("index_correlation")
         )

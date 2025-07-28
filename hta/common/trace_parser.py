@@ -335,6 +335,19 @@ def round_down_time_stamps(df: pd.DataFrame) -> None:
     df["end"] = df[~df["end"].isnull()]["end"].apply(lambda x: math.floor(x))
     df["dur"] = df["end"] - df["ts"]
 
+def _convert_l0queue_to_int(df):
+    def safe_hex_to_int(x):
+        try:
+            return int(x, 16)
+        except Exception:
+            return x
+
+    mask = df["l0queue"] != -1
+
+    if not mask.any():
+        return
+
+    df.loc[mask, "l0queue"] = df.loc[mask, "l0queue"].apply(safe_hex_to_int)
 
 # @profile
 def _parse_trace_dataframe_json(
@@ -362,6 +375,8 @@ def _parse_trace_dataframe_json(
         df["index"] = pd.to_numeric(df["index"], downcast="integer")
 
         df, local_symbol_table = _compress_df(df, cfg)
+
+        _convert_l0queue_to_int(df)
 
     return meta, df, local_symbol_table
 
@@ -410,6 +425,9 @@ def _parse_trace_dataframe_ijson(
     df["index"] = pd.to_numeric(df["index"], downcast="integer")
 
     df, local_symbol_table = _compress_df(df, cfg)
+
+    _convert_l0queue_to_int(df)
+
     return meta, df, local_symbol_table
 
 

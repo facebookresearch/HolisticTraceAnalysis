@@ -597,6 +597,9 @@ class CudaKernelAnalysis:
             cpu_kernels = trace_df[trace_df["stream"].eq(-1)].copy()
             gpu_kernels = trace_df[trace_df["stream"].ne(-1)].copy()
 
+            if "l0queue" in trace_df and gpu_kernels.empty:
+                gpu_kernels = trace_df[trace_df["l0queue"].ne(-1)].copy()
+
             # get correlation id, duration, timestamp and name of cpu and gpu events
             cpu_kernels_filtered = cpu_kernels[
                 (cpu_kernels["correlation"]).isin(merged_series)

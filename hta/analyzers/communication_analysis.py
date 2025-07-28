@@ -32,6 +32,10 @@ class CommunicationAnalysis:
             Compute the overlap percentage between communication and computation kernels for one rank.
             """
             gpu_kernels = trace_df[trace_df["stream"].ne(-1)].copy()
+
+            if "l0queue" in trace_df and gpu_kernels.empty:
+                gpu_kernels = trace_df[trace_df["l0queue"].ne(-1)].copy()
+
             gpu_kernels["kernel_type"] = gpu_kernels[["name"]].apply(
                 lambda x: get_kernel_type(sym_table[x["name"]]), axis=1
             )

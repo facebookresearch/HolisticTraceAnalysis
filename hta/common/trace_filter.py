@@ -327,7 +327,7 @@ def _filter_gpu_kernels_with_cuda_sync(
     # run on GPU
     event_sync_id = symbol_table.get_sym_id_map().get("Event Sync", -1)
     context_sync_id = symbol_table.get_sym_id_map().get("Context Sync", -1)
-    return ((df["stream"] >= 0) & (df["correlation"] >= 0)) | df["name"].isin(
+    return ((df["stream"] >= 0) & (df["correlation"] >= 0)) | ((df["l0queue"] >= 0) & (df["correlation"] >= 0)) | df["name"].isin(
         [event_sync_id, context_sync_id]
     )
 
@@ -340,8 +340,8 @@ class GPUKernelFilter(Filter):
     def __call__(
         self, df: pd.DataFrame, symbol_table: Optional[TraceSymbolTable] = None
     ) -> pd.DataFrame:
-        if "stream" not in df.columns:
-            logger.warning("DataFrame does not contain a 'stream' column.")
+        if "stream" not in df.columns and "l0queue" not in df.columns:
+            logger.warning("DataFrame is missing the required 'stream' or 'l0queue' column.")
             return df
 
         if symbol_table is None:

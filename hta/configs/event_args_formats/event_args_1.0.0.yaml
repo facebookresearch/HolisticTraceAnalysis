@@ -259,3 +259,8 @@ AVAILABLE_ARGS:
     raw_name: batchId
     value_type: String
     default_value: ""
+  xpu::l0queue:
+    name: l0queue
+    raw_name: l0 queue
+    value_type: Int
+    default_value: -1

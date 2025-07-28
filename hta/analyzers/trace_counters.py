@@ -57,6 +57,10 @@ class TraceCounters:
 
         # GPU kernel events
         gpu_kernels = trace_df[trace_df["stream"].ne(-1)].copy()
+
+        if "l0queue" in trace_df and gpu_kernels.empty:
+            gpu_kernels = trace_df[trace_df["l0queue"].ne(-1)].copy()
+
         gpu_kernels["queue"] = -1
 
         # use the pid, tid and cuda stream from the correlated GPU event.
@@ -279,6 +283,10 @@ class TraceCounters:
         sym_table = t.symbol_table.get_sym_table()
 
         gpu_kernels = trace_df[trace_df["stream"].ne(-1)].copy()
+
+        if "l0queue" in trace_df and gpu_kernels.empty:
+            gpu_kernels = trace_df[trace_df["l0queue"].ne(-1)].copy()
+
         gpu_kernels["kernel_type"] = gpu_kernels[["name"]].apply(
             lambda x: get_kernel_type(sym_table[x["name"]]), axis=1
         )
