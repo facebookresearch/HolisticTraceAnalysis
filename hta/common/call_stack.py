@@ -461,7 +461,7 @@ class CallGraph:
         trace: Trace,
         ranks: Optional[List[int]] = None,
         filter_func: Optional[Filter] = None,
-        remapped_tids: Dict[int, Dict[int, int]] | None = None,
+        remapped_tids: Optional[Dict[int, Dict[int, int]]] = None,
     ) -> None:
         """Construct a CallGraph from a Trace object <trace_data>
 
@@ -501,7 +501,7 @@ class CallGraph:
         self,
         ranks: List[int],
         filter_func: Optional[Filter],
-        remapped_tids: Dict[int, Dict[int, int]] | None = None,
+        remapped_tids: Optional[Dict[int, Dict[int, int]]] = None,
     ) -> None:
         """
         Construct the call graph from the traces of a distributed training job.
