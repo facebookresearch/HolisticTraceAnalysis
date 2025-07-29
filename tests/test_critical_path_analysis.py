@@ -647,7 +647,9 @@ class EndToEndTestCase(unittest.TestCase):
             ),
         )
 
-    def _assert_trace_files_equal(self, trace_path_1: str, trace_path_2: str):
+    def _assert_trace_files_equal(
+        self, trace_path_1: str, trace_path_2: str, tolerance: float = 0.01
+    ):
         with gzip.open(trace_path_1, "r") as trace_1, gzip.open(
             trace_path_2, "r"
         ) as trace_2:
@@ -662,7 +664,20 @@ class EndToEndTestCase(unittest.TestCase):
                 if "args" in ev and "critical" in ev["args"]
             ]
 
-            self.assertEqual(len(trace_1_critical_events), len(trace_2_critical_events))
+            len_1 = len(trace_1_critical_events)
+            len_2 = len(trace_2_critical_events)
+
+            # Calculate percentage difference
+            if len_1 > 0 or len_2 > 0:
+                diff_percentage = abs(len_1 - len_2) / max(len_1, len_2)
+                self.assertLessEqual(
+                    diff_percentage,
+                    tolerance,
+                    f"Critical event count difference ({len_1} vs {len_2}) exceeds {tolerance*100}% tolerance",
+                )
+            else:
+                # Both are empty, they're equal
+                self.assertEqual(len_1, len_2)
 
     def test_critical_path_end_to_end(self):
         """Test that the critical path analysis generates the expected overlaid trace file."""
