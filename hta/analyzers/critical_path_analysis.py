@@ -622,7 +622,7 @@ class CPGraph(nx.DiGraph):
                         self._add_edge_helper(
                             previous_node, node, CPEdgeType.DEPENDENCY
                         )
-                if not last_node.is_start:
+                if last_node and not last_node.is_start:
                     self._add_edge_helper(last_node, node, CPEdgeType.DEPENDENCY)
 
             last_node = node
@@ -652,7 +652,7 @@ class CPGraph(nx.DiGraph):
         for csg in cpu_call_stacks:
             self._construct_graph_from_call_stack(csg)
 
-    def _get_bwd_tid(self, trace_df: pd.DataFrame) -> int | None:
+    def _get_bwd_tid(self, trace_df: pd.DataFrame) -> Optional[int]:
         """Get the thread id for the backward pass, or None is one cannot be identified.
 
         We identify the backward pass as the thread which contains "autograd" events. If
@@ -668,7 +668,7 @@ class CPGraph(nx.DiGraph):
 
         return self._get_tid_for_event(trace_df, "autograd")
 
-    def _get_fwd_tid(self, trace_df: pd.DataFrame) -> int | None:
+    def _get_fwd_tid(self, trace_df: pd.DataFrame) -> Optional[int]:
         """Get the thread id for the forward pass, or None is one cannot be identified.
 
         We identify the forward pass as the thread which contains
@@ -683,7 +683,7 @@ class CPGraph(nx.DiGraph):
         """
         return self._get_tid_for_event(trace_df, "forward")
 
-    def _get_tid_for_event(self, trace_df: pd.DataFrame, ev_name: str) -> int | None:
+    def _get_tid_for_event(self, trace_df: pd.DataFrame, ev_name: str) -> Optional[int]:
         events = [sym for sym in self.symbol_table.sym_table if ev_name in sym]
         event_ids = [self.symbol_table.sym_index[candidate] for candidate in events]
         cpu_op_id = self.symbol_table.sym_index.get("cpu_op", -1)
