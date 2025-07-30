@@ -1,12 +1,18 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+# Unit tests for call_stack.py
 
 import unittest
 
 import pandas as pd
 
-from hta.common.call_stack import CallStackGraph, CallStackIdentity, CallStackNode
+from hta.common.call_stack import (
+    CallGraph,
+    CallStackGraph,
+    CallStackIdentity,
+    CallStackNode,
+)
 from hta.common.trace_filter import ZeroDurationFilter
 
 
@@ -81,7 +87,7 @@ class CallStackTestCase(unittest.TestCase):
         self.assertDictEqual(nodes, self.nodes2)
 
     def test_sort_events(self):
-        index = [1, 2, 3, 4]
+        index = [0, 1, 2, 3]
         start = [0, 0, 5, 5]
         dur = [10, 5, 1, 5]
         stream = [-1, -1, -1, -1]
@@ -96,11 +102,11 @@ class CallStackTestCase(unittest.TestCase):
             }
         )
         nodes = {
-            -1: CallStackNode(parent=-1, depth=-1, children=[1]),
-            1: CallStackNode(parent=-1, depth=0, children=[2, 4]),
-            2: CallStackNode(parent=1, depth=1, children=[]),
-            4: CallStackNode(parent=1, depth=1, children=[3]),
-            3: CallStackNode(parent=4, depth=2, children=[]),
+            -1: CallStackNode(parent=-1, depth=-1, children=[0]),
+            0: CallStackNode(parent=-1, depth=0, children=[1, 3]),
+            1: CallStackNode(parent=0, depth=1, children=[]),
+            2: CallStackNode(parent=3, depth=2, children=[]),
+            3: CallStackNode(parent=0, depth=1, children=[2]),
         }
         csg = CallStackGraph(df, self.csi)
         self.assertDictEqual(nodes, csg.get_nodes())
@@ -130,6 +136,164 @@ class CallStackTestCase(unittest.TestCase):
         depth_from_csg = csg.get_depth().to_dict()
         depth_from_nodes = {idx: node.depth for idx, node in nodes.items() if idx >= 0}
         self.assertDictEqual(depth_from_csg, depth_from_nodes)
+        # Verify df is used
+        self.assertIsNotNone(df)
+
+
+class CallGraphTestCase(unittest.TestCase):
+    def setUp(self) -> None:
+        super().setUp()
+
+        # Mock Trace class for testing
+        class MockTrace:
+            def __init__(self, traces):
+                self.traces = traces
+
+            def get_all_traces(self):
+                return self.traces.keys()
+
+            def get_trace(self, rank):
+                return self.traces[rank]
+
+        # Create test data for trim_trace_events
+        self.df_trim = pd.DataFrame(
+            {
+                "index": [0, 1, 2, 3],
+                "ts": [0, 2, 4, 6],
+                "dur": [10, 6, 8, 2],  # Child event 2 exceeds parent event 1's duration
+                "pid": [1, 1, 1, 1],
+                "tid": [1, 1, 1, 1],
+                "stream": [-1, -1, -1, -1],
+                "index_correlation": [-1, -1, -1, -1],
+                "python_id": [100, 101, 102, 103],
+                "python_parent_id": [-1, 100, 101, 102],
+            }
+        )
+
+        self.trace_mock = MockTrace({0: self.df_trim})
+
+    def test_trim_trace_events_basic(self):
+        # Given & when
+        CallGraph(self.trace_mock, pre_process_trace_data=True)
+
+        # Then
+        # Event 1: ts=2, dur=6, end=8
+        # Event 2: ts=4, dur=8 (original), should be trimmed to dur=4 to end at 8
+        self.assertEqual(self.df_trim.at[2, "dur"], 4)
+
+    def test_trim_trace_events_complex_hierarchy(self):
+        # Given
+        df_complex = pd.DataFrame(
+            {
+                "index": [0, 1, 2, 3, 4],
+                "ts": [0, 2, 4, 6, 7],
+                "dur": [15, 10, 10, 20, 8],
+                "pid": [1, 1, 1, 1, 1],
+                "tid": [1, 1, 1, 1, 1],
+                "stream": [-1, -1, -1, -1, -1],
+                "index_correlation": [-1, -1, -1, -1, -1],
+                "python_id": [100, 101, 102, 103, 104],
+                "python_parent_id": [-1, 100, 101, 102, 102],
+            }
+        )
+
+        trace_complex = type(self.trace_mock)({0: df_complex})
+
+        # When
+        CallGraph(trace_complex, pre_process_trace_data=True)
+
+        # Then
+        # Event 1: ts=2, dur=10, end=12
+        # Event 2: ts=4, dur=10, should be trimmed to dur=8 to end at 12
+        # Event 3: ts=6, dur=20, should be trimmed to dur=6 to end at 12
+        # Event 4: ts=7, dur=8, should be trimmed to dur=5 to end at 12
+        self.assertEqual(df_complex.at[2, "dur"], 8)
+        self.assertEqual(df_complex.at[3, "dur"], 6)
+        self.assertEqual(df_complex.at[4, "dur"], 5)
+
+    def test_trim_trace_events_different_threads(self):
+        # Given
+        df_threads = pd.DataFrame(
+            {
+                "index": [0, 1, 2, 3],
+                "ts": [0, 2, 4, 6],
+                "dur": [10, 6, 8, 2],
+                "pid": [1, 1, 1, 1],
+                "tid": [1, 1, 2, 2],  # Events 2 and 3 are in a different thread
+                "stream": [-1, -1, -1, -1],
+                "index_correlation": [-1, -1, -1, -1],
+                "python_id": [100, 101, 102, 103],
+                "python_parent_id": [-1, 100, 101, 102],
+            }
+        )
+
+        trace_threads = type(self.trace_mock)({0: df_threads})
+
+        # When
+        CallGraph(trace_threads, pre_process_trace_data=True)
+
+        # Then
+        # Event 2 should not be trimmed because it's in a different thread than its parent
+        self.assertEqual(df_threads.at[2, "dur"], 8)
+
+    def test_trim_trace_events_no_trimming_needed(self):
+        # Given
+        df_no_trim = pd.DataFrame(
+            {
+                "index": [0, 1, 2, 3],
+                "ts": [0, 2, 4, 6],
+                "dur": [10, 6, 3, 1],  # All child events end before their parents
+                "pid": [1, 1, 1, 1],
+                "tid": [1, 1, 1, 1],
+                "stream": [-1, -1, -1, -1],
+                "index_correlation": [-1, -1, -1, -1],
+                "python_id": [100, 101, 102, 103],
+                "python_parent_id": [-1, 100, 101, 102],
+            }
+        )
+
+        trace_no_trim = type(self.trace_mock)({0: df_no_trim})
+
+        # When
+        CallGraph(trace_no_trim, pre_process_trace_data=True)
+
+        # Then
+        # Durations should remain unchanged
+        self.assertEqual(df_no_trim.at[1, "dur"], 6)
+        self.assertEqual(df_no_trim.at[2, "dur"], 3)
+        self.assertEqual(df_no_trim.at[3, "dur"], 1)
+
+    def test_trim_trace_events_multiple_children(self):
+        # Given
+        df_multi_children = pd.DataFrame(
+            {
+                "index": [0, 1, 2, 3, 4],
+                "ts": [0, 2, 3, 6, 8],
+                "dur": [
+                    10,
+                    8,
+                    3,
+                    2,
+                    5,
+                ],  # Child event 4 exceeds parent event 1's duration
+                "pid": [1, 1, 1, 1, 1],
+                "tid": [1, 1, 1, 1, 1],
+                "stream": [-1, -1, -1, -1, -1],
+                "index_correlation": [-1, -1, -1, -1, -1],
+                "python_id": [100, 101, 102, 103, 104],
+                "python_parent_id": [-1, 100, 101, 101, 101],
+            }
+        )
+
+        trace_multi = type(self.trace_mock)({0: df_multi_children})
+
+        # When
+        CallGraph(trace_multi, pre_process_trace_data=True)
+
+        # Then
+        # Event 1: ts=2, dur=8, end=10
+        # Event 4: ts=8, dur=5, should be trimmed to dur=2 to end at 10
+        self.assertEqual(df_multi_children.at[4, "dur"], 2)
 
 
 if __name__ == "__main__":  # pragma: no cover
