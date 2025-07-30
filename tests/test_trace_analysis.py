@@ -42,6 +42,7 @@ class TraceAnalysisTestCase(unittest.TestCase):
         cls.ns_resolution_trace_dir: str = os.path.join(
             cls.base_data_dir, "ns_resolution_trace"
         )
+        cls.torchtitan_trace_dir: str = os.path.join(cls.base_data_dir, "torchtitan_h100")
 
     @cached_property
     def vision_transformer_t(self):
@@ -70,6 +71,10 @@ class TraceAnalysisTestCase(unittest.TestCase):
     @cached_property
     def ns_resolution_t(self):
         return TraceAnalysis(trace_dir=self.ns_resolution_trace_dir)
+
+    @cached_property
+    def torchtitan_trace_t(self):
+        return TraceAnalysis(trace_dir=self.torchtitan_trace_dir)
 
     def setUp(self):
         self.overlaid_trace_dir = self.base_data_dir
@@ -616,6 +621,47 @@ class TraceAnalysisTestCase(unittest.TestCase):
                 expval,
                 msg=f"Stream 1 idle stats mismatch key={key}",
             )
+
+    def test_memory_analysis_from_trace(self):
+        memory_events = self.torchtitan_trace_t.get_memory_timeline(visualize=False)
+        self.assertEqual(len(memory_events), 6707, "There are 6707 [memory] events in the trace file, dataframe should have the same number of rows.")
+        # Assuming we have the original json loaded as 'json_event' and the DataFrame row as 'df_row'
+        json_event = {
+            "ph": "i", "cat": "cpu_instant_event", "s": "t", "name": "[memory]",
+            "pid": 1401543, "tid": 1405042,
+            "ts": 1336304250192.702,
+            "args": {
+            "Total Reserved": 82514542592, "Total Allocated": 46558666240,
+            "Bytes": 134217728, "Addr": 128828684894208, "Device Id": 0, "Device Type": 1,
+            "Ev Idx": 6710
+            }
+        }
+
+        df_row = memory_events.loc[memory_events["ev_idx"] == 6710].iloc[0]
+
+        # Core identifiers
+        assert df_row['ev_idx'] == json_event["args"]["Ev Idx"], "Event index mismatch - we are not comparing the right events nothing will match"
+        assert df_row['pid'] == json_event["pid"], "Process ID mismatch"
+        assert df_row['tid'] == json_event["tid"], "Thread ID mismatch"
+
+        # Memory-related fields
+        assert df_row['total_reserved'] == json_event["args"]["Total Reserved"], "Total Reserved mismatch"
+        assert df_row['total_allocated'] == json_event["args"]["Total Allocated"], "Total Allocated mismatch"
+        assert df_row['device_id'] == json_event["args"]["Device Id"], "Device ID mismatch"
+        assert df_row['device_type'] == json_event["args"]["Device Type"], "Device Type mismatch"
+
+        # Optional: Check if address exists (with possible transformation)
+        assert df_row['addr'] == json_event["args"]["Addr"], "Memory address mismatch"
+
+
+
+        categorised_memory_timelines, memory_events = self.torchtitan_trace_t.get_memory_timeline_per_category(visualize=False)
+        self.assertEqual(set(memory_events.keys()), {-1, 0}, "expected CPU (device -1) and GPU (device 0) memory events")
+        gpu_events = memory_events[0]
+        total_memory_events = len(memory_events[-1]) + len(gpu_events)
+        expected_memory_events = 6707 + len(memory_events)
+        self.assertEqual(total_memory_events, expected_memory_events, "There should be 6707 [memory] events in the trace and 2 events used to capture what was allocated before profiling.")
+        self.assertEqual(len(gpu_events), 6547, "There are 6546 [memory] event associated with GPU 0 in the trace file.")
 
 
 if __name__ == "__main__":  # pragma: no cover
