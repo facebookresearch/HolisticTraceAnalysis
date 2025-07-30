@@ -4,7 +4,6 @@
 
 import functools
 import logging
-import queue
 from collections import namedtuple
 from enum import Enum
 from time import perf_counter
@@ -463,7 +462,6 @@ class CallGraph:
         ranks: Optional[List[int]] = None,
         filter_func: Optional[Filter] = None,
         remapped_tids: Optional[Dict[int, Dict[int, int]]] = None,
-        pre_process_trace_data: bool = False,
     ) -> None:
         """Construct a CallGraph from a Trace object <trace_data>
 
@@ -474,14 +472,12 @@ class CallGraph:
             remapped_tids (Dict[Dict[int, int]]) : a dictionary that stores per-rank thread ID remappings.
                 For example: { 0: { 300: 400}} means that on rank 0, thread ID 300 is remapped to 400.
                 This is useful for training jobs, where the backward thread can typically be merged into the main trainer thread.
-            pre_process_trace_data (bool) : whether to pre-process the trace data. If True, the event duration from trace data will be trimmed to not exceed the duration of the parent event if exist.
         Raises:
             ValueError: the trace data is invalid.
         """
         self.trace_data: Trace = trace
         self.mapping: pd.DataFrame = pd.DataFrame()
         self.call_stacks: List[CallStackGraph] = []
-        self.pre_process_trace_data = pre_process_trace_data
 
         _ranks = [k for k in trace.get_all_traces()] if ranks is None else ranks
         self._construct_call_graph(_ranks, filter_func, remapped_tids)
@@ -521,8 +517,6 @@ class CallGraph:
         t0 = perf_counter()
         # construct a call stack graph for each thread/stream
         for rank in ranks:
-            if self.pre_process_trace_data:
-                self.trim_trace_events(self.trace_data.get_trace(rank))
             df = self.trace_data.get_trace(rank).copy()
             if remapped_tids and rank in remapped_tids:
                 df = self._remap_tids(df, remapped_tids[rank])
@@ -531,11 +525,7 @@ class CallGraph:
                     # Filter out gpu annotations and sync events
                     df_thread = df_thread[df_thread["stream"].gt(0)]
                 csi = CallStackIdentity(rank, pid, tid)
-                csg = CallStackGraph(
-                    df_thread,
-                    csi,
-                    filter_func,
-                )
+                csg = CallStackGraph(df_thread, csi, filter_func)
                 self.call_stacks.append(csg)
                 call_stack_ids.append(csi)
         t1 = perf_counter()
@@ -617,44 +607,3 @@ class CallGraph:
         stack_nodes = np.array(leaf_nodes + parent_nodes + kernel_nodes)
         df_stack = df.reindex(stack_nodes)
         return df_stack
-
-    def trim_trace_events(self, df: pd.DataFrame) -> None:
-        """Trim the trace events to not exceed the duration of the parent event if exist. The original DataFrame is modified in place.
-
-        Args:
-            df (pd.DataFrame): the trace data frame.
-        """
-        adj: Dict[int, List[int]] = {}
-        python_id_event_idx_map: Dict[int, int] = {}
-        roots = []
-        for row in df.itertuples():
-            if hasattr(row, "python_id") and row.python_id > -1:
-                python_id_event_idx_map[row.python_id] = row.index
-                if (
-                    hasattr(row, "python_parent_id")
-                    and row.python_parent_id > -1
-                    and df.loc[python_id_event_idx_map[row.python_parent_id]]["tid"]
-                    == row.tid
-                ):
-                    children = adj.get(row.python_parent_id, [])
-                    children.append(row.python_id)
-                    adj[row.python_parent_id] = children
-                else:
-                    roots.append(row.python_id)
-        for root in roots:
-            # BFS trim event duration
-            q: queue.Queue[int] = queue.Queue()
-            q.put(root)
-            while not q.empty():
-                cur_py_id = q.get()
-                if cur_py_id in adj:
-                    cur_id = python_id_event_idx_map[cur_py_id]
-                    for child_py_id in adj[cur_py_id]:
-                        child_id = python_id_event_idx_map[child_py_id]
-                        df.at[child_id, "dur"] = min(
-                            df.at[child_id, "dur"],
-                            df.at[cur_id, "ts"]
-                            + df.at[cur_id, "dur"]
-                            - df.at[child_id, "ts"],
-                        )
-                        q.put(child_py_id)

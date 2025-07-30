@@ -37,6 +37,16 @@ PROFILE_TIMES = {}
 CUDA_RUNTIME_EVENTS = frozenset(
     ["cudaHostAlloc", "cudaLaunchKernel", "cudaMemcpyAsync"]
 )
+# Threshold (in microseconds) for what might
+# count as a delay between consecutive kernels.
+# Typical kernel-kernel delay is:
+#   - compute stream: < 10us
+#   - communication stream: ~1ms
+# To allow for both of these types of delays,
+# we set our threshold to be 1.5ms.
+# Anything beyond 1.5ms probably indicates an
+# unrecognized dependency.
+KERNEL_KERNEL_DELAY_THRESHOLD_US = 1500
 
 
 # Enable per function timing
@@ -1372,6 +1382,8 @@ class CPGraph(nx.DiGraph):
                 launch_delay_added = True
             elif (
                 last_node.get(stream) is not None
+                and start_node.ts - last_node[stream].ts
+                < KERNEL_KERNEL_DELAY_THRESHOLD_US
                 # and the kernel sync dependency if any finished earlier than last node
                 and (
                     kernel_sync_index is None
