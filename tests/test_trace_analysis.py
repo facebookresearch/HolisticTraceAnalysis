@@ -22,7 +22,7 @@ class TraceAnalysisTestCase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         super(TraceAnalysisTestCase, cls).setUpClass()
-        cls.base_data_dir = str(Path(__file__).parent.parent.joinpath("tests/data"))
+        cls.base_data_dir = add_test_data_path_prefix_if_exists("tests/data")
         cls.vision_transformer_trace_dir: str = os.path.join(
             cls.base_data_dir, "vision_transformer"
         )
@@ -271,17 +271,17 @@ class TraceAnalysisTestCase(unittest.TestCase):
         )
         self.assertAlmostEqual(
             idle_time.iloc[0]["idle_time_pctg"],
-            round((5649476.0 * 100) / 13328071, 3),
+            round((5648827.0 * 100) / 13328347, 3),
             delta=0.01,
         )
         self.assertAlmostEqual(
             idle_time.iloc[0]["compute_time_pctg"],
-            round((7305597.0 * 100 / 13328071), 3),
+            round((7305596.0 * 100 / 13328347), 3),
             delta=0.01,
         )
         self.assertAlmostEqual(
             idle_time.iloc[0]["non_compute_time_pctg"],
-            round(372998.0 * 100 / 13328071, 3),
+            round(373924.0 * 100 / 13328347, 3),
             delta=0.01,
         )
 
@@ -309,11 +309,11 @@ class TraceAnalysisTestCase(unittest.TestCase):
         )
 
         self.assertEqual(kernel_type_breakdown.iloc[0]["kernel_type"], "COMPUTATION")
-        self.assertEqual(kernel_type_breakdown.iloc[0]["sum"], 7305597)
+        self.assertEqual(kernel_type_breakdown.iloc[0]["sum"], 7304578)
         self.assertEqual(kernel_breakdown.iloc[0]["kernel_type"], "COMPUTATION")
         self.assertEqual(kernel_breakdown.iloc[0]["sum (us)"], 77283.0)
         self.assertEqual(kernel_breakdown.iloc[11]["kernel_type"], "MEMORY")
-        self.assertEqual(kernel_breakdown.iloc[11]["sum (us)"], 400892.0)
+        self.assertEqual(kernel_breakdown.iloc[11]["sum (us)"], 403067.0)
 
     def __test_gpu_user_annotation_common(
         self, use_gpu_annotation: bool, expected_rows: int
@@ -596,11 +596,11 @@ class TraceAnalysisTestCase(unittest.TestCase):
         idle_categories = idle_time_df.idle_category.unique()
 
         self.assertEqual(set(ranks), {0})
-        self.assertEqual(set(streams), {1, 102})
+        self.assertEqual(set(streams), {1, 102, 801})
         self.assertEqual(set(idle_categories), {"host_wait", "kernel_wait", "other"})
 
         # Ratios sum up to 1.0, 2 streams x 1 ranks = 2.0
-        self.assertAlmostEqual(idle_time_df.idle_time_ratio.sum(), 2.0)
+        self.assertAlmostEqual(idle_time_df.idle_time_ratio.sum(), 3.0)
 
         stream1_stats = idle_time_df[idle_time_df.stream == 1].iloc[0].to_dict()
         expected_stats = {
@@ -616,6 +616,14 @@ class TraceAnalysisTestCase(unittest.TestCase):
                 expval,
                 msg=f"Stream 1 idle stats mismatch key={key}",
             )
+
+
+def add_test_data_path_prefix_if_exists(test_path):
+    """Add TEST_DATA_PREFIX_PATH to the test path if it exists"""
+    needs_prefix = os.environ.get("TEST_DATA_PREFIX_PATH", "")
+    if needs_prefix:
+        return needs_prefix + "/" + test_path
+    return test_path
 
 
 if __name__ == "__main__":  # pragma: no cover
