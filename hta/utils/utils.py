@@ -243,3 +243,23 @@ def normalize_gpu_stream_numbers(df: pd.DataFrame) -> None:
         lambda r: _normalize_stream_number(r["stream"]),
         axis=1,
     )
+
+
+def get_value_from_dict(d: object, key: str, default: object = None) -> object:
+    """Get the value of a key from a dictionary.
+
+    Args:
+        d (dict[str, object]): a dictionary of nested key-value pairs.
+        key (str): the key in a dot format to get the value, e.g., "a.b.c".
+        default (object, optional): the default value if the key is not found. Defaults to None.
+
+    Returns:
+        object: the value of the key or the default value
+    """
+    keys = key.split(".")
+    for k in keys:
+        if isinstance(d, dict) and k in d:
+            d = d[k]
+        else:
+            return default
+    return d
