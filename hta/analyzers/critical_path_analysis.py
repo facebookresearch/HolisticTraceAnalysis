@@ -1431,15 +1431,11 @@ class CPGraph(nx.DiGraph):
 
         Returns:
             (bool) True if critical path was calculated successfully
-
-        Raises:
-            ValueError: If the graph is not valid for critical path calculation
         """
         t0 = time.perf_counter()
         if not self._validate_graph():
-            raise ValueError(
-                "Graph is not valid, see prints above for help on debugging"
-            )
+            logging.error("Graph is not valid, see prints above for help on debugging")
+            return False
         try:
             self.critical_path_nodes = nx.dag_longest_path(self, weight="weight")
         except nx.NetworkXUnfeasible as err:
