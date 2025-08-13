@@ -251,7 +251,11 @@ class CriticalPathAnalysisTestCase(unittest.TestCase):
                 if "args" in e and e["ph"] == "f"
             )
             stats.edge_count_per_type = Counter(
-                e["cat"] for e in trace_events if "critical_path" in e.get("cat", "")
+                e["args"]["type"]
+                for e in trace_events
+                if "args" in e
+                and "type" in e["args"]
+                and "critical_path" in e["args"]["type"]
             )
 
         return stats
@@ -604,6 +608,104 @@ class CriticalPathAnalysisTestCase(unittest.TestCase):
             test()
 
             set_default_trace_parsing_backend(old_backend)
+
+
+class EndToEndTestCase(unittest.TestCase):
+    """Tests the input / final output (overlaid trace file) of critical path analysis.
+
+    These tests focus on easy, manual-human verification. Instead of checking individual
+    behaviors, the tests are set-up to allow the user to supply an input trace file +
+    expected output trace file, and asserts that the generated output matches
+    the expectation.
+
+    Each test case is comprised of a subdirectory that contains both an input trace file,
+    and an expected overlaid trace file according to the following structure:
+
+    /tests/data/critical_path/end_to_end
+        /<test_name>
+            /input/trace.json.gz
+            /output/overlaid_critical_path_trace.json.gz
+
+    To generate the output, you can run this test manually and save the generated file,
+    then open it in chrome://tracing to verify it looks correct. Once verified, you can
+    save the generated file in the output directory to be used in subsequent tests.
+    """
+
+    def setUp(self):
+
+        # If CRITICAL_PATH_DATA_DIR is set, use that as the base directory for test data.
+        # This allows the developer to pass in specific test cases that may contain
+        # sensitive traces that cannot be uploaded to the repo.
+        #
+        # If CRITIAL_PATH_DATA_DIR is not set, use the default test data in the repo.
+        self.base_data_dir = os.environ.get(
+            "CRITICAL_PATH_DATA_DIR",
+            str(
+                Path(__file__).parent.parent.joinpath(
+                    "tests/data/critical_path/end_to_end"
+                )
+            ),
+        )
+
+    def _assert_trace_files_equal(
+        self, trace_path_1: str, trace_path_2: str, tolerance: float = 0.01
+    ):
+        with gzip.open(trace_path_1, "r") as trace_1, gzip.open(
+            trace_path_2, "r"
+        ) as trace_2:
+            trace_1_critical_events = [
+                ev
+                for ev in json.load(trace_1)["traceEvents"]
+                if "args" in ev and "critical" in ev["args"]
+            ]
+            trace_2_critical_events = [
+                ev
+                for ev in json.load(trace_2)["traceEvents"]
+                if "args" in ev and "critical" in ev["args"]
+            ]
+
+            len_1 = len(trace_1_critical_events)
+            len_2 = len(trace_2_critical_events)
+
+            # Calculate percentage difference
+            if len_1 > 0 or len_2 > 0:
+                diff_percentage = abs(len_1 - len_2) / max(len_1, len_2)
+                self.assertLessEqual(
+                    diff_percentage,
+                    tolerance,
+                    f"Critical event count difference ({len_1} vs {len_2}) exceeds {tolerance*100}% tolerance",
+                )
+            else:
+                # Both are empty, they're equal
+                self.assertEqual(len_1, len_2)
+
+    def test_critical_path_end_to_end(self):
+        """Test that the critical path analysis generates the expected overlaid trace file."""
+        for test_dir in os.listdir(self.base_data_dir):
+            test_dir_path = os.path.join(self.base_data_dir, test_dir)
+            if not os.path.isdir(test_dir_path):
+                continue
+
+            critical_path_t = TraceAnalysis(
+                trace_dir=os.path.join(test_dir_path, "input")
+            )
+            rank = 0
+            cp_graph, success = critical_path_t.critical_path_analysis(
+                rank=rank,
+                annotation="",
+                instance_id=0,
+                data_load_events=["data_load"],
+            )
+            self.assertTrue(success)
+            with TemporaryDirectory(dir="/tmp") as tmpdir:
+                actual_output_file = critical_path_t.overlay_critical_path_analysis(
+                    rank, cp_graph, output_dir=tmpdir, only_show_critical_events=False
+                )
+
+                expected_output_file = os.path.join(
+                    test_dir_path, "output", "overlaid_critical_path_trace.json.gz"
+                )
+                self._assert_trace_files_equal(expected_output_file, actual_output_file)
 
 
 if __name__ == "__main__":

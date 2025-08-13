@@ -305,20 +305,25 @@ class TraceSymbolTable:
     # Use a number lower than -1 as a sentinel for missing symbols
     NULL: int = -128
 
-    def get_operator_or_cuda_runtime_query(self) -> str:
-        """Returns a SQL query you can pass to trace dataframe query()
+    def get_operator_or_cuda_runtime_mask(self, df: pd.DataFrame) -> pd.Series:
+        """Returns a boolean mask you can use with pandas dataframes
         to filter events that are CUDA runtime events or operators."""
         cpu_op_id = self.sym_index.get("cpu_op")
         cuda_runtime_id = self.sym_index.get("cuda_driver", self.NULL)
         cuda_driver_id = self.sym_index.get("cuda_runtime", self.NULL)
-        return f"(cat == {cpu_op_id} or cat == {cuda_runtime_id} or cat == {cuda_driver_id})"
+        return (
+            (df["cat"] == cpu_op_id)
+            | (df["cat"] == cuda_runtime_id)
+            | (df["cat"] == cuda_driver_id)
+        )
 
-    def get_runtime_launch_events_query(self) -> str:
-        """Returns a SQL query you can pass to trace dataframe query()
+    def get_runtime_launch_events_mask(self, df: pd.DataFrame) -> pd.Series:
+        """Returns a boolean mask you can use with pandas dataframes
         to filter events that are CUDA runtime kernel and memcpy launches."""
         cudaLaunchKernel_id = self.sym_index.get("cudaLaunchKernel", self.NULL)
         cudaLaunchKernelExC_id = self.sym_index.get("cudaLaunchKernelExC", self.NULL)
         cuLaunchKernel_id = self.sym_index.get("cuLaunchKernel", self.NULL)
+        cuLaunchKernelEx_id = self.sym_index.get("cuLaunchKernelEx", self.NULL)
         cudaMemcpyAsync_id = self.sym_index.get("cudaMemcpyAsync", self.NULL)
         cudaMemsetAsync_id = self.sym_index.get("cudaMemsetAsync", self.NULL)
         mtiaLaunchKernel_id = self.sym_index.get(
@@ -331,14 +336,33 @@ class TraceSymbolTable:
         rocmMemsetAsync_id = self.sym_index.get("hipMemsetAsync", self.NULL)
         rocmMemcpyAsync_id = self.sym_index.get("hipMemcpyAsync", self.NULL)
         rocmMemcpyWithStream_id = self.sym_index.get("hipMemcpyWithStream", self.NULL)
-        return (
-            f"((name == {cudaMemsetAsync_id}) or (name == {cudaMemcpyAsync_id}) or "
-            f"(name == {cudaLaunchKernel_id}) or (name == {cudaLaunchKernelExC_id}) or "
-            f"(name == {cuLaunchKernel_id}) or (name == {mtiaLaunchKernel_id}) or "
-            f"(name == {rocmLaunchKernel_id}) or (name == {rocmExtModuleLaunchKernel_id}) or "
-            f"(name == {rocmMemcpyAsync_id}) or (name == {rocmMemsetAsync_id}) or "
-            f"(name == {rocmMemcpyWithStream_id})) and (index_correlation > 0)"
+
+        # Create a mask for each event type and combine with OR
+        name_mask = (
+            (df["name"] == cudaMemsetAsync_id)
+            | (df["name"] == cudaMemcpyAsync_id)
+            | (df["name"] == cudaLaunchKernel_id)
+            | (df["name"] == cudaLaunchKernelExC_id)
+            | (df["name"] == cuLaunchKernel_id)
+            | (df["name"] == mtiaLaunchKernel_id)
+            | (df["name"] == rocmLaunchKernel_id)
+            | (df["name"] == rocmExtModuleLaunchKernel_id)
+            | (df["name"] == rocmMemcpyAsync_id)
+            | (df["name"] == rocmMemsetAsync_id)
+            | (df["name"] == rocmMemcpyWithStream_id)
+            | (df["name"] == cuLaunchKernelEx_id)
         )
+
+        # Add the index_correlation > 0 condition
+        return name_mask & (df["index_correlation"] > 0)
+
+    def get_events_mask(self, df: pd.DataFrame, events: list[str] | None) -> pd.Series:
+        """Returns a boolean mask you can use with pandas dataframes
+        to filter for events that are in the given events list (regex supported)."""
+        if events is None:
+            return pd.Series(False, index=df.index)
+        event_ids = self.find_matches(events)
+        return df["name"].isin(event_ids)
 
     def get_cpu_event_cat_ids(self) -> List[int]:
         return list(self.get_symbol_ids(CPU_EVENTS_CATEGORY_PATTERN).values())

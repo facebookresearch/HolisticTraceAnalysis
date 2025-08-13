@@ -207,7 +207,18 @@ def add_iteration(df: pd.DataFrame, symbol_table: TraceSymbolTable) -> pd.DataFr
         return iter
 
     # Update the trace iteration column
+    # should catch host side
     df.loc[df["stream"].lt(0), "iteration"] = df["ts"].apply(_get_profiler_step)
+
+    # get iteration for cpu ops that include stream data
+    # triton ops potentially arrive with stream = 0
+    if "cpu_op" in s_map.index:
+        cpu_op_id = s_map.at["cpu_op"]
+        # triton comes in with stream information but no index correlation
+        df.loc[df["stream"].eq(0) & df["cat"].eq(cpu_op_id), "iteration"] = df[
+            "ts"
+        ].apply(_get_profiler_step)
+
     df.loc[df["stream"].gt(0), "iteration"] = df["index_correlation"].apply(
         lambda x: df.loc[x, "iteration"] if x > 0 else -1
     )

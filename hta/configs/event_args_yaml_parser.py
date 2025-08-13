@@ -17,6 +17,13 @@ from hta.configs.default_values import AttributeSpec, EventArgs, ValueType, Yaml
 v1_0_0: YamlVersion = YamlVersion(1, 0, 0)
 
 
+ARGS_INDEX_FUNC: Callable[[Dict[str, AttributeSpec]], List[AttributeSpec]] = (
+    lambda available_args: [
+        available_args[k]
+        for k in ["index::external_id", "index::python_id", "index::python_parent_id"]
+        if k in available_args
+    ]
+)
 ARGS_INPUT_SHAPE_FUNC: Callable[[Dict[str, AttributeSpec]], List[AttributeSpec]] = (
     lambda available_args: [
         available_args[k]
@@ -92,7 +99,7 @@ ARGS_DEFAULT_FUNC: Callable[[Dict[str, AttributeSpec]], List[AttributeSpec]] = (
         + ARGS_SYNC_FUNC(available_args)
         + ARGS_INPUT_SHAPE_FUNC(available_args)
         + ARGS_MEMORY_FUNC(available_args)
-        + [available_args["index::external_id"]]
+        + ARGS_INDEX_FUNC(available_args)
     )
 )
 

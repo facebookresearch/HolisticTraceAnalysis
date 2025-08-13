@@ -685,6 +685,7 @@ class TraceAnalysis:
         rank: int,
         annotation: str,
         instance_id: Union[Optional[int], Tuple[int, int]],
+        data_load_events: Optional[List[str]] = None,
     ) -> Tuple[CPGraph, bool]:
         r"""
         Perform critical path analysis for trace events within a rank.
@@ -707,6 +708,10 @@ class TraceAnalysis:
                         Defaults to the first instance.
                 (Tuple(int, int)) - considers a range of annotation instances start to end,
                         inclusive of both start and end instance.
+            data_load_events (List[str]): List of events (regex) to be considered as
+                data load events. Different traces may use different annotations to
+                indicate data loading, so we allow the caller to pass in the list.
+
         Returns:
             Tuple[CPGraph, bool]
                 A tuple of CPGraph object and a success or fail boolean value.
@@ -725,7 +730,7 @@ class TraceAnalysis:
            Please see the documentation of this PR on how to enable CUDA sync events in the trace.
         """
         return CriticalPathAnalysis.critical_path_analysis(
-            self.t, rank, annotation, instance_id
+            self.t, rank, annotation, instance_id, data_load_events=data_load_events
         )
 
     def overlay_critical_path_analysis(

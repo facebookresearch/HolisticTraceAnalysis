@@ -4,7 +4,7 @@
 
 import functools
 import logging
-from collections import namedtuple
+from collections import defaultdict, deque, namedtuple
 from enum import Enum
 from time import perf_counter
 from typing import Callable, Dict, List, NamedTuple, Optional
@@ -461,6 +461,8 @@ class CallGraph:
         trace: Trace,
         ranks: Optional[List[int]] = None,
         filter_func: Optional[Filter] = None,
+        remapped_tids: Optional[Dict[int, Dict[int, int]]] = None,
+        pre_process_trace_data: bool = False,
     ) -> None:
         """Construct a CallGraph from a Trace object <trace_data>
 
@@ -468,18 +470,41 @@ class CallGraph:
             trace (Trace): the trace data used to construct this CallGraph object.
             ranks (List[int]) : filter the traces using the given set of ranks. Using all ranks if None.
             filter_func (Callable) : used to preprocess the trace events and filter events out. Please see filters in hta/common/trace_filter.py for details.
+            remapped_tids (Dict[Dict[int, int]]) : a dictionary that stores per-rank thread ID remappings.
+                For example: { 0: { 300: 400}} means that on rank 0, thread ID 300 is remapped to 400.
+                This is useful for training jobs, where the backward thread can typically be merged into the main trainer thread.
+            pre_process_trace_data (bool) : whether to pre-process the trace data. If True, the event duration from trace data will be trimmed to not exceed the duration of the parent event if exist.
         Raises:
             ValueError: the trace data is invalid.
         """
         self.trace_data: Trace = trace
         self.mapping: pd.DataFrame = pd.DataFrame()
         self.call_stacks: List[CallStackGraph] = []
+        self.pre_process_trace_data = pre_process_trace_data
 
         _ranks = [k for k in trace.get_all_traces()] if ranks is None else ranks
-        self._construct_call_graph(_ranks, filter_func)
+        self._construct_call_graph(_ranks, filter_func, remapped_tids)
+
+    def _remap_tids(
+        self, df: pd.DataFrame, remapped_tids: Dict[int, int]
+    ) -> pd.DataFrame:
+        """Returns a dataframe where threads IDs have been mapped to new values.
+
+        Args:
+            df (pd.DataFrame): dataframe to update
+            remapped_tids: a mapping from <old_tid, new_tid>
+
+        Returns:
+            The updated dataframe.
+        """
+        df["tid"] = df["tid"].map(remapped_tids).fillna(df["tid"])
+        return df
 
     def _construct_call_graph(
-        self, ranks: List[int], filter_func: Optional[Filter]
+        self,
+        ranks: List[int],
+        filter_func: Optional[Filter],
+        remapped_tids: Optional[Dict[int, Dict[int, int]]] = None,
     ) -> None:
         """
         Construct the call graph from the traces of a distributed training job.
@@ -487,18 +512,31 @@ class CallGraph:
         Args:
             ranks (List[int]) : a list ranks to select traces for construct the call stacks.
             filter_func (Callable) : used to preprocess the trace events and filter events out. Please see filters in hta/common/trace_filter.py for details.
+            remapped_tids (Dict[Dict[int, int]]) : a dictionary that stores per-rank thread ID remappings.
+                For example: { 0: { 300: 400}} means that on rank 0, thread ID 300 is remapped to 400.
+                This is useful for training jobs, where the backward thread can typically be merged into the main trainer thread.
         """
         call_stack_ids: List[CallStackIdentity] = []
         t0 = perf_counter()
         # construct a call stack graph for each thread/stream
         for rank in ranks:
-            df = self.trace_data.get_trace(rank)
+            if self.pre_process_trace_data:
+                self.constrain_child_time_withinin_parent(
+                    self.trace_data.get_trace(rank)
+                )
+            df = self.trace_data.get_trace(rank).copy()
+            if remapped_tids and rank in remapped_tids:
+                df = self._remap_tids(df, remapped_tids[rank])
             for (pid, tid), df_thread in df.groupby(["pid", "tid"]):
                 if df_thread.stream.gt(0).any():
                     # Filter out gpu annotations and sync events
                     df_thread = df_thread[df_thread["stream"].gt(0)]
                 csi = CallStackIdentity(rank, pid, tid)
-                csg = CallStackGraph(df_thread, csi, filter_func)
+                csg = CallStackGraph(
+                    df_thread,
+                    csi,
+                    filter_func,
+                )
                 self.call_stacks.append(csg)
                 call_stack_ids.append(csi)
         t1 = perf_counter()
@@ -580,3 +618,71 @@ class CallGraph:
         stack_nodes = np.array(leaf_nodes + parent_nodes + kernel_nodes)
         df_stack = df.reindex(stack_nodes)
         return df_stack
+
+    def constrain_child_time_withinin_parent(self, df: pd.DataFrame) -> None:
+        """Trim the trace events to not exceed the duration of the parent event if exist. The original DataFrame is modified in place.
+
+        Args:
+            df (pd.DataFrame): the trace data frame.
+        """
+        # Skip processing if dataframe is empty or missing required columns
+        if df.empty or "python_id" not in df.columns:
+            return
+
+        # Filter relevant rows to avoid unnecessary processing
+        mask = df["python_id"] > -1
+        if not mask.any():
+            return
+
+        # Create filtered view with only relevant rows
+        filtered_df = df[mask]
+
+        # Extract necessary columns as Series for faster access
+        python_ids = filtered_df["python_id"]
+        indices = filtered_df.index
+
+        # Create mapping from python_id to dataframe index
+        python_id_event_idx_map = dict(zip(python_ids, indices))
+
+        # Use defaultdict to avoid repetitive dict.get() operations
+        adj = defaultdict(list)
+        roots = []
+
+        # Extract parent IDs and thread IDs as Series for vectorized operations
+        if "python_parent_id" in filtered_df.columns:
+            parent_ids = filtered_df["python_parent_id"]
+            tids = filtered_df["tid"]
+
+            # Process each row to build adjacency list and calculate depths
+            for py_id, parent_id, tid in zip(python_ids, parent_ids, tids):
+                if parent_id > -1 and parent_id in python_id_event_idx_map:
+                    parent_idx = python_id_event_idx_map[parent_id]
+                    # Check if parent and child are in the same thread
+                    if df.at[parent_idx, "tid"] == tid:
+                        adj[parent_id].append(py_id)
+                    else:
+                        roots.append(py_id)
+                else:
+                    roots.append(py_id)
+        else:
+            # If no parent IDs, all are roots
+            roots = list(python_ids)
+
+        queue = deque(roots)
+        while queue:
+            cur_py_id = queue.popleft()
+            if cur_py_id in adj:
+                cur_id = python_id_event_idx_map[cur_py_id]
+                parent_ts = df.at[cur_id, "ts"]
+                parent_end = parent_ts + df.at[cur_id, "dur"]
+                for child_py_id in adj[cur_py_id]:
+                    child_id = python_id_event_idx_map[child_py_id]
+                    child_ts = df.at[child_id, "ts"]
+                    child_dur = df.at[child_id, "dur"]
+
+                    # Calculate new duration
+                    new_dur = min(child_dur, parent_end - child_ts)
+                    if new_dur != child_dur:
+                        df.at[child_id, "dur"] = new_dur
+
+                    queue.append(child_py_id)
