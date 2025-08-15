@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+import enum
+
 import gzip
 import io
 import json
@@ -29,12 +31,22 @@ from hta.configs.parser_config import (
     ParserBackend,
     ParserConfig,
 )
-from hta.utils.utils import normalize_gpu_stream_numbers
+from hta.utils.utils import get_value_from_dict, normalize_gpu_stream_numbers
 
 # from memory_profiler import profile
 
 
 MetaData = Dict[str, Any]
+
+
+# meta data keys
+class MetaDataKey(enum.Enum):
+    DEVICE_TYPE = "device_type"
+
+    def __str__(self) -> str:
+        return self.value
+
+
 _TRACE_PARSING_BACKEND: Optional[ParserBackend] = None
 
 IJSON_INSTRS = """ Install ijson with pip by using
@@ -46,6 +58,36 @@ Also please install yajl for optimal speed. You will need an installation of yaj
 
 Check the backend with: python3 -c "import ijson; print(ijson.backend)" output = yajl2_c
 For more details see https://pypi.org/project/ijson/#performance-tips, https://anaconda.org/anaconda/yajl, https://pypi.org/project/yajl/"""
+
+
+def infer_gpu_type(
+    metadata: Optional[MetaData] = None, name_set: dict[str, int] = {}
+) -> str:
+    """
+    Infer the GPU type from a trace metadata or it's symbold ID map (name_set).
+
+    Args:
+        df (pd.DataFrame): The trace events DataFrame.
+        metadata (Optional[MetaData]): The metadata of the trace.
+
+    Returns:
+        str: The inferred GPU type.
+    """
+    if metadata is not None:
+        backend = get_value_from_dict(metadata, "distributedInfo.backend", None)
+        if (
+            backend is not None
+            and isinstance(backend, str)
+            and "mtia:hccl" in str(backend)
+        ):
+            return "MTIA"
+    if "cudaLaunchKernel" in name_set:
+        return "NVIDIA GPU"
+    if "hipLaunchKernel" in name_set:
+        return "AMD GPU"
+    if "runFunction - job_prep_and_submit_for_execution" in name_set:
+        return "MTIA"
+    return "UNKNOWN GPU"
 
 
 def _auto_detect_parser_backend() -> ParserBackend:
@@ -241,6 +283,7 @@ def _compress_df(
     Args:
         df (pd.DataFrame): the input DataFrame
         cfg (Optional[ParserConfig]): an object to customize how to parse/compress the trace.
+        metadata (MetaData, Optional): the metadata of the trace.
 
     Returns:
         Tuple[pd.DataFrame, TraceSymbolTable]
@@ -461,6 +504,10 @@ def parse_trace_dataframe(
         )
     else:
         raise ValueError(f"unexpected or unsupported parser = {parser_backend}")
+
+    # infer device type in trace metadata
+    device_type = infer_gpu_type(meta, local_symbol_table.get_sym_id_map())
+    meta[str(MetaDataKey.DEVICE_TYPE)] = device_type
 
     t_end = time.perf_counter()
     logger.warning(

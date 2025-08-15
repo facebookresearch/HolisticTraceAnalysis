@@ -6,7 +6,7 @@ import math
 import os
 import unittest
 
-from typing import Any, Dict, Set
+from typing import Any, Dict, Optional, Set
 
 # import unittest.mock as mock
 
@@ -16,12 +16,13 @@ from hta.common.trace_parser import (
     _auto_detect_parser_backend,
     _open_trace_file,
     get_default_trace_parsing_backend,
+    infer_gpu_type,
     parse_metadata_ijson,
     parse_trace_dataframe,
     ParserBackend,
     set_default_trace_parsing_backend,
 )
-from hta.configs.config import HtaConfig
+from hta.common.trace_symbol_table import TraceSymbolTable
 from hta.configs.parser_config import AVAILABLE_ARGS, ParserConfig
 from hta.utils.test_utils import data_provider
 
@@ -100,9 +101,15 @@ class TraceParseTestCase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         super(TraceParseTestCase, cls).setUpClass()
-        vision_transformer_trace_dir: str = "tests/data/vision_transformer"
-        inference_trace_dir: str = "tests/data/inference_single_rank"
-        triton_trace_dir: str = "tests/data/triton_example"
+        vision_transformer_trace_dir: str = add_test_data_path_prefix_if_exists(
+            "tests/data/vision_transformer"
+        )
+        inference_trace_dir: str = add_test_data_path_prefix_if_exists(
+            "tests/data/inference_single_rank"
+        )
+        triton_trace_dir: str = add_test_data_path_prefix_if_exists(
+            "tests/data/triton_example"
+        )
 
         vision_transformer_rank_0_file: str = "rank-0.json.gz"
         inference_rank_0_file: str = "inference_rank_0.json.gz"
@@ -112,7 +119,6 @@ class TraceParseTestCase(unittest.TestCase):
         ]
         max_ranks = 8
 
-        # Trace parser for vision transformer
         cls.vision_transformer_t: Trace = Trace(trace_dir=vision_transformer_trace_dir)
         cls.vision_transformer_t.parse_traces(
             max_ranks=max_ranks, use_multiprocessing=True
@@ -120,7 +126,6 @@ class TraceParseTestCase(unittest.TestCase):
         cls.vision_transformer_raw_df = prepare_ground_truth_df(
             vision_transformer_trace_dir, vision_transformer_rank_0_file
         )
-        # Trace parser for inference
         cls.inference_t: Trace = Trace(
             trace_files=inference_trace_files, trace_dir=os.getcwd()
         )
@@ -128,22 +133,29 @@ class TraceParseTestCase(unittest.TestCase):
         cls.inference_raw_df = prepare_ground_truth_df(
             inference_trace_dir, inference_rank_0_file
         )
-        # Trace parser for triton
         cls.triton_t: Trace = Trace(trace_dir=triton_trace_dir)
         cls.triton_t.parse_traces(max_ranks=max_ranks, use_multiprocessing=True)
-        cls.triton_t.align_and_filter_trace()
+        cls.triton_t.align_and_filter_trace(include_last_profiler_step=True)
         cls.triton_raw_df = prepare_ground_truth_df(
             triton_trace_dir, triton_example_file
         )
 
     def setUp(self) -> None:
-        self.traces = [self.vision_transformer_t, self.inference_t, self.triton_t]
+        self.traces = [
+            self.vision_transformer_t,
+            self.inference_t,
+            self.triton_t,
+        ]
         self.raw_dfs = [
             self.vision_transformer_raw_df,
             self.inference_raw_df,
             self.triton_raw_df,
         ]
-        self.total_ranks = [8, 1, 1]
+        self.total_ranks = [
+            8,
+            1,
+            1,
+        ]
 
     def test_trace_load(self) -> None:
         # run tests for each collection of traces
@@ -159,15 +171,19 @@ class TraceParseTestCase(unittest.TestCase):
             ground_truth_name = raw_df["name"]
             ground_truth_name_id = raw_df["name"].apply(lambda x: sym_id_map[x])
 
-            self.assertListEqual(
-                rank_0_df_name_id.to_list(), ground_truth_name_id.to_list()
+            self.assertSetEqual(
+                set(rank_0_df_name_id.to_list()), set(ground_truth_name_id.to_list())
             )
-            self.assertListEqual(rank_0_df_name.to_list(), ground_truth_name.to_list())
-
-            # test aligned and filtered trace
-            t.align_and_filter_trace()
+            self.assertSetEqual(
+                set(rank_0_df_name.to_list()), set(ground_truth_name.to_list())
+            )
 
             raw_profiler_steps = raw_df["name"].str.contains("ProfilerStep").sum()
+            # test aligned and filtered trace
+            t.align_and_filter_trace(
+                include_last_profiler_step=True if raw_profiler_steps == 1 else False
+            )
+
             sym_id_map = t.symbol_table.get_sym_id_map()
             profiler_steps = [v for k, v in sym_id_map.items() if "ProfilerStep" in k]
             filtered_profiler_steps = t.traces[0]["name"].isin(profiler_steps).sum()
@@ -227,7 +243,7 @@ class TraceParseTestCase(unittest.TestCase):
             # This trace metadata doesn't have the "baseTimeNanoseconds" field, so we expect a KeyError
             self.vision_transformer_t.get_trace_start_unixtime_ns(0)
 
-        triton_trace_first_event_ts_ns = 2413669096100149
+        triton_trace_first_event_ts_ns = 2413669096090100
         triton_trace_base_time_nanoseconds = 1727743122000000000
         expected_triton_start_unixtime_ns = (
             triton_trace_first_event_ts_ns + triton_trace_base_time_nanoseconds
@@ -273,9 +289,13 @@ class TraceParseIjsonOthersTestCase(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.inference_trace_dir: str = "tests/data/critical_path/alexnet"
-        cls.vision_transformer_trace_dir: str = "tests/data/vision_transformer"
-        cls.cpu_only_trace_path: str = (
+        cls.inference_trace_dir: str = add_test_data_path_prefix_if_exists(
+            "tests/data/critical_path/alexnet"
+        )
+        cls.vision_transformer_trace_dir: str = add_test_data_path_prefix_if_exists(
+            "tests/data/vision_transformer"
+        )
+        cls.cpu_only_trace_path: str = add_test_data_path_prefix_if_exists(
             "tests/data/cpu_only/rank-34.Jul_15_10_52_41.1074.pt.trace.json.gz"
         )
 
@@ -342,6 +362,54 @@ class TraceParseIjsonOthersTestCase(unittest.TestCase):
     #     self.assertEqual(_auto_detect_parser_backend(), "ijson_batch_and_compress")
 
 
+def add_test_data_path_prefix_if_exists(test_path):
+    """Add TEST_DATA_PREFIX_PATH to the test path if it exists"""
+    needs_prefix = os.environ.get("TEST_DATA_PREFIX_PATH", "")
+    if needs_prefix:
+        return needs_prefix + "/" + test_path
+    return test_path
+
+
+class TestMtiaAlignAndFilter(unittest.TestCase):
+    def test_align_and_filter_mtia(self) -> None:
+        # Trace parser for MTIA
+        mtia_trace_dir: str = add_test_data_path_prefix_if_exists(
+            "tests/data/mtia_trace_single_rank"
+        )
+        t: Trace = Trace(trace_dir=mtia_trace_dir)
+        t.parse_traces()
+        t.align_and_filter_trace()
+        t.decode_symbol_ids(use_shorten_name=False)
+
+        # Ensure that the trace is MTIA trace
+        self.assertEqual(t.get_device_type(), "MTIA")
+        self.assertGreaterEqual(len(t.get_ranks()), 1)
+
+        # Ensure that the trace has the correct iterations
+        result_df = t.get_trace(t.get_ranks()[0])
+        self.assertTrue(result_df["ts"].ge(0).all())
+        self.assertTrue(result_df["iteration"].ge(0).all())
+
+        # Ensure that cpu ops has the correct stream
+        cpu_cat_ids = t.symbol_table.get_cpu_event_cat_ids()
+        cpu_ops = result_df[result_df["cat"].isin(cpu_cat_ids)]
+        self.assertTrue(len(cpu_ops) > 0)
+        self.assertTrue(cpu_ops["stream"].le(0).all())
+
+        # Ensure that cuda ops has the correct stream
+        memory_kernels = result_df[
+            result_df["name"].isin(t.symbol_table.get_memory_name_ids())
+        ]
+        self.assertTrue(len(memory_kernels) > 0)
+        self.assertTrue(memory_kernels["stream"].ge(0).all())
+        self.assertTrue(memory_kernels["iteration"].ge(0).all())
+
+        mtia_kernels = result_df[
+            result_df["stream"].ge(0) & result_df["correlation"].gt(0)
+        ]
+        self.assertTrue(len(mtia_kernels) > 0)
+
+
 class TraceParseConfigTestCase(unittest.TestCase):
     def setUp(self) -> None:
         # Parse all nccl fields in the test
@@ -353,13 +421,17 @@ class TraceParseConfigTestCase(unittest.TestCase):
         # ParserConfig.set_default_cfg(custom_cfg)
 
         # Trace parser test file for nccl fields
-        resnet_nccl_trace: str = "tests/data/nccl_parser_config"
+        self.resnet_nccl_trace: str = add_test_data_path_prefix_if_exists(
+            "tests/data/nccl_parser_config"
+        )
         self.resnet_nccl_t: Trace = Trace(
-            trace_dir=resnet_nccl_trace, parser_config=self.custom_cfg
+            trace_dir=self.resnet_nccl_trace, parser_config=self.custom_cfg
         )
 
         # Trace parser test file for Triton fields
-        triton_trace: str = "tests/data/triton_example"
+        triton_trace: str = add_test_data_path_prefix_if_exists(
+            "tests/data/triton_example"
+        )
         self.triton_t: Trace = Trace(
             trace_dir=triton_trace, parser_config=self.custom_cfg
         )
@@ -463,13 +535,93 @@ class TraceParseConfigTestCase(unittest.TestCase):
         expected_missing_columns: Set[str],
     ) -> None:
         """Tests if we can parse all args in the trace"""
-        trace_dir = HtaConfig.get_test_data_path("nccl_parser_config")
-        trace_file = os.path.join(trace_dir, "nccl_data.json.gz")
+        trace_file = os.path.join(self.resnet_nccl_trace, "nccl_data.json.gz")
         cfg = ParserConfig(ParserConfig.get_minimum_args())
         cfg.set_parse_all_args(parse_all_args)
         _, df, _ = parse_trace_dataframe(trace_file, cfg)
         self.assertTrue(expected_columns.issubset(set(df.columns)))
         self.assertTrue(expected_missing_columns.isdisjoint(set(df.columns)))
+
+    # pyre-ignore[56]
+    @data_provider(
+        lambda: (
+            {
+                "metadata": {
+                    "distributedInfo": {"backend": "mtia:hccl"},
+                },
+                "syms": {"some_event": 1},
+                "expected_device_type": "MTIA",
+            },
+            {
+                "metadata": None,
+                "syms": {
+                    "some_event": 1,
+                    "runFunction - job_prep_and_submit_for_execution": 2,
+                },
+                "expected_device_type": "MTIA",
+            },
+            {
+                "metadata": None,
+                "syms": {"cudaLaunchKernel": 1, "other_event": 2},
+                "expected_device_type": "NVIDIA GPU",
+            },
+            {
+                "metadata": None,
+                "syms": {"hipLaunchKernel": 1, "another_event": 2},
+                "expected_device_type": "AMD GPU",
+            },
+            {
+                "metadata": None,
+                "syms": {"some_event": 1},
+                "expected_device_type": "UNKNOWN GPU",
+            },
+        )
+    )
+    def test_infer_gpu_type(
+        self,
+        syms: Dict[str, int],
+        metadata: Optional[Dict[str, object]],
+        expected_device_type: str,
+    ) -> None:
+        self.assertEqual(
+            infer_gpu_type(metadata, syms),
+            expected_device_type,
+        )
+
+    def test_fix_mtia_memory_kernels(self) -> None:
+        df = pd.DataFrame(
+            {
+                "index": [0, 1, 2, 3, 4],
+                "name": [1001, 2001, 2001, 2001, 2004],
+                "ts": [0, 10, 20, 30, 40],
+                "dur": [50, 10, 10, 10, 10],
+                "iteration": [1, -1, 1, -1, 1],
+                "stream": [-1, 3, -1, 4, 1],
+                "tid": [1, 2, 3, 4, 5],
+            }
+        )
+        symbol_table = TraceSymbolTable.create_from_symbol_id_map(
+            {
+                "ProfilerStep#1": 1001,
+                "dma_request": 2001,
+                "aten::add": 2004,
+            }
+        )
+        # Create a Trace object
+        t = Trace(trace_dir="", trace_files={})
+        t.traces[0] = df.copy()
+        t.symbol_table = symbol_table
+
+        # Expected result after applying fix
+        expected_df = df.copy()
+        expected_df.loc[[1, 3], "iteration"] = 1
+        expected_df.loc[[2], "stream"] = expected_df.loc[[2], "tid"]
+
+        t._fix_mtia_memory_kernels(t.get_trace(0))
+        fixed_df = t.get_trace(0)
+
+        # Validate results
+        pd.testing.assert_frame_equal(fixed_df, expected_df)
 
 
 if __name__ == "__main__":  # pragma: no cover

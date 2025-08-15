@@ -569,7 +569,10 @@ class CallGraph:
                     }
                 )
             df = self.trace_data.get_trace(rank)
-            if not hta_options.disable_call_graph_depth():
+            if (
+                not hta_options.disable_call_graph_depth()
+                and call_stack_indices.size > 0
+            ):
                 depth = pd.concat(
                     [self.call_stacks[idx].get_depth() for idx in call_stack_indices]
                 )
