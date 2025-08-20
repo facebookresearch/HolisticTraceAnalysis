@@ -85,6 +85,7 @@ class ParserConfig:
         parse_all_args: bool = False,
         selected_arg_keys: Optional[List[str]] = None,
         skip_event_types: Optional[Set[str]] = None,
+        convert_ts_to_integer: bool = True,
     ) -> None:
         """Initialize the ParserConfig object."""
         # Note remember to update set_default_cfg() when adding new fields.
@@ -109,6 +110,9 @@ class ParserConfig:
 
         # Json batched backend specific configs
         self.batch_size = 1000
+
+        # config to convert ts to nearest integer
+        self.convert_ts_to_integer = convert_ts_to_integer
 
     def clone(self) -> "ParserConfig":
         return copy.deepcopy(self)
