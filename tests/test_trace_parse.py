@@ -341,6 +341,7 @@ class TraceParseIjsonOthersTestCase(unittest.TestCase):
             self.assertEqual(
                 trace_meta["deviceProperties"][0], exp_meta["deviceProperties"][0]
             )
+        self.assertTrue("traceName" in trace_meta)
 
     def test_ijson_metadata_reader_basic(self):
         trace_file_path = self.vision_transformer_trace_dir + "/rank-0.json.gz"

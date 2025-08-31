@@ -602,8 +602,8 @@ def parse_metadata_ijson(fh: io.BufferedIOBase) -> MetaData:
     for prefix, event, value in trace_parser:
         logger.debug(prefix, event, value)
         if event == "map_key" and value == "traceEvents":
-            # done ok bye!
-            return meta
+            # could be some more metadata after traceEvents, so we skip "traceEvents" and carry on
+            continue
 
         # Handle a nested map like "distributedInfo"
         if prefix == cur_key and event == "start_map":
@@ -613,13 +613,18 @@ def parse_metadata_ijson(fh: io.BufferedIOBase) -> MetaData:
 
         # Handle a nested array map like "deviceProperties"
         if prefix == cur_key and event == "start_array":
-            meta[cur_key] = []
             # For deviceProperties this should be start_map or end_array
             _, _event_, _ = next(trace_parser)
-            assert _event_ in [
+            if _event_ not in [
                 "start_map",
                 "end_array",
-            ], f"We only support an array with map elements like deviceProperties, (prefix, event, value) = ({prefix}, {event}, {value})"
+            ]:
+                logger.warning(
+                    f"Skipping {prefix}... We only support an array with map elements like deviceProperties, (prefix, event, value) = ({prefix}, {event}, {value})"
+                )
+                continue
+
+            meta[cur_key] = []
             while _event_ != "end_array":
                 nested_map = {}
                 nested_map = handle_nested_map(trace_parser, "", nested_map)
