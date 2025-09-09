@@ -615,16 +615,15 @@ def parse_metadata_ijson(fh: io.BufferedIOBase) -> MetaData:
         if prefix == cur_key and event == "start_array":
             meta[cur_key] = []
             # For deviceProperties this should be start_map or end_array
-            _, _event_, _ = next(trace_parser)
-            assert _event_ in [
-                "start_map",
-                "end_array",
-            ], f"We only support an array with map elements like deviceProperties, (prefix, event, value) = ({prefix}, {event}, {value})"
+            _, _event_, _event_value = next(trace_parser)
             while _event_ != "end_array":
-                nested_map = {}
-                nested_map = handle_nested_map(trace_parser, "", nested_map)
-                meta[cur_key].append(nested_map)
-                _, _event_, _ = next(trace_parser)
+                if _event_ == "start_map":
+                    nested_map = {}
+                    nested_map = handle_nested_map(trace_parser, "", nested_map)
+                    meta[cur_key].append(nested_map)
+                else:
+                    meta[cur_key].append((_event_, _event_value))
+                _, _event_, _event_value = next(trace_parser)
             continue
 
         # Handle top level simple key values
