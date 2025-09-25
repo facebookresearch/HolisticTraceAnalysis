@@ -3,13 +3,17 @@
 # LICENSE file in the root directory of this source tree.
 
 import multiprocessing as mp
-import re
 from enum import Enum
 from pathlib import Path
 from typing import Any, List, Tuple
 
 import pandas as pd
 import psutil
+from hta.common.types import (
+    CommunicateKernelGroupingPattern,
+    ComputeKernelGroupingPattern,
+    MemoryKernelGroupingPattern,
+)
 from hta.configs.config import logger
 
 
@@ -53,9 +57,6 @@ def normalize_path(path: str) -> str:
     return normalized_path
 
 
-NCCL_KERNEL_RE = re.compile(r"^nccl.*Kernel")
-
-
 def is_comm_kernel(name: str) -> bool:
     """
     Check if a given GPU kernel is a communication kernel.
@@ -66,10 +67,7 @@ def is_comm_kernel(name: str) -> bool:
     Returns:
         A boolean indicating if the kernel is a communication kernel.
     """
-    return NCCL_KERNEL_RE.match(name) is not None
-
-
-MEMORY_KERNEL_RE = re.compile(r"(^Memcpy)|(^Memset)|(^dma)")
+    return CommunicateKernelGroupingPattern.match(name)
 
 
 def is_memory_kernel(name: str) -> bool:
@@ -82,10 +80,7 @@ def is_memory_kernel(name: str) -> bool:
     Returns:
         A boolean indicating if the kernel is an IO kernel.
     """
-    return MEMORY_KERNEL_RE.match(name) is not None
-
-
-NCCL_COMPUTE_KERNEL_RE = re.compile(r"(^nccl.*Kernel)|(.*(Memcpy)|(Memset))|(.*Sync)")
+    return MemoryKernelGroupingPattern.match(name)
 
 
 def is_compute_kernel(name: str) -> bool:
@@ -96,7 +91,7 @@ def is_compute_kernel(name: str) -> bool:
     Returns:
         A boolean indicating if the kernel is a computation kernel.
     """
-    return not NCCL_COMPUTE_KERNEL_RE.match(name)
+    return ComputeKernelGroupingPattern.match(name)
 
 
 def is_computer_kernel(name: str) -> bool:
@@ -151,7 +146,7 @@ def shorten_name(name: str) -> str:
     This utility removes the functional arguments, template arguments, and return values
     to make the name easy to understand.
     """
-    if MEMORY_KERNEL_RE.match(name) is not None:
+    if is_memory_kernel(name):
         return name
 
     if name.find("<") < 0 and name.find("(") < 0:
