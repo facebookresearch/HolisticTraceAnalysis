@@ -119,14 +119,14 @@ MTIAMemoryKernelGroupingPattern = GroupingPattern(
 )
 
 CommunicateKernelGroupingPattern = GroupingPattern(
-    pattern=re.compile(r"(^nccl)"),
+    pattern=re.compile(r"(^nccl.*)|(^hip)|(^hccl)"),
     inverse_match=False,
     group_name="Communicate",
 )
 
 ComputeKernelGroupingPattern = GroupingPattern(
     pattern=re.compile(
-        r"(^nccl)|(.*Memcpy)|(.*Memset)|(.*dma)|(^.*Sync)|(cuda.*LaunchKernel)|(^runFunction)"
+        r"(^nccl)|(.*Memcpy)|(.*Memset)|(.*dma)|(^.*Sync)|(^Stream Wait Event)|(cuda.*LaunchKernel)|(^runFunction)|(^hip)|(^job_exe)|(^packet)|(^pe_exe)|(^cpum_exe_subgraph)|(^hccl)|(^collective_subgraph_execution)"
     ),
     inverse_match=True,
     group_name="Compute",
