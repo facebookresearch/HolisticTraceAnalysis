@@ -5,7 +5,7 @@
 import multiprocessing as mp
 from enum import Enum
 from pathlib import Path
-from typing import Any, List, Tuple
+from typing import List, Tuple
 
 import pandas as pd
 import psutil
@@ -228,16 +228,7 @@ def normalize_gpu_stream_numbers(df: pd.DataFrame) -> None:
         logger.error("No stream column found in the trace.")
         return
 
-    def _normalize_stream_number(stream_number: Any) -> int:
-        try:
-            return int(stream_number)
-        except ValueError:
-            return -1
-
-    df["stream"] = df.apply(
-        lambda r: _normalize_stream_number(r["stream"]),
-        axis=1,
-    )
+    df["stream"] = pd.to_numeric(df["stream"], errors="coerce").fillna(-1).astype(int)
 
 
 def get_value_from_dict(d: object, key: str, default: object = None) -> object:
