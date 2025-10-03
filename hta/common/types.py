@@ -119,7 +119,7 @@ MTIAMemoryKernelGroupingPattern = GroupingPattern(
 )
 
 CommunicateKernelGroupingPattern = GroupingPattern(
-    pattern=re.compile(r"(^nccl.*)|(^hip)|(^hccl)"),
+    pattern=re.compile(r"(^nccl.*)|(^hip)|(^hccl)|(.*ncclKernel.*)"),
     inverse_match=False,
     group_name="Communicate",
 )
