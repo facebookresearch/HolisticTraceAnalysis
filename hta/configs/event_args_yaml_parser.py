@@ -82,6 +82,7 @@ ARGS_DEFAULT_FUNC: Callable[[Dict[str, AttributeSpec]], List[AttributeSpec]] = (
         + ARGS_SYNC_FUNC(available_args)
         + ARGS_INPUT_SHAPE_FUNC(available_args)
         + ARGS_INDEX_FUNC(available_args)
+        + ARGS_COMMUNICATION_FUNC(available_args)
     )
 )
 

@@ -1178,18 +1178,14 @@ class CPGraph(nx.DiGraph):
         ):
             # Join the event sync event with the index of the kernel/memcpy launch
             # that is was syncing on.
-            gpu_kernels = (
-                pd.merge(
-                    gpu_kernels,
-                    cuda_record_calls[["correlation", "index_previous_launch"]],
-                    left_on="wait_on_cuda_event_record_corr_id",
-                    right_on="correlation",
-                    how="left",
-                    suffixes=("", "_cuda_record"),
-                )
-                .fillna(-1)
-                .astype(int)
-            )
+            gpu_kernels = pd.merge(
+                gpu_kernels,
+                cuda_record_calls[["correlation", "index_previous_launch"]],
+                left_on="wait_on_cuda_event_record_corr_id",
+                right_on="correlation",
+                how="left",
+                suffixes=("", "_cuda_record"),
+            ).fillna(-1)
             # Note convert NAN to -1 and then turn all records to int
 
         # Sort kernels by start timestamp but use end time_stamp for sync events.
