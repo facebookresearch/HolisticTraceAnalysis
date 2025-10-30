@@ -155,7 +155,7 @@ class BreakdownAnalysis:
 
             for kernel in kernel_per_rank:
                 specs = []
-                for count, rank in enumerate(kernel_per_rank[kernel]):
+                for count, _ in enumerate(kernel_per_rank[kernel]):
                     if count % 2 == 0:
                         specs.append([{"type": "domain"}, {"type": "domain"}])
                 fig = make_subplots(
@@ -436,7 +436,7 @@ class BreakdownAnalysis:
 
         if visualize:  # pragma: no cover
             specs = []
-            for count, rank in enumerate(kernel_per_rank):
+            for count, _ in enumerate(kernel_per_rank):
                 if count % 2 == 0:
                     specs.append([{"type": "domain"}, {"type": "domain"}])
             fig = make_subplots(
