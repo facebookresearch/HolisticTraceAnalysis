@@ -377,6 +377,8 @@ def round_down_time_stamps(df: pd.DataFrame) -> None:
     df["ts"] = df[~df["ts"].isnull()]["ts"].apply(lambda x: math.ceil(x))
     df["end"] = df[~df["end"].isnull()]["end"].apply(lambda x: math.floor(x))
     df["dur"] = df["end"] - df["ts"]
+    # Fix negative durations that can occur due to rounding very small time intervals.
+    df.loc[df["dur"] < 0, "dur"] = 0
 
 
 # @profile
