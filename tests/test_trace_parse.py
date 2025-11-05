@@ -20,6 +20,7 @@ from hta.common.trace_parser import (
     parse_metadata_ijson,
     parse_trace_dataframe,
     ParserBackend,
+    round_down_time_stamps,
     set_default_trace_parsing_backend,
 )
 from hta.common.trace_symbol_table import TraceSymbolTable
@@ -622,6 +623,26 @@ class TraceParseConfigTestCase(unittest.TestCase):
 
         # Validate results
         pd.testing.assert_frame_equal(fixed_df, expected_df)
+
+    def test_round_down_time_stamps(self) -> None:
+        """Test that round_down_time_stamps never produces negative durations."""
+
+        # Test case 1: Very small durations that could become negative after rounding.
+        test_data = {
+            "ts": [100.3, 200.7, 300.1, 400.9],
+            "dur": [0.3, 0.2, 0.8, 0.1],
+        }
+        df = pd.DataFrame(test_data)
+        df["ts"] = df["ts"].astype("float64")
+        df["dur"] = df["dur"].astype("float64")
+
+        round_down_time_stamps(df)
+
+        # Assert no negative durations.
+        self.assertTrue(
+            (df["dur"] >= 0).all(),
+            "Found negative duration times which should not occur after rounding down timestamps!",
+        )
 
 
 if __name__ == "__main__":  # pragma: no cover
