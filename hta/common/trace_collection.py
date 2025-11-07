@@ -338,12 +338,12 @@ def add_fwd_bwd_links(df: pd.DataFrame) -> None:
     logger.debug(f"Time taken to add fwd_bwd links: {t1 - t0 :.2f} seconds")
 
 
-class Trace:
+class TraceCollection:
     """
     A container for the traces collected for a distributed ML training job.
 
     An ML training job can have multiple trace collections. Each of those trace collections maps to
-    one Trace object.
+    one TraceCollection object.
 
 
     Attributes:
@@ -364,7 +364,7 @@ class Trace:
         parser_config: Optional[ParserConfig] = None,
     ) -> None:
         """
-        The constructor of a Trace object.
+        The constructor of a TraceCollection object.
         Args:
             trace_files: Optional[Union[List[str], Dict[int, str]]]: either a list of trace file names or a map from rank to trace file names.
                 When a list is provided, HTA will infer the ranks by reading the trace file metadata.
@@ -629,7 +629,7 @@ class Trace:
             The DataFrame for the given rank.
 
         Raises:
-            ValueError when this Trace object doesn't have trace for the given rank.
+            ValueError when this TraceCollection object doesn't have trace for the given rank.
         """
         if rank not in self.traces:
             logger.error(f"get_rank_trace - no trace for rank {rank}")
@@ -656,7 +656,7 @@ class Trace:
             The raw content of the trace file of the given rank.
 
         Raises:
-            ValueError when this Trace object doesn't have trace for the given rank.
+            ValueError when this TraceCollection object doesn't have trace for the given rank.
         """
         if rank not in self.trace_files:
             logger.error(f"get_rank_trace - no trace for rank {rank}")
@@ -956,7 +956,7 @@ class Trace:
 
         Returns: Unixtime (nanoseconds) of trace start (int)
 
-        Raises: ValueError when this Trace object doesn't have trace for the given rank.
+        Raises: ValueError when this TraceCollection object doesn't have trace for the given rank.
         """
         if rank not in self.traces:
             err_msg: str = f"No trace found for rank {rank}"

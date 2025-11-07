@@ -13,7 +13,7 @@ from hta.utils.utils import get_kernel_type, KernelType, merge_kernel_intervals
 # import statement used without the "if TYPE_CHECKING" guard will cause a circular
 # dependency with trace_analysis.py causing mypy to fail and should not be removed.
 if TYPE_CHECKING:
-    from hta.trace import Trace
+    from hta.common.trace_collection import TraceCollection
 
 
 class CommunicationAnalysis:
@@ -21,7 +21,9 @@ class CommunicationAnalysis:
         pass
 
     @classmethod
-    def get_comm_comp_overlap(cls, t: "Trace", visualize: bool = True) -> pd.DataFrame:
+    def get_comm_comp_overlap(
+        cls, t: "TraceCollection", visualize: bool = True
+    ) -> pd.DataFrame:
         """
         Communication analysis implementation. See `get_comm_comp_overlap` in `trace_analysis.py` for details.
         """

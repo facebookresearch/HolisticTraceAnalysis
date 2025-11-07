@@ -27,7 +27,7 @@ from hta.analyzers.trace_counters import TraceCounters
 # from hta.common.trace_call_graph import CallGraph, CallStackGraph, DeviceType
 from hta.common.call_stack import CallGraph, CallStackGraph, DeviceType
 
-from hta.common.trace import Trace
+from hta.common.trace_collection import TraceCollection
 from hta.common.trace_symbol_table import decode_symbol_id_to_symbol_name
 from hta.configs.config import logger
 from hta.utils.utils import is_comm_kernel
@@ -185,8 +185,8 @@ class CPGraph(nx.DiGraph):
 
     def __init__(
         self,
-        t: Optional["Trace"],
-        t_full: "Trace",
+        t: Optional["TraceCollection"],
+        t_full: "TraceCollection",
         rank: int,
         G=None,
         data_load_events=None,
@@ -200,8 +200,8 @@ class CPGraph(nx.DiGraph):
         For (2) the networkx.DiGraph object G is utilized, see restore_cpgraph() function in this file.
 
         Args:
-            t (Trace): Clipped trace object focussing on region of interest.
-            t_full (Trace): Full Trace object.
+            t (TraceCollection): Clipped collection of traces focussing on region of interest.
+            t_full (TraceCollection): Full TraceCollection object.
             rank (int): Rank to perform analysis on.
             G (networkx.DiGraph): An optional DiGraph object.
             data_load_events (List[str]): List of events (regex) to be considered as
@@ -1699,7 +1699,7 @@ class CPGraph(nx.DiGraph):
         return zip_filename
 
 
-def restore_cpgraph(zip_filename: str, t_full: "Trace", rank: int) -> CPGraph:
+def restore_cpgraph(zip_filename: str, t_full: "TraceCollection", rank: int) -> CPGraph:
     """Restores the critical path graph object from a zip file.
     The graph will already be constructed in this case. You can
     however run critical_path() again and modify the graph etc.
@@ -1757,7 +1757,7 @@ class CriticalPathAnalysis:
     @classmethod
     def critical_path_analysis(
         cls,
-        t: "Trace",
+        t: "TraceCollection",
         rank: int,
         annotation: str,
         instance_id: Union[Optional[int], Tuple[int, int]],
@@ -1772,7 +1772,7 @@ class CriticalPathAnalysis:
         by passing annotation='ProfilerStep'.
 
         Args:
-            t (Trace): Input trace data structure.
+            t (TraceCollection): Input collection of traces data structure.
             rank (int): rank to analyze for the critical path.
             annotation (str): a trace annotation to limit the analysis to,
                 for example "ProfilerStep" would match all annotations that
@@ -1871,7 +1871,7 @@ class CriticalPathAnalysis:
         logger.info(f"Clipped dataframe has {len(clipped_df)} events")
 
         # XXX This is a bit hacky but CallGraph does not really support a way
-        # to specify a dataframe, just supports passing Trace object
+        # to specify a dataframe, just supports passing TraceCollection object
         t_copy = deepcopy(t)
         t_copy.traces[rank] = clipped_df
         t1 = time.perf_counter()
@@ -1893,7 +1893,7 @@ class CriticalPathAnalysis:
     @classmethod
     def overlay_critical_path_analysis(
         cls,
-        t: "Trace",
+        t: "TraceCollection",
         rank: int,
         critical_path_graph: CPGraph,
         output_dir: str,
@@ -1906,7 +1906,7 @@ class CriticalPathAnalysis:
         for visualization.
 
         Args:
-            t (Trace): Input trace data structure.
+            t (TraceCollection): Input collection of traces data structure.
             rank (int): rank to generate the time series for.
             critical_path_graph: Critical Path Graph object generated previously.
             output_dir (str): Output directory to store overlaid trace.
@@ -1972,7 +1972,7 @@ class CriticalPathAnalysis:
 
             is_critical = e in critical_path_graph.critical_path_edges_set
 
-            return Trace.flow_event(
+            return TraceCollection.flow_event(
                 id=flow_id,
                 pid=event["pid"],
                 tid=event["tid"],

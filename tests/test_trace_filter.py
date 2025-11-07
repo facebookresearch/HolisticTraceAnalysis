@@ -9,7 +9,7 @@ import hta
 import numpy as np
 
 import pandas as pd
-from hta.common.trace import Trace
+from hta.common.trace_collection import TraceCollection
 from hta.common.trace_filter import (
     CompositeFilter,
     CPUOperatorFilter,
@@ -27,7 +27,7 @@ from hta.common.trace_stack_filter import CombinedOperatorFilter, UnderOperatorF
 class TestTraceFilters(unittest.TestCase):
     base_data_dir = str(Path(hta.__file__).parent.parent.joinpath("tests/data"))
     trace_dir: str = os.path.join(base_data_dir, "trace_filter")
-    htaTrace: Trace = Trace(trace_dir=trace_dir)
+    htaTrace: TraceCollection = TraceCollection(trace_dir=trace_dir)
     htaTrace.parse_traces()
 
     def setUp(self):
@@ -307,7 +307,7 @@ class TestTraceFiltersSyncEvents(unittest.TestCase):
 
     base_data_dir = str(Path(hta.__file__).parent.parent.joinpath("tests/data"))
     trace_dir: str = os.path.join(base_data_dir, "critical_path/cuda_event_sync")
-    htaTrace: Trace = Trace(trace_dir=trace_dir)
+    htaTrace: TraceCollection = TraceCollection(trace_dir=trace_dir)
     htaTrace.parse_traces()
 
     def setUp(self):

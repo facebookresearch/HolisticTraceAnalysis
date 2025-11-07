@@ -15,7 +15,7 @@ from hta.configs.config import logger
 # import statement used without the "if TYPE_CHECKING" guard will cause a circular
 # dependency with trace_analysis.py causing mypy to fail and should not be removed.
 if TYPE_CHECKING:
-    from hta.common.trace import Trace
+    from hta.common.trace_collection import TraceCollection
 
 
 class StragglerAnalysis:
@@ -23,7 +23,7 @@ class StragglerAnalysis:
         pass
 
     @classmethod
-    def get_profiler_steps(cls, t: "Trace") -> List[int]:
+    def get_profiler_steps(cls, t: "TraceCollection") -> List[int]:
         """
         Profiler steps implementation. Returns the list of profiler steps.
         """
@@ -34,7 +34,7 @@ class StragglerAnalysis:
     @classmethod
     def get_potential_stragglers(
         cls,
-        t: "Trace",
+        t: "TraceCollection",
         profiler_steps: Optional[List[int]] = None,
         num_candidates: int = 2,
         visualize: bool = False,

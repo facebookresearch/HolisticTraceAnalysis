@@ -21,8 +21,8 @@ from hta.common.timeline import (
     Timeline,
     TimelinePlotSetting,
 )
-from hta.common.trace import Trace
 from hta.common.trace_call_graph import CallGraph
+from hta.common.trace_collection import TraceCollection
 from hta.common.trace_filter import CPUOperatorFilter, GPUKernelFilter
 from hta.common.trace_symbol_table import TraceSymbolTable
 
@@ -32,7 +32,7 @@ _MODULE = "hta.common.timeline"
 class TestTimelineAnalysis(unittest.TestCase):
     base_data_dir = str(Path(hta.__file__).parent.parent.joinpath("tests/data"))
     trace_path: str = os.path.join(base_data_dir, "timeline_analysis")
-    t = Trace(trace_dir=trace_path)
+    t = TraceCollection(trace_dir=trace_path)
     t.parse_traces()
     t.decode_symbol_ids(use_shorten_name=False)
     cg = CallGraph(t, ranks=[0])

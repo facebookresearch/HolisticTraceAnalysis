@@ -11,7 +11,7 @@ from typing import Any, Dict, Optional, Set
 # import unittest.mock as mock
 
 import pandas as pd
-from hta.common.trace import parse_trace_dict, Trace
+from hta.common.trace_collection import parse_trace_dict, TraceCollection
 from hta.common.trace_parser import (
     _auto_detect_parser_backend,
     _open_trace_file,
@@ -91,11 +91,11 @@ def prepare_ground_truth_df(trace_dir, rank_0_file) -> pd.DataFrame:
 
 
 class TraceParseTestCase(unittest.TestCase):
-    vision_transformer_t: Trace
+    vision_transformer_t: TraceCollection
     vision_transformer_raw_df: pd.DataFrame
-    inference_t: Trace
+    inference_t: TraceCollection
     inference_raw_df: pd.DataFrame
-    triton_t: Trace
+    triton_t: TraceCollection
     triton_raw_df: pd.DataFrame
 
     @classmethod
@@ -119,21 +119,23 @@ class TraceParseTestCase(unittest.TestCase):
         ]
         max_ranks = 8
 
-        cls.vision_transformer_t: Trace = Trace(trace_dir=vision_transformer_trace_dir)
+        cls.vision_transformer_t: TraceCollection = TraceCollection(
+            trace_dir=vision_transformer_trace_dir
+        )
         cls.vision_transformer_t.parse_traces(
             max_ranks=max_ranks, use_multiprocessing=True
         )
         cls.vision_transformer_raw_df = prepare_ground_truth_df(
             vision_transformer_trace_dir, vision_transformer_rank_0_file
         )
-        cls.inference_t: Trace = Trace(
+        cls.inference_t: TraceCollection = TraceCollection(
             trace_files=inference_trace_files, trace_dir=os.getcwd()
         )
         cls.inference_t.parse_traces(max_ranks=max_ranks, use_multiprocessing=True)
         cls.inference_raw_df = prepare_ground_truth_df(
             inference_trace_dir, inference_rank_0_file
         )
-        cls.triton_t: Trace = Trace(trace_dir=triton_trace_dir)
+        cls.triton_t: TraceCollection = TraceCollection(trace_dir=triton_trace_dir)
         cls.triton_t.parse_traces(max_ranks=max_ranks, use_multiprocessing=True)
         cls.triton_t.align_and_filter_trace(include_last_profiler_step=True)
         cls.triton_raw_df = prepare_ground_truth_df(
@@ -302,7 +304,9 @@ class TraceParseIjsonOthersTestCase(unittest.TestCase):
     def test_ijson_parser(self):
         set_default_trace_parsing_backend(ParserBackend.IJSON)
 
-        inference_t: Trace = Trace(trace_dir=self.inference_trace_dir)
+        inference_t: TraceCollection = TraceCollection(
+            trace_dir=self.inference_trace_dir
+        )
         inference_t.parse_traces(max_ranks=1)
 
         self.assertEqual(len(inference_t.traces), 1)
@@ -311,7 +315,9 @@ class TraceParseIjsonOthersTestCase(unittest.TestCase):
     def test_ijson_batched_parser(self):
         set_default_trace_parsing_backend(ParserBackend.IJSON_BATCHED)
 
-        inference_t: Trace = Trace(trace_dir=self.inference_trace_dir)
+        inference_t: TraceCollection = TraceCollection(
+            trace_dir=self.inference_trace_dir
+        )
         inference_t.parse_traces(max_ranks=1)
 
         self.assertEqual(len(inference_t.traces), 1)
@@ -320,7 +326,9 @@ class TraceParseIjsonOthersTestCase(unittest.TestCase):
     def test_ijson_batch_and_compress_parser(self):
         set_default_trace_parsing_backend(ParserBackend.IJSON_BATCH_AND_COMPRESS)
 
-        inference_t: Trace = Trace(trace_dir=self.inference_trace_dir)
+        inference_t: TraceCollection = TraceCollection(
+            trace_dir=self.inference_trace_dir
+        )
         inference_t.parse_traces(max_ranks=1)
 
         self.assertEqual(len(inference_t.traces), 1)
@@ -376,7 +384,7 @@ class TestMtiaAlignAndFilter(unittest.TestCase):
         mtia_trace_dir: str = add_test_data_path_prefix_if_exists(
             "tests/data/mtia_trace_single_rank"
         )
-        t: Trace = Trace(trace_dir=mtia_trace_dir)
+        t: TraceCollection = TraceCollection(trace_dir=mtia_trace_dir)
         t.parse_traces()
         t.align_and_filter_trace()
         t.decode_symbol_ids(use_shorten_name=False)
@@ -424,7 +432,7 @@ class TraceParseConfigTestCase(unittest.TestCase):
         self.resnet_nccl_trace: str = add_test_data_path_prefix_if_exists(
             "tests/data/nccl_parser_config"
         )
-        self.resnet_nccl_t: Trace = Trace(
+        self.resnet_nccl_t: TraceCollection = TraceCollection(
             trace_dir=self.resnet_nccl_trace, parser_config=self.custom_cfg
         )
 
@@ -432,7 +440,7 @@ class TraceParseConfigTestCase(unittest.TestCase):
         triton_trace: str = add_test_data_path_prefix_if_exists(
             "tests/data/triton_example"
         )
-        self.triton_t: Trace = Trace(
+        self.triton_t: TraceCollection = TraceCollection(
             trace_dir=triton_trace, parser_config=self.custom_cfg
         )
 
@@ -607,8 +615,8 @@ class TraceParseConfigTestCase(unittest.TestCase):
                 "aten::add": 2004,
             }
         )
-        # Create a Trace object
-        t = Trace(trace_dir="", trace_files={})
+        # Create a TraceCollection object
+        t = TraceCollection(trace_dir="", trace_files={})
         t.traces[0] = df.copy()
         t.symbol_table = symbol_table
 

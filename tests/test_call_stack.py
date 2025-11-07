@@ -144,7 +144,7 @@ class CallGraphTestCase(unittest.TestCase):
     def setUp(self) -> None:
         super().setUp()
 
-        # Mock Trace class for testing
+        # Mock TraceCollection class for testing
         class MockTrace:
             def __init__(self, traces):
                 self.traces = traces

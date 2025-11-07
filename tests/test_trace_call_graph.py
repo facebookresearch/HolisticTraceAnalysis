@@ -3,10 +3,10 @@ import unittest
 from pathlib import Path
 
 import pandas as pd
-from hta.common.trace import Trace
 from hta.common.trace_call_graph import CallGraph
 
 from hta.common.trace_call_stack import CallStackGraph, CallStackIdentity
+from hta.common.trace_collection import TraceCollection
 
 
 class TraceCallGraphTestCase(unittest.TestCase):
@@ -16,7 +16,7 @@ class TraceCallGraphTestCase(unittest.TestCase):
             "tests/data/call_stack/backward_thread.json"
         )
         self.test_trace_backward_threads: str = str(test_data_path)
-        self.t_backward_threads: Trace = Trace(
+        self.t_backward_threads: TraceCollection = TraceCollection(
             trace_files={0: self.test_trace_backward_threads},
             trace_dir="",
         )
@@ -90,7 +90,7 @@ class TraceCallGraphTestCase(unittest.TestCase):
         self.assertListEqual(main_stack_root, bwd_stack_root)
 
     def test_link_main_and_bwd_stacks_no_bwd_annotation(self) -> None:
-        t: Trace = self.t_backward_threads
+        t: TraceCollection = self.t_backward_threads
         # remove backward annotation
         for _, df in t.get_all_traces().items():
             df.drop(df.loc[df["s_name"].eq("## backward ##")].index, inplace=True)
@@ -108,7 +108,9 @@ class TraceCallGraphTestCase(unittest.TestCase):
 
     def test_skip_gpu_threads(self) -> None:
         trace_file = self.test_trace_backward_threads
-        t: Trace = Trace(trace_files={i: trace_file for i in range(4)})
+        t: TraceCollection = TraceCollection(
+            trace_files={i: trace_file for i in range(4)}
+        )
         t.parse_traces()
         # set a new pid for the traces
         for rank, df in t.get_all_traces().items():

@@ -23,7 +23,7 @@ from plotly.subplots import make_subplots
 # import statement used without the "if TYPE_CHECKING" guard will cause a circular
 # dependency with trace_analysis.py causing mypy to fail and should not be removed.
 if TYPE_CHECKING:
-    from hta.common.trace import Trace
+    from hta.common.trace_collection import TraceCollection
 
 # This configures the threshold under which we consider gaps between
 # kernels to be due to realistic delays in launching back-back kernels on the GPU
@@ -36,7 +36,7 @@ class BreakdownAnalysis:
     @classmethod
     def get_gpu_kernel_breakdown(
         cls,
-        t: "Trace",
+        t: "TraceCollection",
         visualize: bool = True,
         duration_ratio: float = 0.8,
         num_kernels: int = 10,
@@ -216,13 +216,13 @@ class BreakdownAnalysis:
     def _get_gpu_kernel_interval_dataframe(
         cls,
         trace_df: pd.DataFrame,
-        t: "Trace",
+        t: "TraceCollection",
     ) -> pd.DataFrame:
         """Obtains all GPU kernels in the trace dataframe and assigns them
         an interval index that can be used for analyzing overlap.
             @args: trace_df (pd.DataFrame) : trace df for specific rank
                 Please make sure this includes "end" column.
-            @args: t (Trace) : trace object
+            @args: t (TraceCollection) : object representing collection of traces.
 
         Returns: pd.DataFrame with GPU kernels subset with an interval index
                 of [start, end) intervals.
@@ -238,13 +238,13 @@ class BreakdownAnalysis:
     def _get_gpu_user_anno_interval_dataframe(
         cls,
         trace_df: pd.DataFrame,
-        t: "Trace",
+        t: "TraceCollection",
     ) -> Optional[pd.DataFrame]:
         """Obtains all GPU user annotations in the trace dataframe and assigns them
         an interval index that can be used for analyzing overlap.
             @args: trace_df (pd.DataFrame) : trace df for specific rank
                 Please make sure this includes "end" column.
-            @args: t (Trace) : trace object
+            @args: t (TraceCollection) : object representing collection of traces.
 
         Returns: pd.DataFrame with GPU kernels subset with an interval index
                 of [start, end) intervals.
@@ -309,7 +309,7 @@ class BreakdownAnalysis:
     @classmethod
     def get_gpu_kernels_with_user_annotations(
         cls,
-        t: "Trace",
+        t: "TraceCollection",
         rank: int,
         expand_names: bool = True,
         shortern_names: bool = True,
@@ -345,7 +345,7 @@ class BreakdownAnalysis:
     @classmethod
     def get_gpu_user_annotation_breakdown(
         cls,
-        t: "Trace",
+        t: "TraceCollection",
         use_gpu_annotation: bool = True,
         visualize: bool = True,
         duration_ratio: float = 0.8,
@@ -639,7 +639,9 @@ class BreakdownAnalysis:
         return kernel_time - kernel_run_time, kernel_time
 
     @classmethod
-    def get_temporal_breakdown(cls, t: "Trace", visualize: bool = True) -> pd.DataFrame:
+    def get_temporal_breakdown(
+        cls, t: "TraceCollection", visualize: bool = True
+    ) -> pd.DataFrame:
         """
         Temporal breakdown implementation. See `get_temporal_breakdown` in `trace_analysis.py` for details.
         """
@@ -802,7 +804,7 @@ class BreakdownAnalysis:
     @classmethod
     def get_idle_time_breakdown(
         cls,
-        t: "Trace",
+        t: "TraceCollection",
         consecutive_kernel_delay: int,
         rank: int = 0,
         streams: Optional[List[int]] = None,

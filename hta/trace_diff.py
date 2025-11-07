@@ -10,7 +10,7 @@ from typing import Dict, List, Optional, Union
 import pandas as pd
 import plotly.graph_objects as go
 
-from hta.common.trace import Trace
+from hta.common.trace_collection import TraceCollection
 from hta.configs.config import logger
 from hta.utils.utils import flatten_column_names, shorten_name
 
@@ -26,26 +26,26 @@ TraceDir = str
 
 
 class LabeledTrace:
-    """A wrapper class for the Trace class which assigns a label to each trace object.
+    """A wrapper class for the TraceCollection class which assigns a label to each trace object.
 
     Attributes:
         label (str): a label attached to the trace.
-        t (Trace): a Trace object that contains the trace data.
+        t (TraceCollection): a TraceCollection object that contains data of multiple traces.
         iteration_df (pd.DataFrame): a DataFrame that contains the
     """
 
     def __init__(
         self,
         label: str = None,
-        t: Optional[Trace] = None,
+        t: Optional[TraceCollection] = None,
         trace_dir: Optional[str] = None,
     ):
-        """Construct a LabeledTrace from either a Trace object or trace files in trace_dir."""
+        """Construct a LabeledTrace from either a TraceCollection object or trace files in trace_dir."""
         self.label = label if label else f"t{random.randint(0,10)}"
         if t is not None:
             self.t = t
         elif trace_dir is not None and os.path.isdir(trace_dir):
-            self.t = Trace(trace_dir=trace_dir)
+            self.t = TraceCollection(trace_dir=trace_dir)
         else:
             raise ValueError(
                 "either a trace object or a valid trace dir must be provided in LabeledTrace.__init__()"
@@ -213,13 +213,13 @@ class LabeledTrace:
 
 
 def _trace_argument_adapter(
-    t: Union[LabeledTrace, Trace, TraceDir], default_label: str
+    t: Union[LabeledTrace, TraceCollection, TraceDir], default_label: str
 ) -> LabeledTrace:
     """A helper function to construct a LabeledTrace from several argument types."""
     lt: LabeledTrace
     if isinstance(t, TraceDir):
         lt = LabeledTrace(label=default_label, trace_dir=t)
-    elif isinstance(t, Trace):
+    elif isinstance(t, TraceCollection):
         lt = LabeledTrace(label=default_label, t=t)
     elif isinstance(t, LabeledTrace):
         lt = t
@@ -245,13 +245,13 @@ class TraceDiff:
         Compare the operators/kernels counts and total duration of two traces.
 
         Args:
-            control (Union[LabeledTrace, Trace, TraceDir]): the control trace.
-                A string or Trace object that defines the control trace. Possible values can be:
+            control (Union[LabeledTrace, TraceCollection, TraceDir]): the control trace.
+                A string or TraceCollection object that defines the control trace. Possible values can be:
                     1. a str (TraceDir) that points to parent path of the trace files.
-                    2. a Trace object that contains the trace records and metadata.
-                    3. a LabeledTrace object, which is a wrapper of the Trace object with a label to identify the trace.
+                    2. a TraceCollection object that contains the trace records and metadata.
+                    3. a LabeledTrace object, which is a wrapper of the TraceCollection object with a label to identify the trace.
 
-            test (Union[LabeledTrace, Trace, TraceDir]): the test trace.
+            test (Union[LabeledTrace, TraceCollection, TraceDir]): the test trace.
                 Similar to the control trace except it defines the test trace.
 
             control_rank (Optional[Union[int, List[int]]]): Specify which ranks of the control trace to use.
@@ -363,13 +363,13 @@ class TraceDiff:
         Get the operator difference between two traces.
 
         Args:
-            control (Union[LabeledTrace, Trace, TraceDir]): The control trace.
-                A string or Trace object that defines the control trace. A possible value can be:
+            control (Union[LabeledTrace, TraceCollection, TraceDir]): The control trace.
+                A string or TraceCollection object that defines the control trace. A possible value can be:
                     1. a str (TraceDir) that points to parent path of the trace files.
-                    2. a Trace object that contains the trace records and metadata.
-                    3. a LabeledTrace object, which is a wrapper of the Trace object with a label to identify the trace.
+                    2. a TraceCollection object that contains the trace records and metadata.
+                    3. a LabeledTrace object, which is a wrapper of the TraceCollection object with a label to identify the trace.
 
-            test (Union[LabeledTrace, Trace, TraceDir]): The test trace.
+            test (Union[LabeledTrace, TraceCollection, TraceDir]): The test trace.
                 Similar to the control trace except it defines the test trace.
 
             control_rank (Optional[Union[int, List[int]]]): Specify which ranks

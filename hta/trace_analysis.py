@@ -17,7 +17,7 @@ from hta.analyzers.straggler import find_stragglers_with_late_start_comm_kernels
 from hta.analyzers.straggler_analysis import StragglerAnalysis
 from hta.analyzers.trace_counters import TraceCounters
 from hta.common.constants import CUDA_MAX_LAUNCH_QUEUE_PER_STREAM
-from hta.common.trace import Trace
+from hta.common.trace_collection import TraceCollection
 from hta.configs.config import logger
 from hta.configs.default_values import DEFAULT_TRACE_DIR
 
@@ -34,7 +34,7 @@ class TraceAnalysis:
         trace_dir: str = DEFAULT_TRACE_DIR,
         include_last_profiler_step: Optional[bool] = False,
     ):
-        self.t = Trace(trace_files, trace_dir)
+        self.t = TraceCollection(trace_files, trace_dir)
         self.t.load_traces(include_last_profiler_step)
         assert self.t.is_parsed is True
 
@@ -688,7 +688,7 @@ class TraceAnalysis:
         by passing annotation='ProfilerStep'. See notes for how to pick the iteration.
 
         Args:
-            t (Trace): Input trace data structure.
+            t (TraceCollection): Input trace collection data structure.
             rank (int): rank to analyze for the critical path.
             annotation (str): a trace annotation to limit the analysis to,
                 for example "ProfilerStep" would match all annotations that
