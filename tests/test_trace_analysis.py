@@ -327,7 +327,7 @@ class TraceAnalysisTestCase(unittest.TestCase):
 
         annotation = "gpu_user_annotation" if use_gpu_annotation else "user_annotation"
         idx = analyzer.t.symbol_table.sym_index[annotation]
-        trace_df = analyzer.t.get_trace(0)
+        trace_df = analyzer.t.get_trace_df(0)
         analyzer.t.symbol_table.add_symbols_to_trace_df(trace_df, "name")
         ref_sum_df = (
             trace_df[trace_df.cat == idx][["name", "dur"]]

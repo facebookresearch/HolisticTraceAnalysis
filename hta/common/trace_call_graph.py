@@ -3,6 +3,7 @@ from typing import Dict, Generator, List, Optional
 
 import pandas as pd
 
+from hta.common import singletrace
 from hta.common.trace_call_stack import CallStackGraph, CallStackIdentity, CallStackNode
 from hta.common.trace_collection import get_cpu_gpu_correlation, TraceCollection
 from hta.common.trace_symbol_table import TraceSymbolTable
@@ -96,7 +97,7 @@ class CallGraph:
         self._cached_nodes: Dict[int, CallStackNode] = self.rank_to_nodes[
             self._cached_rank
         ]
-        self._cached_df: pd.DataFrame = self.trace_data.get_trace(self._cached_rank)
+        self._cached_df: pd.DataFrame = self.trace_data.get_trace_df(self._cached_rank)
         self._cached_gpu_kernels: pd.DataFrame = self._cached_df.loc[
             self._cached_df["stream"].ne(-1)
         ]
@@ -121,7 +122,7 @@ class CallGraph:
         t.symbol_table = (
             symbol_table if symbol_table else TraceSymbolTable.create_from_df(df)
         )
-        t.traces[rank] = df.copy()
+        t.traces[rank] = singletrace.create_default(df=df.copy())
         t.is_parsed = True
 
         cg = CallGraph(t)
@@ -138,7 +139,7 @@ class CallGraph:
             t0 = perf_counter()
             self.rank_to_nodes[rank] = {}
             self.rank_to_stacks[rank] = {}
-            df = self.trace_data.get_trace(rank)
+            df = self.trace_data.get_trace_df(rank)
             # add an "end" column for time interval based filtering
             if "end" not in df.columns:
                 df["end"] = df["ts"] + df["dur"]
@@ -364,7 +365,7 @@ class CallGraph:
         if rank in self.ranks and rank != self._cached_rank:
             self._cached_rank = rank
             self._cached_nodes = self.rank_to_nodes[self._cached_rank]
-            self._cached_df = self.trace_data.get_trace(self._cached_rank)
+            self._cached_df = self.trace_data.get_trace_df(self._cached_rank)
             self._cached_gpu_kernels = self._cached_df.loc[
                 self._cached_df["stream"].ne(-1)
             ]

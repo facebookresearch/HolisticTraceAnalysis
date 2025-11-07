@@ -244,7 +244,7 @@ def plot_timeline_gpu_kernels_from_trace(
     else:
         _ranks = list(trace_data.get_all_traces().keys())
     df = pd.concat(
-        [trace_data.get_trace(r) for r in _ranks],
+        [trace_data.get_trace_df(r) for r in _ranks],
         axis=0,
         keys=_ranks,
         names=["rank", "idx"],

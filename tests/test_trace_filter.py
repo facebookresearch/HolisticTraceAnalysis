@@ -32,7 +32,7 @@ class TestTraceFilters(unittest.TestCase):
 
     def setUp(self):
         self.htaTrace = TestTraceFilters.htaTrace
-        self.df = self.htaTrace.get_trace(0)
+        self.df = self.htaTrace.get_trace_df(0)
 
     def testIterationFilter(self) -> None:
         f = IterationFilter([551])
@@ -47,10 +47,10 @@ class TestTraceFilters(unittest.TestCase):
         f = RankFilter([0])
 
         ranks_df = []
-        for rank, df in self.htaTrace.traces.items():
+        for rank, trace in self.htaTrace.traces.items():
             # add rank column
-            df["rank"] = rank
-            ranks_df.append(df)
+            trace.df["rank"] = rank
+            ranks_df.append(trace.df)
 
         # combine both ranks
         combined_df = pd.concat(ranks_df)
@@ -63,7 +63,7 @@ class TestTraceFilters(unittest.TestCase):
         start_time = 1682725898237042
         end_time = 1682725898240570
         f = TimeRangeFilter((start_time, end_time))
-        filtered_df = f(self.htaTrace.traces[0])
+        filtered_df = f(self.htaTrace.get_trace_df(0))
 
         # rows are present in time range
         self.assertEqual(filtered_df.shape[0], 93)
@@ -109,7 +109,7 @@ class TestTraceFilters(unittest.TestCase):
 
     def testGPUKernelFilter(self) -> None:
         f = GPUKernelFilter()
-        filtered_df = f(self.htaTrace.traces[0])
+        filtered_df = f(self.htaTrace.get_trace_df(0))
 
         # GPU kernel is present, note we are not reading CUDA sync events.
         self.assertTrue(filtered_df[(filtered_df["stream"] > 0)].size > 0)
@@ -119,7 +119,7 @@ class TestTraceFilters(unittest.TestCase):
 
     def testCPUOperatorFilter(self) -> None:
         f = CPUOperatorFilter()
-        filtered_df = f(self.htaTrace.traces[0])
+        filtered_df = f(self.htaTrace.get_trace_df(0))
 
         # CPU operator is present
         self.assertTrue(filtered_df[(filtered_df["stream"] < 0)].size > 0)
@@ -135,7 +135,7 @@ class TestTraceFilters(unittest.TestCase):
         f2 = TimeRangeFilter((start_time, end_time))
 
         cf = CompositeFilter([f1, f2])
-        filtered_df = cf(self.htaTrace.traces[0])
+        filtered_df = cf(self.htaTrace.get_trace_df(0))
         self.assertTrue(filtered_df[(filtered_df["iteration"] == 551)].size > 0)
         self.assertTrue(
             filtered_df[
@@ -270,7 +270,7 @@ class TestTraceFilters(unittest.TestCase):
         ]
 
         self.htaTrace.decode_symbol_ids(use_shorten_name=False)
-        df = self.htaTrace.traces[0]
+        df = self.htaTrace.get_trace_df(0)
         for i, tc in enumerate(test_cases):
             f = CombinedOperatorFilter(
                 tc.root_op_name,
@@ -294,7 +294,7 @@ class TestTraceFilters(unittest.TestCase):
     def testUnderOperatorFilter(self) -> None:
         op_name = "forward"
         self.htaTrace.decode_symbol_ids(use_shorten_name=False)
-        df = FirstIterationFilter()(self.htaTrace.traces[0])
+        df = FirstIterationFilter()(self.htaTrace.get_trace_df(0))
         f = UnderOperatorFilter(op_name=op_name, position=0, include_gpu_kernels=True)
         self.assertEqual(f(df).shape[0], 146)
 
@@ -312,12 +312,12 @@ class TestTraceFiltersSyncEvents(unittest.TestCase):
 
     def setUp(self):
         self.htaTrace = TestTraceFiltersSyncEvents.htaTrace
-        self.df = self.htaTrace.get_trace(0)
+        self.df = self.htaTrace.get_trace_df(0)
 
     def testGPUKernelFilter(self) -> None:
         f = GPUKernelFilter()
         filtered_df = f(
-            self.htaTrace.traces[0], symbol_table=self.htaTrace.symbol_table
+            self.htaTrace.get_trace_df(0), symbol_table=self.htaTrace.symbol_table
         )
 
         # GPU kernel is present
@@ -330,7 +330,7 @@ class TestTraceFiltersSyncEvents(unittest.TestCase):
     def testCPUOperatorFilter(self) -> None:
         f = CPUOperatorFilter()
         filtered_df = f(
-            self.htaTrace.traces[0], symbol_table=self.htaTrace.symbol_table
+            self.htaTrace.get_trace_df(0), symbol_table=self.htaTrace.symbol_table
         )
 
         # CPU operator is present

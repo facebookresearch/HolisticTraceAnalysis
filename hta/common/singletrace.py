@@ -1,4 +1,4 @@
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 import pandas as pd
 
@@ -18,6 +18,14 @@ class _SingleTrace:
         self.meta = meta
         self.df = df
         self.symbol_table = symbol_table
+
+    def get_sym_table(self) -> List[str]:
+        """Get the list of symbols from the symbol table.
+
+        Returns:
+            List of symbol strings in order of their IDs.
+        """
+        return self.symbol_table.get_sym_table()
 
 
 class _XPUSingleTrace(_SingleTrace):

@@ -139,10 +139,10 @@ class LabeledTrace:
 
         # Filter the trace by ranks
         if len(ranks) == 1:
-            df_rank = self.t.get_trace(ranks[0])
+            df_rank = self.t.get_trace_df(ranks[0])
         else:
             df_rank = pd.concat(
-                [self.t.get_trace(r) for r in ranks],
+                [self.t.get_trace_df(r) for r in ranks],
                 axis=0,
                 keys=_ranks,
                 names=["rank", "idx"],

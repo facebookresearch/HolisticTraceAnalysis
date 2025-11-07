@@ -51,7 +51,7 @@ def extract_iteration_info(trace: TraceCollection) -> pd.DataFrame:
         return p_steps
 
     df_iterations = pd.concat(
-        [_extract_one_rank(trace.get_trace(r)) for r in ranks],
+        [_extract_one_rank(trace.get_trace_df(r)) for r in ranks],
         keys=ranks,
         names=["rank", "iter"],
     ).reset_index()

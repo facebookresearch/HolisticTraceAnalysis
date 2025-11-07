@@ -211,7 +211,7 @@ class CPGraph(nx.DiGraph):
         self.rank: int = rank
         self.t = t
         self.t_full = t_full
-        self.full_trace_df: pd.DataFrame = self.t_full.get_trace(rank)
+        self.full_trace_df: pd.DataFrame = self.t_full.get_trace_df(rank)
         self.symbol_table = t_full.symbol_table
         self.data_load_events = data_load_events
 
@@ -221,7 +221,7 @@ class CPGraph(nx.DiGraph):
         if t is None:
             return
 
-        self.trace_df: pd.DataFrame = t.get_trace(rank)
+        self.trace_df: pd.DataFrame = t.get_trace_df(rank)
 
         self.critical_path_nodes: List[int] = []
         self.critical_path_events_set: Set[int] = set()
@@ -1798,7 +1798,7 @@ class CriticalPathAnalysis:
         """
         global PROFILE_TIMES
         t0 = time.perf_counter()
-        trace_df: pd.DataFrame = t.get_trace(rank)
+        trace_df: pd.DataFrame = t.get_trace_df(rank)
         sym_index = t.symbol_table.get_sym_id_map()
 
         if "cuda_sync" not in sym_index:
@@ -1873,7 +1873,7 @@ class CriticalPathAnalysis:
         # XXX This is a bit hacky but CallGraph does not really support a way
         # to specify a dataframe, just supports passing TraceCollection object
         t_copy = deepcopy(t)
-        t_copy.traces[rank] = clipped_df
+        t_copy.traces[rank].df = clipped_df
         t1 = time.perf_counter()
         logger.info(f"Preprocessing took {t1 - t0:.2f} seconds")
 

@@ -11,6 +11,8 @@ from typing import Any, Dict, Optional, Set
 # import unittest.mock as mock
 
 import pandas as pd
+from hta.common import singletrace
+from hta.common.singletrace import Trace
 from hta.common.trace_collection import parse_trace_dict, TraceCollection
 from hta.common.trace_parser import (
     _auto_detect_parser_backend,
@@ -167,8 +169,8 @@ class TraceParseTestCase(unittest.TestCase):
 
             sym_id_map = t.symbol_table.get_sym_id_map()
             sym_table = t.symbol_table.get_sym_table()
-            rank_0_df_name_id = t.traces[0]["name"]
-            rank_0_df_name = t.traces[0]["name"].apply(lambda x: sym_table[x])
+            rank_0_df_name_id = t.get_trace_df(0)["name"]
+            rank_0_df_name = t.get_trace_df(0)["name"].apply(lambda x: sym_table[x])
 
             ground_truth_name = raw_df["name"]
             ground_truth_name_id = raw_df["name"].apply(lambda x: sym_id_map[x])
@@ -188,19 +190,21 @@ class TraceParseTestCase(unittest.TestCase):
 
             sym_id_map = t.symbol_table.get_sym_id_map()
             profiler_steps = [v for k, v in sym_id_map.items() if "ProfilerStep" in k]
-            filtered_profiler_steps = t.traces[0]["name"].isin(profiler_steps).sum()
+            filtered_profiler_steps = (
+                t.get_trace_df(0)["name"].isin(profiler_steps).sum()
+            )
 
             self.assertEqual(
                 filtered_profiler_steps + int(raw_profiler_steps > 1),
                 raw_profiler_steps,
             )
-            self.assertLessEqual(len(t.traces[0]), len(raw_df))
-            self.assertGreaterEqual(t.traces[0]["ts"].min(), 0)
+            self.assertLessEqual(len(t.get_trace_df(0)), len(raw_df))
+            self.assertGreaterEqual(t.get_trace_df(0)["ts"].min(), 0)
 
     def test_trace_iteration(self) -> None:
         # run tests for each collection of traces
         for t in self.traces:
-            df = t.traces[0]
+            df = t.get_trace_df(0)
             sym_id_map = t.symbol_table.get_sym_id_map()
             iterations = {
                 f"ProfilerStep#{i}"
@@ -228,7 +232,8 @@ class TraceParseTestCase(unittest.TestCase):
             )
 
     def test_trace_metadata(self) -> None:
-        trace_meta = self.vision_transformer_t.meta_data[0]
+        trace: Trace = self.vision_transformer_t.get_trace(0)
+        trace_meta = trace.meta
         exp_meta = EXPECTED_META_VISION_TRANFORMER
         self.assertEqual(trace_meta["schemaVersion"], exp_meta["schemaVersion"])
         self.assertEqual(trace_meta["distributedInfo"], exp_meta["distributedInfo"])
@@ -394,7 +399,7 @@ class TestMtiaAlignAndFilter(unittest.TestCase):
         self.assertGreaterEqual(len(t.get_ranks()), 1)
 
         # Ensure that the trace has the correct iterations
-        result_df = t.get_trace(t.get_ranks()[0])
+        result_df = t.get_trace_df(t.get_ranks()[0])
         self.assertTrue(result_df["ts"].ge(0).all())
         self.assertTrue(result_df["iteration"].ge(0).all())
 
@@ -452,7 +457,7 @@ class TraceParseConfigTestCase(unittest.TestCase):
         self.resnet_nccl_t.parse_traces(max_ranks=1, use_multiprocessing=False)
         self.resnet_nccl_t.decode_symbol_ids(use_shorten_name=False)
 
-        trace_df = self.resnet_nccl_t.get_trace(0)
+        trace_df = self.resnet_nccl_t.get_trace_df(0)
         self.assertGreater(len(trace_df), 0)
 
         nccl_kernels = trace_df.query(
@@ -480,7 +485,7 @@ class TraceParseConfigTestCase(unittest.TestCase):
         self.triton_t.parse_traces(max_ranks=1, use_multiprocessing=False)
         self.triton_t.decode_symbol_ids(use_shorten_name=False)
 
-        trace_df = self.triton_t.get_trace(0)
+        trace_df = self.triton_t.get_trace_df(0)
         self.assertGreater(len(trace_df), 0)
         self.assertTrue("kernel_backend" in trace_df.columns)
         self.assertTrue("kernel_hash" in trace_df.columns)
@@ -546,7 +551,8 @@ class TraceParseConfigTestCase(unittest.TestCase):
         trace_file = os.path.join(self.resnet_nccl_trace, "nccl_data.json.gz")
         cfg = ParserConfig(ParserConfig.get_minimum_args())
         cfg.set_parse_all_args(parse_all_args)
-        _, df, _ = parse_trace_dataframe(trace_file, cfg)
+        trace: Trace = parse_trace_dataframe(trace_file, cfg)
+        df = trace.df
         self.assertTrue(expected_columns.issubset(set(df.columns)))
         self.assertTrue(expected_missing_columns.isdisjoint(set(df.columns)))
 
@@ -617,7 +623,7 @@ class TraceParseConfigTestCase(unittest.TestCase):
         )
         # Create a TraceCollection object
         t = TraceCollection(trace_dir="", trace_files={})
-        t.traces[0] = df.copy()
+        t.traces[0] = singletrace.create_default(df=df.copy())
         t.symbol_table = symbol_table
 
         # Expected result after applying fix
@@ -625,8 +631,8 @@ class TraceParseConfigTestCase(unittest.TestCase):
         expected_df.loc[[1, 3], "iteration"] = 1
         expected_df.loc[[2], "stream"] = expected_df.loc[[2], "tid"]
 
-        t._fix_mtia_memory_kernels(t.get_trace(0))
-        fixed_df = t.get_trace(0)
+        t._fix_mtia_memory_kernels(t.get_trace_df(0))
+        fixed_df = t.get_trace_df(0)
 
         # Validate results
         pd.testing.assert_frame_equal(fixed_df, expected_df)

@@ -8,6 +8,7 @@ from typing import Dict, List, Optional, Tuple, TYPE_CHECKING
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+from hta.common.singletrace import Trace
 from hta.common.trace_filter import GPUKernelFilter
 from hta.common.trace_symbol_table import decode_symbol_id_to_symbol_name
 
@@ -75,8 +76,8 @@ class BreakdownAnalysis:
             kernel_type_to_analysis.append(KernelType.MEMORY.name)
 
         kernel_per_rank: Dict[str, Dict] = defaultdict(dict)
-        for rank, trace_df in t.traces.items():
-            gpu_kernels = trace_df[trace_df["stream"].ne(-1)].copy()
+        for rank, trace in t.traces.items():
+            gpu_kernels = trace.df[trace.df["stream"].ne(-1)].copy()
             gpu_kernels["kernel_type"] = gpu_kernels[["name"]].apply(
                 lambda x: get_kernel_type(sym_table[x["name"]]), axis=1
             )
@@ -318,7 +319,7 @@ class BreakdownAnalysis:
         GPU user annotation. If the kernel overlaps with multiple user annotations,
         we will pick the lowest/leaf annotation in the stack to attribute to.
         Read more in get_gpu_kernels_with_user_annotations in hta/trace_analysis.py."""
-        trace_df = t.get_trace(rank)
+        trace_df = t.get_trace_df(rank)
         trace_df["end"] = trace_df["ts"] + trace_df["dur"]
         trace_df["user_annotation"] = -1
 
@@ -401,8 +402,8 @@ class BreakdownAnalysis:
 
         kernel_per_rank: Dict[int, pd.DataFrame] = {}
 
-        for rank, trace_df in t.traces.items():
-            gpu_user_annotation_kernels = trace_df[trace_df["cat"].eq(idx)].copy()
+        for rank, trace in t.traces.items():
+            gpu_user_annotation_kernels = trace.df[trace.df["cat"].eq(idx)].copy()
             t.symbol_table.add_symbols_to_trace_df(gpu_user_annotation_kernels, "name")
             logger.info(
                 f"rank = {rank}, num {annotation}s = {len(gpu_user_annotation_kernels)}"
@@ -647,9 +648,9 @@ class BreakdownAnalysis:
         """
         sym_table = t.symbol_table.get_sym_table()
 
-        def idle_time_per_rank(trace_df: pd.DataFrame) -> Tuple[int, int, int, int]:
+        def idle_time_per_rank(trace: Trace) -> Tuple[int, int, int, int]:
             """returns idle_time (us) , compute_time (us), non_compute_time (us), total_time (us)"""
-            gpu_kernels = trace_df[trace_df["stream"].ne(-1)].copy()
+            gpu_kernels = trace.df[trace.df["stream"].ne(-1)].copy()
             idle_time, kernel_time = cls._get_idle_time_for_kernels(gpu_kernels)
 
             gpu_kernels["kernel_type"] = gpu_kernels[["name"]].apply(
@@ -672,10 +673,10 @@ class BreakdownAnalysis:
             return idle_time, compute_time, non_compute_time, kernel_time
 
         result: Dict[str, List[float]] = defaultdict(list)
-        for rank, trace_df in t.traces.items():
+        for rank, trace in t.traces.items():
             result["rank"].append(rank)
             idle_time, compute_time, non_compute_time, kernel_time = idle_time_per_rank(
-                trace_df
+                trace
             )
             result["idle_time(us)"].append(idle_time)
             result["compute_time(us)"].append(compute_time)
@@ -826,7 +827,7 @@ class BreakdownAnalysis:
            and median of idle intervals between kernels on a CUDA stream, also broken down by
            the idleness category (default = False).
         """
-        trace_df: pd.DataFrame = t.get_trace(rank)
+        trace_df: pd.DataFrame = t.get_trace_df(rank)
 
         # Need to filter out events with `cuda_sync` category
         kernel_cats = [

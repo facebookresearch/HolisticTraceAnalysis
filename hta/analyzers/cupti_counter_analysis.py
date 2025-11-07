@@ -31,7 +31,7 @@ class CuptiCounterAnalysis:
     ) -> Optional[pd.DataFrame]:
         sym_table = t.symbol_table.get_sym_table()
         t.decode_symbol_ids(use_shorten_name=False)
-        df = t.get_trace(rank)
+        df = t.get_trace_df(rank)
 
         # Get valid cuda kernels
         gpu_kernels = (

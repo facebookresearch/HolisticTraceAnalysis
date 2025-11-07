@@ -121,7 +121,7 @@ def correlate_execution_trace(
     Please note (2) is not supported yet and will come in future PRs.
 
     """
-    trace_df = trace.get_trace(rank)
+    trace_df = trace.get_trace_df(rank)
 
     if not _et_has_overlap(trace_df, et):
         logging.error(

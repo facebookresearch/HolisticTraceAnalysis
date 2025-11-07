@@ -86,7 +86,7 @@ class CustomTraceParserTestCase(unittest.TestCase):
         with tempfile.TemporaryDirectory() as t_dir:
             t = self._create_and_load_trace(t_dir)
             cfg = ParserConfig.get_default_cfg()
-            df = t.get_trace(self.rank)
+            df = t.get_trace_df(self.rank)
             self.assertTrue(all(arg.name in df.columns for arg in cfg.get_args()))
 
     def test_custom_config(self) -> None:
@@ -119,6 +119,6 @@ class CustomTraceParserTestCase(unittest.TestCase):
         with tempfile.TemporaryDirectory() as t_dir:
             t = self._create_and_load_trace(t_dir)
             cfg = ParserConfig.get_default_cfg()
-            df = t.get_trace(self.rank)
+            df = t.get_trace_df(self.rank)
             self.assertTrue(all(arg.name in df.columns for arg in cfg.get_args()))
             self.assertFalse(all(arg.name in df.columns for arg in removed_args))

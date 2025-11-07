@@ -71,7 +71,7 @@ class CudaKernelAnalysis:
 
         sym_index = t.symbol_table.get_sym_id_map()
         cg = CallGraph(t, ranks=[rank])
-        trace_df = t.get_trace(rank)
+        trace_df = t.get_trace_df(rank)
 
         # cpu_kernels = trace_df[trace_df["stream"].eq(-1)].copy()
         # gpu_kernels = trace_df[trace_df["stream"].ne(-1)].copy()
@@ -444,8 +444,8 @@ class CudaKernelAnalysis:
 
         result_dict: Dict = {}
         for rank in ranks:
-            trace_data = trace.get_trace(rank)
-            symbol_table.decode_df(trace.traces[rank], create_new_columns=True)
+            trace_data = trace.get_trace_df(rank)
+            symbol_table.decode_df(trace_data, create_new_columns=True)
             aten_operations = trace_data[
                 trace_data["s_name"].str.startswith("aten::")
             ].copy()
@@ -556,7 +556,7 @@ class CudaKernelAnalysis:
 
         for rank in ranks:
             # get trace for a rank
-            trace_df: pd.DataFrame = t.get_trace(rank)
+            trace_df: pd.DataFrame = t.get_trace_df(rank)
 
             # filter out events which have correlation value matching to
             # cudaLaunchKernel, cudaLaunchKernelExC, cudaMemcpyAsync, cudaMemsetAsync

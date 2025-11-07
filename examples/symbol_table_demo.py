@@ -47,7 +47,7 @@ def demo_statistics(
     Returns:
         The resulted dataframe from this analysis.
     """
-    df = trace.get_trace(rank)
+    df = trace.get_trace_df(rank)
     sym_id_map = trace.symbol_table.get_sym_id_map()
     sym_table = trace.symbol_table.get_sym_table()
 
@@ -151,13 +151,13 @@ def run_demo(
             break
     logging.info("\n===End of Symbol to ID Map\n")
 
-    df = demo_trace.get_trace(0)
+    df = demo_trace.get_trace_df(0)
     logging.info(f"\n===Data Frame of Rank-0===\ntype={type(df)}\n")
     logging.info(f"\n{df}\n")
     logging.info("\n===End of Data Frame\n")
 
     logging.info(f"===Data Frame Info===\ntype={type(df)}\n")
-    demo_trace.get_trace(0).info()
+    demo_trace.get_trace_df(0).info()
 
     logging.info("\n===Kernel Statistics===\n")
     top_k: int = 10
@@ -176,7 +176,7 @@ def run_demo(
 
 def trace_info(trace: TraceCollection):
     rank = next(iter(trace.traces))
-    df = trace.get_trace(rank)
+    df = trace.get_trace_df(rank)
     logging.info(f"\n===Dataframe of Rank {rank}")
     df.info()
 

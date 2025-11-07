@@ -62,7 +62,10 @@ class StragglerAnalysis:
 
         ranks = list(t.get_all_traces().keys())
         df_all = pd.concat(
-            [t.get_trace(r) for r in ranks], axis=0, keys=ranks, names=["rank", "idx"]
+            [t.get_trace_df(r) for r in ranks],
+            axis=0,
+            keys=ranks,
+            names=["rank", "idx"],
         ).reset_index()
 
         df_selected_profiler_steps = df_all.loc[

@@ -6,6 +6,7 @@ import unittest
 
 import pandas as pd
 
+from hta.common import singletrace
 from hta.common.trace_collection import transform_correlation_to_index
 from hta.common.trace_symbol_table import TraceSymbolTable
 
@@ -35,7 +36,8 @@ class CorrelationTestCase(unittest.TestCase):
         mock_symbol_table = TraceSymbolTable()
         mock_symbol_table.sym_index = sym_index
         expected_index_correlation = [5, 6, 0, -1, 1, 2, 0, -1]
-        df2 = transform_correlation_to_index(df, mock_symbol_table)
+        trace = singletrace.create_default(df=df, symbol_table=mock_symbol_table)
+        df2 = transform_correlation_to_index(trace)
         self.assertListEqual(
             expected_index_correlation, df2["index_correlation"].tolist()
         )

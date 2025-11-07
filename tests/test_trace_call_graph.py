@@ -27,7 +27,7 @@ class TraceCallGraphTestCase(unittest.TestCase):
             self.t_backward_threads, ranks=[0]
         )
         self.df_backward_threads: pd.DataFrame = (
-            self.cg_backward_threads.trace_data.get_trace(0)
+            self.cg_backward_threads.trace_data.get_trace_df(0)
         )
 
     @staticmethod
@@ -92,14 +92,17 @@ class TraceCallGraphTestCase(unittest.TestCase):
     def test_link_main_and_bwd_stacks_no_bwd_annotation(self) -> None:
         t: TraceCollection = self.t_backward_threads
         # remove backward annotation
-        for _, df in t.get_all_traces().items():
+        for _, trace in t.get_all_traces().items():
+            df = trace.df
             df.drop(df.loc[df["s_name"].eq("## backward ##")].index, inplace=True)
         cg: CallGraph = CallGraph(t)
 
         autograd_index = self._get_first_index(
-            t.get_trace(0), "autograd::engine::evaluate_function: AddmmBackward0"
+            t.get_trace_df(0), "autograd::engine::evaluate_function: AddmmBackward0"
         )
-        profiler_step_index = self._get_first_index(t.get_trace(0), "ProfilerStep#552")
+        profiler_step_index = self._get_first_index(
+            t.get_trace_df(0), "ProfilerStep#552"
+        )
         self.assertTrue(autograd_index > -1)
         self.assertTrue(profiler_step_index > -1)
         csg: CallStackGraph = cg.get_csg_of_node(autograd_index, 0)
@@ -113,8 +116,8 @@ class TraceCallGraphTestCase(unittest.TestCase):
         )
         t.parse_traces()
         # set a new pid for the traces
-        for rank, df in t.get_all_traces().items():
-            df["pid"] = rank + 1
+        for rank, trace in t.get_all_traces().items():
+            trace.df["pid"] = rank + 1
         # For the test traces, there should be exactly two stacks for each rank.
         cg: CallGraph = CallGraph(t)
         self.assertListEqual(cg.mapping.groupby("rank").size().unique().tolist(), [2])

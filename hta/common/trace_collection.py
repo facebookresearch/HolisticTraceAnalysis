@@ -13,12 +13,13 @@ import sys
 import time
 import tracemalloc
 import warnings
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
 
 import pandas as pd
 
+from hta.common.singletrace import Trace
 from hta.common.trace_file import create_rank_to_trace_dict, get_trace_files
 from hta.common.trace_filter import CPUOperatorFilter, GPUKernelFilter
 from hta.common.trace_parser import parse_trace_dataframe, parse_trace_dict
@@ -60,10 +61,8 @@ def trace_event_timestamp_to_unixtime_ns(
     return trace_event_ts_ns + base_time_nanoseconds
 
 
-def transform_correlation_to_index(
-    df: pd.DataFrame, symbol_table: TraceSymbolTable
-) -> pd.DataFrame:
-    """Transform correlation to index_correlation and add a index_correlation column to df.
+def transform_correlation_to_index(trace: Trace) -> pd.DataFrame:
+    """Transform correlation to index_correlation and add a index_correlation column to trace's df.
 
     The correlation in the trace is a reference ID which links a Cuda kernel launch
     and the cuda kernel. Because the correlation is not an index, using `correction` to find
@@ -78,21 +77,21 @@ def transform_correlation_to_index(
 
     The transform can be illustrated as follows:
 
-    Given the following input DataFrame <df>:
+    Given the following input trace's DataFrame:
 
     | index | stream | cat | s_cat  | correlation |
     ===============================================
     | 675   | 7      | 248 | Kernel | 278204204   |
     | 677   | -1     |   9 | Runtime| 278204204   |
 
-    After calling `transform_correlation_to_index(df)`, <df> will become:
+    After calling `transform_correlation_to_index(df)`, trace's df will become:
 
     | index | stream | cat | s_cat  | correlation |  index_correlation |
     ====================================================================
     | 675   | 7      | 248 | Kernel | 278204204   |       677          |
     | 677   | -1     |   9 | Runtime| 278204204   |       675          |
 
-    This function changes the input DataFrame by adding a new column `index_correlation`.
+    This function changes the input trace's DataFrame by adding a new column `index_correlation`.
 
     Example use: find the kernels of all Cuda Launch
     cuda_launch_events = df.loc[df['cat'].eq(9) & df['index_correlation'].gt(0)]
@@ -100,15 +99,15 @@ def transform_correlation_to_index(
     df.loc[cuda_kernel_indices]
 
     Args:
-        df (pd.DataFrame): the input DataFrame
-        symbol_table: the TraceSymbolTable for the trace
+        trace (Trace): the input Trace object, containing both the DataFrame and the symbol table.
 
     Returns:
         pd.DataFrame: the transformed DataFrame with a index_correlation column.
 
     Affects:
-        This function adds a index_correlation column to df.
+        This function adds a index_correlation column to trace's df.
     """
+    df = trace.df
 
     if "correlation" not in df.columns:
         return df
@@ -119,8 +118,8 @@ def transform_correlation_to_index(
         df["correlation"].ne(-1), ["index", "correlation", "stream", "name"]
     ]
 
-    on_cpu = CPUOperatorFilter()(corr_df, symbol_table)
-    on_gpu = GPUKernelFilter()(corr_df, symbol_table)
+    on_cpu = CPUOperatorFilter()(corr_df, trace.symbol_table)
+    on_gpu = GPUKernelFilter()(corr_df, trace.symbol_table)
 
     # We only need to merge once.
     # index_x --> index_y will be cpu to gpu mapping
@@ -154,9 +153,9 @@ def get_cpu_gpu_correlation(df: pd.DataFrame) -> pd.DataFrame:
     return cpu_gpu_correlation
 
 
-def add_iteration(df: pd.DataFrame, symbol_table: TraceSymbolTable) -> pd.DataFrame:
+def add_iteration(trace: Trace) -> pd.DataFrame:
     """
-    Add an iteration column to the DataFrame <df>.
+    Add an iteration column to the trace's DataFrame.
 
     This function extracts the trace iteration number from the `ProfilerStep` annotation
     in the name column and then apply the following logic to determine which iteration
@@ -169,17 +168,18 @@ def add_iteration(df: pd.DataFrame, symbol_table: TraceSymbolTable) -> pd.DataFr
        steps, set the iteration number to -1.
 
     Args:
-        df: a DataFrame representation of a trace.
-        symbol_table: the TraceSymbolTable for the trace
+        trace (Trace): a Trace object containing both the DataFrame and the symbol table.
 
     Returns:
         A DataFrame with the profiler steps information.
 
     Note:
-        This function will change the input DataFrame by adding the iteration number column.
+        This function will change the input trace's DataFrame by adding the iteration number column.
     """
-    s_map = pd.Series(symbol_table.sym_index)
-    s_tab = pd.Series(symbol_table.sym_table)
+    df = trace.df
+
+    s_map = pd.Series(trace.symbol_table.sym_index)
+    s_tab = pd.Series(trace.symbol_table.sym_table)
     profiler_step_ids = s_map[s_map.index.str.startswith("ProfilerStep")]
     profiler_step_ids.sort_index()
 
@@ -228,20 +228,17 @@ def add_iteration(df: pd.DataFrame, symbol_table: TraceSymbolTable) -> pd.DataFr
     return profiler_steps
 
 
-def parse_trace_file(
-    trace_file_path: str,
-    cfg: Optional[ParserConfig] = None,
-) -> Tuple[MetaData, pd.DataFrame, TraceSymbolTable]:
-    """parse a single trace file into a meat test_data dictionary and a dataframe of events.
+def parse_trace_file(trace_file_path: str, cfg: Optional[ParserConfig] = None) -> Trace:
+    """parse a single trace file into a trace (Trace) object.
     Args:
         trace_file_path (str): The path to a trace file. When the trace_file is a relative path.
             This method combines the object's trace_path with trace_file to get the full path of the trace file.
         cfg (ParserConfig, Optional): A ParserConfig object controls how to parse the trace file.
     Returns:
-        Tuple[MetaData, pd.DataFrame, TraceSymbolTable]
-            The first item is the trace's metadata;
-            The second item is the dataframe representation of the trace's events.
-            The third item is the symbol table to encode the symbols of the trace.
+        Trace object that contains:
+            Trace's metadata.
+            DataFrame representation of the trace's events.
+            Symbol table to encode the symbols of the trace.
 
     Raises:
         OSError when the trace file doesn't exist or current process has no permission to access it.
@@ -257,21 +254,21 @@ def parse_trace_file(
     t_start = time.perf_counter()
     cfg = cfg or ParserConfig.get_default_cfg()
 
-    meta, df, local_symbol_table = parse_trace_dataframe(trace_file_path, cfg)
+    trace: Trace = parse_trace_dataframe(trace_file_path, cfg)
 
     # add fwd bwd links between CPU ops
-    add_fwd_bwd_links(df)
+    add_fwd_bwd_links(trace.df)
+    trace.df = transform_correlation_to_index(trace)
+    add_iteration(trace)
 
-    df = transform_correlation_to_index(df, local_symbol_table)
-
-    add_iteration(df, local_symbol_table)
-    df["end"] = df["ts"] + df["dur"]
+    trace.df["end"] = trace.df["ts"] + trace.df["dur"]
 
     t_end = time.perf_counter()
     logger.warning(
         f"Overall parsing of {trace_file_path} in {(t_end - t_start):.2f} seconds; current PID:{os. getpid()}"
     )
-    return meta, df, local_symbol_table
+
+    return trace
 
 
 class _TraceFileParserWrapper:
@@ -280,9 +277,7 @@ class _TraceFileParserWrapper:
     def __init__(self, cfg: ParserConfig) -> None:
         self.cfg = cfg
 
-    def __call__(
-        self, trace_file: str
-    ) -> Tuple[MetaData, pd.DataFrame, TraceSymbolTable]:
+    def __call__(self, trace_file: str) -> Trace:
         return parse_trace_file(trace_file, self.cfg)
 
 
@@ -399,7 +394,7 @@ class TraceCollection:
             return
 
         logger.debug(self.trace_files)
-        self.traces: Dict[int, pd.DataFrame] = {}
+        self.traces: Dict[int, Trace] = {}
         self.symbol_table = TraceSymbolTable()
         self.meta_data: Dict[int, MetaData] = {}
         self.min_ts: int = 0
@@ -428,10 +423,11 @@ class TraceCollection:
             use_memory_profiling=use_memory_profiling,
         )
         self.align_and_filter_trace(include_last_profiler_step)
-        for rank, df in self.traces.items():
-            df = self.traces[rank].set_index("index", drop=False)
+        for trace in self.traces.values():
+            df = trace.df
+            df = df.set_index("index", drop=False)
             df.index.names = [None]
-            self.traces[rank] = df
+            trace.df = df
         self.is_parsed = True
 
     def parse_single_rank(self, rank: int) -> None:
@@ -443,20 +439,17 @@ class TraceCollection:
         """
         if rank in self.trace_files:
             trace_filepath = self.trace_files[rank]
-            (
-                self.meta_data[rank],
-                self.traces[rank],
-                local_symbol_table,
-            ) = parse_trace_file(trace_filepath, self.parser_config)
+            trace = parse_trace_file(trace_filepath, self.parser_config)
             # update the global symbol table
-            self.symbol_table.add_symbols(local_symbol_table.get_sym_table())
+            local_symbol_table = trace.get_sym_table()
+            self.symbol_table.add_symbols(local_symbol_table)
             # fix the encoding of the data frame
-            local_table = local_symbol_table.get_sym_table()
             global_map = self.symbol_table.get_sym_id_map()
             for col in ["cat", "name"]:
-                self.traces[rank][col] = self.traces[rank][col].apply(
-                    lambda idx: global_map[local_table[idx]]
+                trace.df[col] = trace.df[col].apply(
+                    lambda idx: global_map[local_symbol_table[idx]]
                 )
+            self.traces[rank] = trace
 
     def parse_multiple_ranks(
         self,
@@ -482,13 +475,9 @@ class TraceCollection:
         if not use_multiprocessing:
             for rank in ranks:
                 logger.debug(f"parsing trace for rank-{rank}")
-                result = parse_trace_file(self.trace_files[rank], self.parser_config)
-                self.meta_data[rank], self.traces[rank], local_symbol_tables[rank] = (
-                    result[0],
-                    result[1],
-                    result[2],
-                )
-                self.symbol_table.add_symbols(local_symbol_tables[rank].get_sym_table())
+                trace = parse_trace_file(self.trace_files[rank], self.parser_config)
+                self.traces[rank] = trace
+                self.symbol_table.add_symbols(trace.get_sym_table())
             logger.debug(f"finished parsing for all {len(ranks)} ranks")
         else:
             num_procs = min(mp.cpu_count(), len(ranks))
@@ -504,24 +493,20 @@ class TraceCollection:
 
             _parser = _TraceFileParserWrapper(self.parser_config)
             with mp.get_context("fork").Pool(num_procs) as pool:
-                results = pool.map(_parser, trace_paths, chunksize=1)
+                trace_list = pool.map(_parser, trace_paths, chunksize=1)
             logger.debug(f"finished parallel parsing using {num_procs} processes.")
 
             # collect the results
-            for rank, result in zip(ranks, results):
-                self.meta_data[rank], self.traces[rank], local_symbol_tables[rank] = (
-                    result[0],
-                    result[1],
-                    result[2],
-                )
-                self.symbol_table.add_symbols(local_symbol_tables[rank].get_sym_table())
+            for rank, trace in zip(ranks, trace_list):
+                self.traces[rank] = trace
+                self.symbol_table.add_symbols(trace.get_sym_table())
 
         # Now we update the IDs in the Dataframe using the global symbols table.
         global_map = self.symbol_table.get_sym_id_map()
-        for rank in ranks:
-            local_table = local_symbol_tables[rank].get_sym_table()
+        for trace in self.traces.values():
+            local_table = trace.get_sym_table()
             for col in ["cat", "name"]:
-                self.traces[rank][col] = self.traces[rank][col].apply(
+                trace.df[col] = trace.df[col].apply(
                     lambda idx: global_map[local_table[idx]]
                 )
 
@@ -600,10 +585,29 @@ class TraceCollection:
         rank = self._get_first_rank(rank)
 
         if rank in self.get_ranks():
-            df = self.traces[rank]
+            df = self.get_trace_df(rank)
             if "iteration" in df.columns:
                 return sorted([i for i in df["iteration"].unique() if i >= 0])
         return []
+
+    def get_trace_df(self, rank: int) -> pd.DataFrame:
+        """
+        Get the trace's DataFrame for a given rank.
+
+        Args:
+            rank (int) : the rank of the trainer.
+
+        Returns:
+            The trace's DataFrame for the given rank.
+
+        Raises:
+            ValueError when this TraceCollection object doesn't have trace for the given rank.
+        """
+        if rank not in self.traces:
+            logger.error(f"get_rank_trace - no trace for rank {rank}")
+            raise ValueError
+
+        return self.traces[rank].df
 
     def get_trace_duration(self, rank: Optional[int] = None) -> int:
         """Get the duration of specified rank.
@@ -615,10 +619,11 @@ class TraceCollection:
         Returns: duration of trace (int)
         """
         rank = self._get_first_rank(rank)
-        trace_df = self.get_trace(rank)
+        trace_df = self.get_trace_df(rank)
+
         return trace_df.ts.max() - trace_df.ts.min()
 
-    def get_trace(self, rank: int) -> pd.DataFrame:
+    def get_trace(self, rank: int) -> Trace:
         """
         Get the trace for a given rank.
 
@@ -626,7 +631,7 @@ class TraceCollection:
             rank (int) : the rank of the trainer whose trace is to be returned.
 
         Returns:
-            The DataFrame for the given rank.
+            The trace for the given rank.
 
         Raises:
             ValueError when this TraceCollection object doesn't have trace for the given rank.
@@ -636,11 +641,11 @@ class TraceCollection:
             raise ValueError
         return self.traces[rank]
 
-    def get_all_traces(self) -> Dict[int, pd.DataFrame]:
+    def get_all_traces(self) -> Dict[int, Trace]:
         """
         Get the traces of all ranks.
         Returns:
-            A dictionary with rank as key and its trace test_data as value.
+            A dictionary with rank as key and its trace as value.
         """
         return self.traces
 
@@ -709,10 +714,9 @@ class TraceCollection:
         """
         Align dataframes for all ranks such that the earliest event starts at time 0.
         """
-        self.min_ts = min(trace_df["ts"].min() for trace_df in self.traces.values())
-        for rank, trace_df in self.traces.items():
-            trace_df["ts"] = trace_df["ts"] - self.min_ts
-            self.traces[rank] = trace_df
+        self.min_ts = min(trace.df["ts"].min() for trace in self.traces.values())
+        for _, trace in self.traces.items():
+            trace.df["ts"] = trace.df["ts"] - self.min_ts
 
     def _fix_mtia_memory_kernels(self, trace_df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -850,11 +854,11 @@ class TraceCollection:
                 "There is only one iteration in the trace. The analysis result may not be accurate."
             )
             include_last_profiler_step = True
-        for rank, trace_df in self.traces.items():
+        for trace in self.traces.values():
             if device_type != "MTIA":
-                self.traces[rank] = filter_gpu_kernels_with_cpu_correlation(trace_df)
+                trace.df = filter_gpu_kernels_with_cpu_correlation(trace.df)
             else:
-                self.traces[rank] = filter_mtia_kernels_for_one_rank(trace_df)
+                trace.df = filter_mtia_kernels_for_one_rank(trace.df)
 
     def decode_symbol_ids(self, use_shorten_name: bool = True) -> None:
         """Decode the name and cat column to show the original string names.
@@ -866,7 +870,7 @@ class TraceCollection:
 
         for rank in self.traces:
             decode_symbol_id_to_symbol_name(
-                self.get_trace(rank), self.symbol_table, use_shorten_name
+                self.get_trace_df(rank), self.symbol_table, use_shorten_name
             )
 
     def get_device_type(self) -> str:
@@ -876,7 +880,8 @@ class TraceCollection:
             The device type parsed from the trace metadata. If the device type is not found, return "UNKNOWN".
         """
         rank = next(iter(self.traces))
-        device_type = self.meta_data[rank].get("device_type", "UNKNOWN")
+        trace: Trace = self.traces[rank]
+        device_type = trace.meta.get("device_type", "UNKNOWN")
         return device_type
 
     def convert_time_series_to_events(
@@ -963,4 +968,6 @@ class TraceCollection:
             logger.warning(err_msg)
             raise ValueError(err_msg)
 
-        return trace_event_timestamp_to_unixtime_ns(self.min_ts, self.meta_data[rank])
+        trace: Trace = self.get_trace(rank)
+
+        return trace_event_timestamp_to_unixtime_ns(self.min_ts, trace.meta)

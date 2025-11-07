@@ -522,9 +522,9 @@ class CallGraph:
         for rank in ranks:
             if self.pre_process_trace_data:
                 self.constrain_child_time_withinin_parent(
-                    self.trace_data.get_trace(rank)
+                    self.trace_data.get_trace_df(rank)
                 )
-            df = self.trace_data.get_trace(rank).copy()
+            df = self.trace_data.get_trace_df(rank).copy()
             if remapped_tids and rank in remapped_tids:
                 df = self._remap_tids(df, remapped_tids[rank])
             for (pid, tid), df_thread in df.groupby(["pid", "tid"]):
@@ -568,7 +568,7 @@ class CallGraph:
                         if node_id >= 0
                     }
                 )
-            df = self.trace_data.get_trace(rank)
+            df = self.trace_data.get_trace_df(rank)
             if (
                 not hta_options.disable_call_graph_depth()
                 and call_stack_indices.size > 0
@@ -600,7 +600,7 @@ class CallGraph:
         Raises:
             ValueError when the index is not in the DataFrame.
         """
-        df = self.trace_data.get_trace(rank)
+        df = self.trace_data.get_trace_df(rank)
 
         # If it is a GPU kernel, get the stack from the launch event.
         if df.loc[node_id]["stream"] > -1:

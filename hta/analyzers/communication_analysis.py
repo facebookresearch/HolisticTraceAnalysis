@@ -8,6 +8,7 @@ from typing import Dict, List, TYPE_CHECKING
 import pandas as pd
 import plotly.express as px
 
+from hta.common.singletrace import Trace
 from hta.utils.utils import get_kernel_type, KernelType, merge_kernel_intervals
 
 # import statement used without the "if TYPE_CHECKING" guard will cause a circular
@@ -29,11 +30,11 @@ class CommunicationAnalysis:
         """
         sym_table = t.symbol_table.get_sym_table()
 
-        def get_comm_comp_overlap_value(trace_df: pd.DataFrame) -> float:
+        def get_comm_comp_overlap_value(trace: Trace) -> float:
             """
             Compute the overlap percentage between communication and computation kernels for one rank.
             """
-            gpu_kernels = trace_df[trace_df["stream"].ne(-1)].copy()
+            gpu_kernels = trace.df[trace.df["stream"].ne(-1)].copy()
             gpu_kernels["kernel_type"] = gpu_kernels[["name"]].apply(
                 lambda x: get_kernel_type(sym_table[x["name"]]), axis=1
             )
@@ -77,10 +78,10 @@ class CommunicationAnalysis:
             ).sum()
 
         result: Dict[str, List[float]] = defaultdict(list)
-        for rank, trace_df in t.traces.items():
+        for rank, trace in t.traces.items():
             result["rank"].append(rank)
             result["comp_comm_overlap_ratio"].append(
-                get_comm_comp_overlap_value(trace_df)
+                get_comm_comp_overlap_value(trace)
             )
         result_df = pd.DataFrame(result)
         result_df["comp_comm_overlap_pctg"] = round(

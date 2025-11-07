@@ -155,6 +155,9 @@ class CallGraphTestCase(unittest.TestCase):
             def get_trace(self, rank):
                 return self.traces[rank]
 
+            def get_trace_df(self, rank):
+                return self.traces[rank]
+
         # Create test data for trim_trace_events
         self.df_trim = pd.DataFrame(
             {

@@ -44,8 +44,8 @@ class TraceCounters:
                 time series. The value remains constant until the next timestamp.
                 In essence, it can be thought of as a step function.
         """
-        # get trace for a rank
-        trace_df: pd.DataFrame = t.get_trace(rank)
+        # get dataframe of trace for a rank
+        trace_df: pd.DataFrame = t.get_trace_df(rank)
 
         # CUDA Runtime events that may launch kernels
         # - filter events that have a correlated kernel event only.
@@ -274,8 +274,8 @@ class TraceCounters:
                 ts (timestamp), pid (of corresponding GPU), name of memory copy type
                 and memory_bw_gbps (memory bandwidth in GB/sec).
         """
-        # get trace for a rank
-        trace_df: pd.DataFrame = t.get_trace(rank)
+        # get dataframe of trace for a rank
+        trace_df: pd.DataFrame = t.get_trace_df(rank)
         sym_table = t.symbol_table.get_sym_table()
 
         gpu_kernels = trace_df[trace_df["stream"].ne(-1)].copy()
