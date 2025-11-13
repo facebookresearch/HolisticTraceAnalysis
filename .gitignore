@@ -65,3 +65,7 @@ venv.bak/
 
 # sphinx docs
 docs/build/
+.python-version
+*.ipynb
+*.gz
+*.json
