@@ -61,9 +61,9 @@ class CuptiCounterAnalysis:
         op_stacks = {}
         top_level_ops = {}
         bottom_level_ops = {}
-        for idx, kernel_idx, launch_idx in gpu_kernels[
-            ["index", "index_runtime"]
-        ].itertuples(index=True):
+        for idx, _, launch_idx in gpu_kernels[["index", "index_runtime"]].itertuples(
+            index=True
+        ):
             stack = cg.get_stack_of_node(launch_idx).sort_values("ts")
             ops = stack.loc[stack.s_cat.eq("cpu_op"), "index"].to_list()
             op_stacks[idx] = ops
