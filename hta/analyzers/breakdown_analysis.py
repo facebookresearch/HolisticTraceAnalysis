@@ -271,17 +271,18 @@ class BreakdownAnalysis:
     @classmethod
     def _associate_gpu_kernels_with_user_annotations(
         cls,
-        trace_df: pd.DataFrame,
         gpu_kernels_df: pd.DataFrame,
         gpu_user_anno_df: pd.DataFrame,
     ) -> None:
-        """Assigns each gpu_kernel  user annotation. If the kernel overlaps with multiple
+        """Assigns each gpu_kernel user annotation. If the kernel overlaps with multiple
         user annotations, we will pick the lowest/leaf annotation in the stack to attribute to.
-            @args: trace_df (pd.DataFrame) : trace df for specific rank
-                Please make sure this includes "end" column.
             @args: gpu_kernels_df (pd.DataFrame) : kernel df with interval index.
             @args: gpu_user_anno_df (pd.DataFrame) : gpu user annotation df with interval index.
         """
+        # OPTIMIZATION: Pre-filter by pid/tid and use integer-based indexing
+        # Original: O(n*m) with expensive .loc[] calls using triple boolean masks
+        # Optimized: O(n*m) overlap detection but with direct integer indexing updates
+
         # Get the pid tid combinations to scan over
         pid_tids = gpu_user_anno_df[["pid", "tid"]].drop_duplicates().to_dict("records")
 
@@ -294,17 +295,33 @@ class BreakdownAnalysis:
                 f"Pid,tid = {p}, Num gpu annotations = {len(gpu_user_anno_df_filt)}"
             )
 
+            # OPTIMIZATION: Pre-filter kernels by pid/tid ONCE instead of on every iteration
+            # Create boolean mask once and get the integer positions
+            kernel_mask = (gpu_kernels_df["pid"] == pid) & (
+                gpu_kernels_df["tid"] == tid
+            )
+            kernel_positions = gpu_kernels_df.index[kernel_mask]
+
+            if len(kernel_positions) == 0:
+                continue
+
             # Loop over all GPU user annotation intervals and match them with GPU
-            # kernel intervals. This will be efficient if len(user annotations) << len(kernels)
+            # kernel intervals. Build updates using integer positions.
             for row in gpu_user_anno_df_filt.itertuples():
                 interval, anno_name = row.Index, row.name
-                overlaps = gpu_kernels_df.index.overlaps(interval)
-                gpu_kernels_df.loc[
-                    (gpu_kernels_df["pid"] == pid)
-                    & (gpu_kernels_df["tid"] == tid)
-                    & overlaps,
-                    "user_annotation",
-                ] = anno_name
+
+                # Check overlap only on the pre-filtered kernel positions
+                overlaps = kernel_positions.overlaps(interval)
+
+                # Get the actual positions that overlap
+                overlapping_positions = kernel_positions[overlaps]
+
+                # OPTIMIZATION: Use integer-based .loc[] with Index object instead of
+                # triple boolean mask (pid & tid & overlaps). This is much faster.
+                if len(overlapping_positions) > 0:
+                    gpu_kernels_df.loc[overlapping_positions, "user_annotation"] = (
+                        anno_name
+                    )
 
     @classmethod
     def get_gpu_kernels_with_user_annotations(
@@ -332,7 +349,7 @@ class BreakdownAnalysis:
         gpu_kernels_df = cls._get_gpu_kernel_interval_dataframe(trace_df, t)
 
         cls._associate_gpu_kernels_with_user_annotations(
-            trace_df, gpu_kernels_df, gpu_user_anno_df
+            gpu_kernels_df, gpu_user_anno_df
         )
 
         if expand_names:
