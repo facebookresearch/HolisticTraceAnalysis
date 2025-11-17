@@ -152,9 +152,6 @@ class CallGraphTestCase(unittest.TestCase):
             def get_all_traces(self):
                 return self.traces.keys()
 
-            def get_trace(self, rank):
-                return self.traces[rank]
-
             def get_trace_df(self, rank):
                 return self.traces[rank]
 

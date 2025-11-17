@@ -37,11 +37,6 @@ class _XPUSingleTrace(_SingleTrace):
 Trace = _SingleTrace
 
 
-def create_default(meta=None, df=None, symbol_table=None) -> Trace:
-    """Factory method to create default Trace object."""
-    return _SingleTrace(meta, df, symbol_table)
-
-
 def create(device_type: str, meta, df, symbol_table) -> Trace:
     """Factory method to create Trace object based on device type."""
 

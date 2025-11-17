@@ -36,7 +36,7 @@ class CorrelationTestCase(unittest.TestCase):
         mock_symbol_table = TraceSymbolTable()
         mock_symbol_table.sym_index = sym_index
         expected_index_correlation = [5, 6, 0, -1, 1, 2, 0, -1]
-        trace = singletrace.create_default(df=df, symbol_table=mock_symbol_table)
+        trace = singletrace.create(None, None, df, mock_symbol_table)
         df2 = transform_correlation_to_index(trace)
         self.assertListEqual(
             expected_index_correlation, df2["index_correlation"].tolist()

@@ -345,8 +345,7 @@ class TraceCollection:
         trace_path (str) : the path to the folder where the collected raw traces are stored. In other words,
             `trace_path = normalize_path(base_trace_dir)`.
         trace_files (Dict[int, str]) : a dictionary that maps the rank of a job's trainer to its trace file.
-        traces (Dict[int, pd.DataFrame]) : a dictionary that maps the rank of a job's trainer to its trace data.
-        meta_data (Dict[int, MetaData]) : a dictionary that maps the rank of a job's trainer to its meta_data.
+        traces (Dict[int, Trace]) : a dictionary that maps the rank of a job's trainer to its trace data.
         symbol_table (TraceSymbolTable) : a symbol table used to encode the symbols in the trace.
         is_parsed (bool) : a flag indicting whether the trace is parsed or not.
         parser_config (ParserConfig) : a configuration object for customizing the parser.
@@ -396,7 +395,6 @@ class TraceCollection:
         logger.debug(self.trace_files)
         self.traces: Dict[int, Trace] = {}
         self.symbol_table = TraceSymbolTable()
-        self.meta_data: Dict[int, MetaData] = {}
         self.min_ts: int = 0
 
         self._normalize_trace_filenames()
@@ -589,6 +587,25 @@ class TraceCollection:
             if "iteration" in df.columns:
                 return sorted([i for i in df["iteration"].unique() if i >= 0])
         return []
+
+    def get_trace_meta(self, rank: int) -> MetaData:
+        """
+        Get the trace's MetaData for a given rank.
+
+        Args:
+            rank (int) : the rank of the trainer.
+
+        Returns:
+            The trace's MetaData for the given rank.
+
+        Raises:
+            ValueError when this TraceCollection object doesn't have trace for the given rank.
+        """
+        if rank not in self.traces:
+            logger.error(f"get_rank_trace - no trace for rank {rank}")
+            raise ValueError
+
+        return self.traces[rank].meta
 
     def get_trace_df(self, rank: int) -> pd.DataFrame:
         """
@@ -880,8 +897,8 @@ class TraceCollection:
             The device type parsed from the trace metadata. If the device type is not found, return "UNKNOWN".
         """
         rank = next(iter(self.traces))
-        trace: Trace = self.traces[rank]
-        device_type = trace.meta.get("device_type", "UNKNOWN")
+        meta = self.get_trace_meta(rank)
+        device_type = meta.get("device_type", "UNKNOWN")
         return device_type
 
     def convert_time_series_to_events(
@@ -968,6 +985,6 @@ class TraceCollection:
             logger.warning(err_msg)
             raise ValueError(err_msg)
 
-        trace: Trace = self.get_trace(rank)
+        meta = self.get_trace_meta(rank)
 
-        return trace_event_timestamp_to_unixtime_ns(self.min_ts, trace.meta)
+        return trace_event_timestamp_to_unixtime_ns(self.min_ts, meta)

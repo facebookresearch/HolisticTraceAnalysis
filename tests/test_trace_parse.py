@@ -232,8 +232,7 @@ class TraceParseTestCase(unittest.TestCase):
             )
 
     def test_trace_metadata(self) -> None:
-        trace: Trace = self.vision_transformer_t.get_trace(0)
-        trace_meta = trace.meta
+        trace_meta = self.vision_transformer_t.get_trace_meta(0)
         exp_meta = EXPECTED_META_VISION_TRANFORMER
         self.assertEqual(trace_meta["schemaVersion"], exp_meta["schemaVersion"])
         self.assertEqual(trace_meta["distributedInfo"], exp_meta["distributedInfo"])
@@ -623,7 +622,7 @@ class TraceParseConfigTestCase(unittest.TestCase):
         )
         # Create a TraceCollection object
         t = TraceCollection(trace_dir="", trace_files={})
-        t.traces[0] = singletrace.create_default(df=df.copy())
+        t.traces[0] = singletrace.create(None, None, df.copy(), None)
         t.symbol_table = symbol_table
 
         # Expected result after applying fix

@@ -122,7 +122,7 @@ class CallGraph:
         t.symbol_table = (
             symbol_table if symbol_table else TraceSymbolTable.create_from_df(df)
         )
-        t.traces[rank] = singletrace.create_default(df=df.copy())
+        t.traces[rank] = singletrace.create(None, None, df.copy(), None)
         t.is_parsed = True
 
         cg = CallGraph(t)
