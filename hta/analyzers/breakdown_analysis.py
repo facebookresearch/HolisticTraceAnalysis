@@ -772,6 +772,8 @@ class BreakdownAnalysis:
         gpu_kernels_s["idle_interval"] = (
             gpu_kernels_s["ts"] - gpu_kernels_s["prev_end_ts"]
         )
+        # Handle negative idle intervals that can occur due to rounding errors.
+        gpu_kernels_s.loc[gpu_kernels_s["idle_interval"] < 0, "idle_interval"] = 0
 
         # Default idle time category
         gpu_kernels_s["idle_category"] = IdleTimeType.OTHER.value

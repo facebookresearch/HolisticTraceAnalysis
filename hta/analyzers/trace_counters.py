@@ -314,6 +314,8 @@ class TraceCounters:
         result_df_list = []
         for _, membw_df in membw_time_series.groupby("name"):
             membw_df.memory_bw_gbps = membw_df.memory_bw_gbps.cumsum()
+            # Fix floating-point precision errors that can result in tiny negative values.
+            membw_df.loc[membw_df.memory_bw_gbps < 0, "memory_bw_gbps"] = 0
             result_df_list.append(membw_df)
 
         if len(result_df_list) == 0:
