@@ -317,6 +317,60 @@ class TraceSymbolTable:
             | (df["cat"] == cuda_driver_id)
         )
 
+    def _get_xpu_runtime_launch_events_mask(self, df: pd.DataFrame) -> pd.Series:
+        """Returns a boolean mask you can use with pandas dataframes
+        to filter events that are XPU runtime kernel and memory operations."""
+
+        urEnqueueUSMFill_id = self.sym_index.get("urEnqueueUSMFill", self.NULL)
+        urEnqueueUSMFill2D_id = self.sym_index.get("urEnqueueUSMFill2D", self.NULL)
+        urEnqueueUSMMemcpy_id = self.sym_index.get("urEnqueueUSMMemcpy", self.NULL)
+        urEnqueueUSMMemcpy2D_id = self.sym_index.get("urEnqueueUSMMemcpy2D", self.NULL)
+
+        urEnqueueKernelLaunch_id = self.sym_index.get(
+            "urEnqueueKernelLaunch", self.NULL
+        )
+        urEnqueueKernelLaunchCustomExp_id = self.sym_index.get(
+            "urEnqueueKernelLaunchCustomExp", self.NULL
+        )
+        urEnqueueCooperativeKernelLaunchExp_id = self.sym_index.get(
+            "urEnqueueCooperativeKernelLaunchExp", self.NULL
+        )
+
+        urEnqueueMemBufferFill_id = self.sym_index.get(
+            "urEnqueueMemBufferFill", self.NULL
+        )
+        urEnqueueMemBufferRead_id = self.sym_index.get(
+            "urEnqueueMemBufferRead", self.NULL
+        )
+        urEnqueueMemBufferWrite_id = self.sym_index.get(
+            "urEnqueueMemBufferWrite", self.NULL
+        )
+        urEnqueueMemBufferCopy_id = self.sym_index.get(
+            "urEnqueueMemBufferCopy", self.NULL
+        )
+        urUSMHostAlloc_id = self.sym_index.get("urUSMHostAlloc", self.NULL)
+        urUSMSharedAlloc_id = self.sym_index.get("urUSMSharedAlloc", self.NULL)
+        urUSMDeviceAlloc_id = self.sym_index.get("urUSMDeviceAlloc", self.NULL)
+
+        name_mask = (
+            (df["name"] == urEnqueueUSMFill_id)
+            | (df["name"] == urEnqueueUSMFill2D_id)
+            | (df["name"] == urEnqueueUSMMemcpy_id)
+            | (df["name"] == urEnqueueUSMMemcpy2D_id)
+            | (df["name"] == urEnqueueKernelLaunch_id)
+            | (df["name"] == urEnqueueKernelLaunchCustomExp_id)
+            | (df["name"] == urEnqueueCooperativeKernelLaunchExp_id)
+            | (df["name"] == urEnqueueMemBufferFill_id)
+            | (df["name"] == urEnqueueMemBufferRead_id)
+            | (df["name"] == urEnqueueMemBufferWrite_id)
+            | (df["name"] == urEnqueueMemBufferCopy_id)
+            | (df["name"] == urUSMHostAlloc_id)
+            | (df["name"] == urUSMSharedAlloc_id)
+            | (df["name"] == urUSMDeviceAlloc_id)
+        )
+
+        return name_mask
+
     def get_runtime_launch_events_mask(self, df: pd.DataFrame) -> pd.Series:
         """Returns a boolean mask you can use with pandas dataframes
         to filter events that are CUDA runtime kernel and memcpy launches."""
@@ -353,8 +407,10 @@ class TraceSymbolTable:
             | (df["name"] == cuLaunchKernelEx_id)
         )
 
+        xpu_name_mask = self._get_xpu_runtime_launch_events_mask(df)
+
         # Add the index_correlation > 0 condition
-        return name_mask & (df["index_correlation"] > 0)
+        return (name_mask | xpu_name_mask) & (df["index_correlation"] > 0)
 
     def get_events_mask(self, df: pd.DataFrame, events: list[str] | None) -> pd.Series:
         """Returns a boolean mask you can use with pandas dataframes
