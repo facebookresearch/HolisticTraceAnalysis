@@ -21,8 +21,8 @@ from hta.common.timeline import (
     Timeline,
     TimelinePlotSetting,
 )
-from hta.common.trace import Trace
 from hta.common.trace_call_graph import CallGraph
+from hta.common.trace_collection import TraceCollection
 from hta.common.trace_filter import CPUOperatorFilter, GPUKernelFilter
 from hta.common.trace_symbol_table import TraceSymbolTable
 
@@ -32,7 +32,7 @@ _MODULE = "hta.common.timeline"
 class TestTimelineAnalysis(unittest.TestCase):
     base_data_dir = str(Path(hta.__file__).parent.parent.joinpath("tests/data"))
     trace_path: str = os.path.join(base_data_dir, "timeline_analysis")
-    t = Trace(trace_dir=trace_path)
+    t = TraceCollection(trace_dir=trace_path)
     t.parse_traces()
     t.decode_symbol_ids(use_shorten_name=False)
     cg = CallGraph(t, ranks=[0])
@@ -40,7 +40,7 @@ class TestTimelineAnalysis(unittest.TestCase):
     def setUp(self) -> None:
         self.trace_path: str = TestTimelineAnalysis.trace_path
         self.t = TestTimelineAnalysis.t
-        self.df = self.t.get_trace(0)
+        self.df = self.t.get_trace_df(0)
 
     @patch(f"{_MODULE}.px.timeline")
     def test_plot_timeline(self, mock_timeline: Mock) -> None:
@@ -253,7 +253,7 @@ class TestTimelineAnalysis(unittest.TestCase):
 
     @patch(f"{_MODULE}.plot_events_timeline")
     def test_timeline_class(self, mock_plot: Mock) -> None:
-        df = self.t.get_trace(0)
+        df = self.t.get_trace_df(0)
         save_path = os.path.join(self.trace_path, "timeline_class.html")
         tl = Timeline(df, self.t.symbol_table, filter_func=GPUKernelFilter())
         tl.setting.plot_format = PlotFormat.File

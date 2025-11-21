@@ -5,9 +5,9 @@
 from typing import Dict, List, Optional
 
 import pandas as pd
-from hta.common.trace import Trace
 
 from hta.common.trace_call_graph import CallGraph
+from hta.common.trace_collection import TraceCollection
 from hta.configs.config import logger
 
 CUDA_SASS_INSTRUCTION_COUNTER_FLOPS: Dict[str, float] = {
@@ -25,13 +25,13 @@ class CuptiCounterAnalysis:
     @classmethod
     def _get_counter_data_with_operators_for_rank(
         cls,
-        t: Trace,
+        t: TraceCollection,
         rank: int,
         cg: CallGraph,
     ) -> Optional[pd.DataFrame]:
         sym_table = t.symbol_table.get_sym_table()
         t.decode_symbol_ids(use_shorten_name=False)
-        df = t.get_trace(rank)
+        df = t.get_trace_df(rank)
 
         # Get valid cuda kernels
         gpu_kernels = (
@@ -90,13 +90,13 @@ class CuptiCounterAnalysis:
     @classmethod
     def get_counter_data_with_operators(
         cls,
-        t: Trace,
+        t: TraceCollection,
         ranks: Optional[List[int]] = None,
     ) -> List[pd.DataFrame]:
         """Correlates the Kernel counter events with pytorch operators using
         the callgraph.
         Args:
-            t (Trace): trace object
+            t (TraceCollection): Collection of multiple traces.
             ranks (List[int]): List of ranks on which to run the analysis. Default = [0].
         Returns:
             A list of dataframes, one per rank, containing kernel name,

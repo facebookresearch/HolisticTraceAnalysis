@@ -7,7 +7,7 @@ import logging
 
 import pyperf
 
-from hta.common.trace import parse_trace_file, Trace
+from hta.common.trace_collection import parse_trace_file, TraceCollection
 from hta.common.trace_parser import set_default_trace_parsing_backend
 
 from hta.configs.config import logger
@@ -40,7 +40,7 @@ def load_and_parse_trace(
     range_it = range(loops)
     t0 = pyperf.perf_counter()
     for _ in range_it:
-        trace = Trace(trace_dir=trace_dir)
+        trace = TraceCollection(trace_dir=trace_dir)
         trace.parse_traces(max_ranks=max_ranks, use_multiprocessing=use_multiprocessing)
     return pyperf.perf_counter() - t0
 

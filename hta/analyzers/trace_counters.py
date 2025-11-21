@@ -6,7 +6,7 @@ from typing import Dict, List, Optional
 
 import pandas as pd
 
-from hta.common.trace import Trace
+from hta.common.trace_collection import TraceCollection
 from hta.configs.config import logger
 from hta.utils.utils import get_kernel_type, get_memory_kernel_type, KernelType
 
@@ -18,7 +18,7 @@ class TraceCounters:
     @classmethod
     def _get_queue_length_time_series_for_rank(
         cls,
-        t: "Trace",
+        t: "TraceCollection",
         rank: int,
     ) -> Optional[pd.DataFrame]:
         """
@@ -31,7 +31,7 @@ class TraceCounters:
         2. Decremented when a CUDA kernel/memcopy operation executes on a stream.
 
         Args:
-            t (Trace): Input trace data structure.
+            t (TraceCollection): Input collection of traces data structure.
             rank (int): rank to generate the time series for.
 
         Returns:
@@ -44,8 +44,8 @@ class TraceCounters:
                 time series. The value remains constant until the next timestamp.
                 In essence, it can be thought of as a step function.
         """
-        # get trace for a rank
-        trace_df: pd.DataFrame = t.get_trace(rank)
+        # get dataframe of trace for a rank
+        trace_df: pd.DataFrame = t.get_trace_df(rank)
 
         # CUDA Runtime events that may launch kernels
         # - filter events that have a correlated kernel event only.
@@ -96,7 +96,7 @@ class TraceCounters:
     @classmethod
     def get_queue_length_time_series(
         cls,
-        t: "Trace",
+        t: "TraceCollection",
         ranks: Optional[List[int]] = None,
     ) -> Dict[int, pd.DataFrame]:
         """
@@ -108,7 +108,7 @@ class TraceCounters:
         2. Decremented when a CUDA kernel/memcopy operation executes on a stream.
 
         Args:
-            t (Trace): Input trace data structure.
+            t (TraceCollection): Input collection of traces data structure.
             rank (int): rank to perform this analysis for.
 
         Returns:
@@ -169,14 +169,14 @@ class TraceCounters:
     @classmethod
     def get_queue_length_summary(
         cls,
-        t: "Trace",
+        t: "TraceCollection",
         ranks: Optional[List[int]] = None,
     ) -> Optional[pd.DataFrame]:
         """
         Returns an (optional) dataframewith queue length statistics per CUDA stream and rank.
 
         Args:
-            t (Trace): Input trace data structure.
+            t (TraceCollection): Input collection of traces data structure.
             ranks (list of int): ranks to perform this analysis.
 
         Returns:
@@ -194,7 +194,7 @@ class TraceCounters:
     @classmethod
     def get_time_spent_blocked_on_full_queue(
         cls,
-        t: "Trace",
+        t: "TraceCollection",
         queue_length_dict: Dict[int, pd.DataFrame],
         max_queue_length: int,
     ) -> Optional[pd.DataFrame]:
@@ -205,7 +205,7 @@ class TraceCounters:
         up the time spent on all streams where the queue is full (see max_queue_length)
 
         Args:
-            t (Trace): Input trace data structure.
+            t (TraceCollection): Input collection of traces data structure.
             queue_length_dict (Dict[int, pd.DataFrame]): A dictionary of rank -> time series with the queue length of each CUDA stream.
                 This is the output of get_queue_length_time_series().
             max_queue_length (int): Max kernel launch queue length.
@@ -257,14 +257,14 @@ class TraceCounters:
 
     @classmethod
     def _get_memory_bw_time_series_for_rank(
-        cls, t: "Trace", rank: int
+        cls, t: "TraceCollection", rank: int
     ) -> Optional[pd.DataFrame]:
         """
         Returns time series for the memory bandwidth of memory copy and memory set operations
         for specified rank.
 
         Args:
-            t (Trace): Input trace data structure.
+            t (TraceCollection): Input collection of traces data structure.
             rank (int): rank to generate the time series for.
 
         Returns:
@@ -274,8 +274,8 @@ class TraceCounters:
                 ts (timestamp), pid (of corresponding GPU), name of memory copy type
                 and memory_bw_gbps (memory bandwidth in GB/sec).
         """
-        # get trace for a rank
-        trace_df: pd.DataFrame = t.get_trace(rank)
+        # get dataframe of trace for a rank
+        trace_df: pd.DataFrame = t.get_trace_df(rank)
         sym_table = t.symbol_table.get_sym_table()
 
         gpu_kernels = trace_df[trace_df["stream"].ne(-1)].copy()
@@ -325,14 +325,14 @@ class TraceCounters:
     @classmethod
     def get_memory_bw_time_series(
         cls,
-        t: "Trace",
+        t: "TraceCollection",
         ranks: Optional[List[int]] = None,
     ) -> Dict[int, pd.DataFrame]:
         """
         Returns a dictionary of rank -> time series for the memory bandwidth.
 
         Args:
-            t (Trace): Input trace data structure.
+            t (TraceCollection): Input collection of traces data structure.
             ranks (list of int): ranks to perform this analysis for.
 
         Returns:
@@ -359,7 +359,7 @@ class TraceCounters:
     @classmethod
     def get_memory_bw_summary(
         cls,
-        t: "Trace",
+        t: "TraceCollection",
         ranks: Optional[List[int]] = None,
     ) -> Optional[pd.DataFrame]:
         """
@@ -367,7 +367,7 @@ class TraceCounters:
         tracked memory ops are MemcpyDtoH, MemcpyHtoD, MemcpyDtoD and MemSet.
 
         Args:
-            t (Trace): Input trace data structure.
+            t (TraceCollection): Input collection of traces data structure.
             ranks (list of int): ranks to perform this analysis for.
 
         Returns:

@@ -13,7 +13,7 @@ from typing import List
 import numpy as np
 import pandas as pd
 
-from hta.common.trace import Trace
+from hta.common.trace_collection import TraceCollection
 from hta.configs.config import logger
 from hta.utils.utils import normalize_path
 
@@ -96,12 +96,14 @@ def _et_has_overlap(trace_df: pd.DataFrame, et: ExecutionTrace) -> bool:
     return has_overlap
 
 
-def correlate_execution_trace(trace: Trace, rank: int, et: ExecutionTrace) -> None:
+def correlate_execution_trace(
+    trace: TraceCollection, rank: int, et: ExecutionTrace
+) -> None:
     """Correlate the trace from a specific rank with Execution Trace object.
 
     Args:
-        trace (Trace): Trace object loaded using `TraceAnalysis(trace_dir=trace_dir)`
-                        or other method.
+        trace (TraceCollection): TraceCollection object loaded using
+            `TraceAnalysis(trace_dir=trace_dir)` or other method.
         rank (int): Rank to correlate with.
         et (ExecutionTrace): An Execution Trace object to correlate with.
 
@@ -119,7 +121,7 @@ def correlate_execution_trace(trace: Trace, rank: int, et: ExecutionTrace) -> No
     Please note (2) is not supported yet and will come in future PRs.
 
     """
-    trace_df = trace.get_trace(rank)
+    trace_df = trace.get_trace_df(rank)
 
     if not _et_has_overlap(trace_df, et):
         logging.error(

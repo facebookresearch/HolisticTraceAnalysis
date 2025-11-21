@@ -68,7 +68,7 @@ class CriticalPathAnalysisTestCase(unittest.TestCase):
     def test_critical_path_basic_add(self):
         critical_path_t = self.simple_add_trace
         cp_graph = self._critical_path_on_simple_add_trace()
-        trace_df = critical_path_t.t.get_trace(0)
+        trace_df = critical_path_t.t.get_trace_df(0)
 
         # Check the graph construction for the aten::relu_ operator
         # There are 3 stacked operators/runtime events here;

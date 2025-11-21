@@ -13,7 +13,7 @@ from unittest.mock import patch
 
 import hta
 import pandas as pd
-from hta.common.trace import PHASE_COUNTER
+from hta.common.trace_collection import PHASE_COUNTER
 from hta.trace_analysis import TimeSeriesTypes, TraceAnalysis
 
 
@@ -77,7 +77,7 @@ class TraceAnalysisTestCase(unittest.TestCase):
             str(Path(self.overlaid_trace_dir)), "overlaid_rank-0.json.gz"
         )
 
-    @patch.object(hta.common.trace.Trace, "write_raw_trace")
+    @patch.object(hta.common.trace_collection.TraceCollection, "write_raw_trace")
     def test_frequent_cuda_kernel_sequences(self, mock_write_trace):
         frequent_patterns_dfs = (
             self.vision_transformer_t.get_frequent_cuda_kernel_sequences(
@@ -327,7 +327,7 @@ class TraceAnalysisTestCase(unittest.TestCase):
 
         annotation = "gpu_user_annotation" if use_gpu_annotation else "user_annotation"
         idx = analyzer.t.symbol_table.sym_index[annotation]
-        trace_df = analyzer.t.get_trace(0)
+        trace_df = analyzer.t.get_trace_df(0)
         analyzer.t.symbol_table.add_symbols_to_trace_df(trace_df, "name")
         ref_sum_df = (
             trace_df[trace_df.cat == idx][["name", "dur"]]
@@ -497,7 +497,7 @@ class TraceAnalysisTestCase(unittest.TestCase):
             msg=f"queue_full_df = {queue_full_df}",
         )
 
-    @patch.object(hta.common.trace.Trace, "write_raw_trace")
+    @patch.object(hta.common.trace_collection.TraceCollection, "write_raw_trace")
     def test_generate_trace_with_counters(self, mock_write_trace):
         # Use a trace with some kernels missing attribution to operators
         # to check if our logic is robust and does not lead to negative values.

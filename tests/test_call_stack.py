@@ -144,7 +144,7 @@ class CallGraphTestCase(unittest.TestCase):
     def setUp(self) -> None:
         super().setUp()
 
-        # Mock Trace class for testing
+        # Mock TraceCollection class for testing
         class MockTrace:
             def __init__(self, traces):
                 self.traces = traces
@@ -152,7 +152,7 @@ class CallGraphTestCase(unittest.TestCase):
             def get_all_traces(self):
                 return self.traces.keys()
 
-            def get_trace(self, rank):
+            def get_trace_df(self, rank):
                 return self.traces[rank]
 
         # Create test data for trim_trace_events

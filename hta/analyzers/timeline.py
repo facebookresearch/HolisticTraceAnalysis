@@ -9,7 +9,7 @@ from typing import List, Optional
 import pandas as pd
 import plotly.express as px
 
-from hta.common.trace import Trace
+from hta.common.trace_collection import TraceCollection
 from hta.common.trace_symbol_table import TraceSymbolTable
 from hta.configs.config import logger
 
@@ -222,7 +222,7 @@ def plot_timeline_gpu_kernels(
 
 def plot_timeline_gpu_kernels_from_trace(
     title: str,
-    trace_data: Trace,
+    trace_data: TraceCollection,
     ranks: Optional[List[int]] = None,
     iterations: Optional[List[int]] = None,
     streams: Optional[List[int]] = None,
@@ -233,7 +233,7 @@ def plot_timeline_gpu_kernels_from_trace(
 
     Args:
         title (str): a title for the timeline plot
-        trace_data (Trace): a Trace object
+        trace_data (TraceCollection): a TraceCollection object
         ranks (List[int]): filter the input DataFrame with the given set of ranks; use all ranks if None.
         iterations (List[int]): filter the input DataFrame with the given set of iterations; use all iterations if None.
         streams (List[int]): filter the input DataFrame with the given set of streams; use all streams if None.
@@ -244,7 +244,7 @@ def plot_timeline_gpu_kernels_from_trace(
     else:
         _ranks = list(trace_data.get_all_traces().keys())
     df = pd.concat(
-        [trace_data.get_trace(r) for r in _ranks],
+        [trace_data.get_trace_df(r) for r in _ranks],
         axis=0,
         keys=_ranks,
         names=["rank", "idx"],
