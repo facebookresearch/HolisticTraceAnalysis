@@ -307,14 +307,18 @@ class TraceSymbolTable:
 
     def get_operator_or_cuda_runtime_mask(self, df: pd.DataFrame) -> pd.Series:
         """Returns a boolean mask you can use with pandas dataframes
-        to filter events that are CUDA runtime events or operators."""
+        to filter events that are runtime events or operators."""
         cpu_op_id = self.sym_index.get("cpu_op")
-        cuda_runtime_id = self.sym_index.get("cuda_driver", self.NULL)
-        cuda_driver_id = self.sym_index.get("cuda_runtime", self.NULL)
+        cuda_runtime_id = self.sym_index.get("cuda_runtime", self.NULL)
+        cuda_driver_id = self.sym_index.get("cuda_driver", self.NULL)
+        privateuse1_runtime_id = self.sym_index.get("privateuse1_runtime", self.NULL)
+        privateuse1_driver_id = self.sym_index.get("privateuse1_driver", self.NULL)
         return (
             (df["cat"] == cpu_op_id)
             | (df["cat"] == cuda_runtime_id)
             | (df["cat"] == cuda_driver_id)
+            | (df["cat"] == privateuse1_runtime_id)
+            | (df["cat"] == privateuse1_driver_id)
         )
 
     def get_runtime_launch_events_mask(self, df: pd.DataFrame) -> pd.Series:
