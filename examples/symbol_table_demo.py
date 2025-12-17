@@ -18,7 +18,7 @@ from typing import Optional
 import pandas as pd
 import plotly.express as px
 
-from hta.common.trace import Trace
+from hta.common.trace_collection import TraceCollection
 
 path_to_hta = "~/HolisticTraceAnalysis"
 trace_dir: str = path_to_hta + "/tests/data/vision_transformer"
@@ -32,20 +32,22 @@ def set_pandas_display_options():
     pd.set_option("display.float_format", "{:.2f}".format)
 
 
-def demo_statistics(trace: Trace, rank: int, k: Optional[int] = None) -> pd.DataFrame:
+def demo_statistics(
+    trace: TraceCollection, rank: int, k: Optional[int] = None
+) -> pd.DataFrame:
     """
     Show the first k items of the kernels by duration in a specific rank's trace.
     <rank>
 
     Args:
-        trace: a Trace instance.
+        trace: a TraceCollection instance.
         rank: the rank to be analyzed.
         k: how many items to show in the output; If None, then show all items.
 
     Returns:
         The resulted dataframe from this analysis.
     """
-    df = trace.get_trace(rank)
+    df = trace.get_trace_df(rank)
     sym_id_map = trace.symbol_table.get_sym_id_map()
     sym_table = trace.symbol_table.get_sym_table()
 
@@ -98,8 +100,8 @@ def demo_visualization(df: pd.DataFrame, title: str, visualize: bool = False) ->
         logging.info(f"{title}\n{df}\n")
 
 
-def load_trace(trace_dir, max_ranks) -> Trace:
-    trace = Trace(trace_dir=trace_dir)
+def load_trace(trace_dir, max_ranks) -> TraceCollection:
+    trace = TraceCollection(trace_dir=trace_dir)
     trace.parse_traces(max_ranks=max_ranks, use_multiprocessing=True)
     return trace
 
@@ -107,7 +109,7 @@ def load_trace(trace_dir, max_ranks) -> Trace:
 def run_demo(
     trace_dir: str,
     max_ranks: int,
-    preloaded_trace: Optional[Trace] = None,
+    preloaded_trace: Optional[TraceCollection] = None,
 ):
     """_summary_
 
@@ -115,7 +117,8 @@ def run_demo(
         trace_name (str): name of the trace
         base_trace_dir (str): the base path of the traces
         max_ranks (int): maximum number of ranks to be analyzed
-        preloaded_trace (Optional[Trace], optional): a preloaded trace. Defaults to None.
+        preloaded_trace (Optional[TraceCollection], optional): a preloaded collection of traces.
+            Defaults to None.
     """
     # load the trace
     if preloaded_trace is None:
@@ -148,13 +151,13 @@ def run_demo(
             break
     logging.info("\n===End of Symbol to ID Map\n")
 
-    df = demo_trace.get_trace(0)
+    df = demo_trace.get_trace_df(0)
     logging.info(f"\n===Data Frame of Rank-0===\ntype={type(df)}\n")
     logging.info(f"\n{df}\n")
     logging.info("\n===End of Data Frame\n")
 
     logging.info(f"===Data Frame Info===\ntype={type(df)}\n")
-    demo_trace.get_trace(0).info()
+    demo_trace.get_trace_df(0).info()
 
     logging.info("\n===Kernel Statistics===\n")
     top_k: int = 10
@@ -171,9 +174,9 @@ def run_demo(
         )
 
 
-def trace_info(trace: Trace):
+def trace_info(trace: TraceCollection):
     rank = next(iter(trace.traces))
-    df = trace.get_trace(rank)
+    df = trace.get_trace_df(rank)
     logging.info(f"\n===Dataframe of Rank {rank}")
     df.info()
 

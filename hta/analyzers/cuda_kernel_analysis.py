@@ -9,9 +9,9 @@ from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 import pandas as pd
 import plotly.express as px
-from hta.common.trace import Trace
 
 from hta.common.trace_call_graph import CallGraph
+from hta.common.trace_collection import TraceCollection
 from hta.configs.config import logger
 from hta.utils.checker import is_valid_directory
 from plotly import graph_objects as go
@@ -24,7 +24,7 @@ class CudaKernelAnalysis:
     @classmethod
     def get_frequent_cuda_kernel_sequences(
         cls,
-        t: Trace,
+        t: TraceCollection,
         operator_name: str,
         output_dir: str,
         min_pattern_len: int = 3,
@@ -43,7 +43,7 @@ class CudaKernelAnalysis:
         (3) Overlay the top_k identified repeated patterns back to the trace file.
 
         Args:
-            t (Trace): A trace object containing the trace data.
+            t (TraceCollection): A trace collection object containing data of multiple traces.
             operator_name (str): Name of the cpu operators which launch the cuda kernels.
             output_dir (str): Path to the folder containing the new trace file with overlaid top k frequent patterns.
             min_pattern_len (int): Minimum length of the cuda kernel sequences that should be identified.
@@ -71,7 +71,7 @@ class CudaKernelAnalysis:
 
         sym_index = t.symbol_table.get_sym_id_map()
         cg = CallGraph(t, ranks=[rank])
-        trace_df = t.get_trace(rank)
+        trace_df = t.get_trace_df(rank)
 
         # cpu_kernels = trace_df[trace_df["stream"].eq(-1)].copy()
         # gpu_kernels = trace_df[trace_df["stream"].ne(-1)].copy()
@@ -134,7 +134,7 @@ class CudaKernelAnalysis:
     @classmethod
     def _generate_frequent_pattern_results(
         cls,
-        t: "Trace",
+        t: "TraceCollection",
         pattern_counts: Dict[Tuple[int, ...], int],
         pattern_durations: Dict[Tuple[int, ...], List[int]],
         pattern_occurrences: Dict[Tuple[int, ...], Set[int]],
@@ -226,7 +226,7 @@ class CudaKernelAnalysis:
     @classmethod
     def _overlay_frequent_patterns_with_trace(
         cls,
-        t: "Trace",
+        t: "TraceCollection",
         patterns_df: pd.DataFrame,
         rank: int = 0,
         compress_other_kernels: bool = True,
@@ -404,7 +404,7 @@ class CudaKernelAnalysis:
     @classmethod
     def get_aten_op_kernels_and_delay(
         cls,
-        trace: Trace,
+        trace: TraceCollection,
         ranks: Optional[List[int]] = None,
         sort_by: Optional[List[str]] = None,
     ) -> Dict[int, pd.DataFrame]:
@@ -444,8 +444,8 @@ class CudaKernelAnalysis:
 
         result_dict: Dict = {}
         for rank in ranks:
-            trace_data = trace.get_trace(rank)
-            symbol_table.decode_df(trace.traces[rank], create_new_columns=True)
+            trace_data = trace.get_trace_df(rank)
+            symbol_table.decode_df(trace_data, create_new_columns=True)
             aten_operations = trace_data[
                 trace_data["s_name"].str.startswith("aten::")
             ].copy()
@@ -536,7 +536,7 @@ class CudaKernelAnalysis:
     @classmethod
     def cuda_kernel_launch_stats(
         cls,
-        t: Trace,
+        t: TraceCollection,
         ranks: Optional[List[int]] = None,
         runtime_cutoff: int = 50,
         launch_delay_cutoff: int = 100,
@@ -556,7 +556,7 @@ class CudaKernelAnalysis:
 
         for rank in ranks:
             # get trace for a rank
-            trace_df: pd.DataFrame = t.get_trace(rank)
+            trace_df: pd.DataFrame = t.get_trace_df(rank)
 
             # filter out events which have correlation value matching to
             # cudaLaunchKernel, cudaLaunchKernelExC, cudaMemcpyAsync, cudaMemsetAsync

@@ -21,6 +21,8 @@ import hta.configs.env_options as hta_options
 import numpy as np
 
 import pandas as pd
+from hta.common import singletrace
+from hta.common.singletrace import Trace
 from hta.common.trace_symbol_table import TraceSymbolTable
 
 from hta.configs.config import logger
@@ -87,6 +89,8 @@ def infer_gpu_type(
         return "AMD GPU"
     if "runFunction - job_prep_and_submit_for_execution" in name_set:
         return "MTIA"
+    if "urEnqueueKernelLaunch" in name_set:
+        return "INTEL GPU"
     return "UNKNOWN GPU"
 
 
@@ -459,17 +463,17 @@ def _parse_trace_dataframe_ijson(
 def parse_trace_dataframe(
     trace_file_path: str,
     cfg: ParserConfig,
-) -> Tuple[MetaData, pd.DataFrame, TraceSymbolTable]:
-    """Parse a single trace file into a meat test_data dictionary and a dataframe of events.
+) -> Trace:
+    """Parse a single trace file into a trace (Trace) object.
     Args:
         trace_file_path (str): The path to a trace file. When the trace_file is a relative path.
             This method combines the object's trace_path with trace_file to get the full path of the trace file.
         cfg (ParserConfig, Optional): A ParserConfig object controls how to parse the trace file.
     Returns:
-        Tuple[MetaData, pd.DataFrame, TraceSymbolTable]
-            The first item is the trace's metadata;
-            The second item is the dataframe representation of the trace's events.
-            The third item is the symbol table to encode the symbols of the trace.
+        Trace object that contains:
+            Trace's metadata.
+            DataFrame representation of the trace's events.
+            Symbol table to encode the symbols of the trace.
 
     Raises:
         JSONDecodeError when the trace file is not a valid JSON document.
@@ -509,6 +513,9 @@ def parse_trace_dataframe(
     device_type = infer_gpu_type(meta, local_symbol_table.get_sym_id_map())
     meta[str(MetaDataKey.DEVICE_TYPE)] = device_type
 
+    # Create Trace object representing single rank from the trace collection.
+    trace = singletrace.create(device_type, meta, df, local_symbol_table)
+
     t_end = time.perf_counter()
     logger.warning(
         f"Parsed {trace_file_path} backend={parser_backend} in {(t_end - t_start):.2f} seconds; current PID:{os. getpid()}"
@@ -519,7 +526,8 @@ def parse_trace_dataframe(
         logger.warning(
             f"Parser Memory usage peak = {(peak/1024/1024):.2f} MB, current = {(current/1024/1024):.2f} MB"
         )
-    return meta, df, local_symbol_table
+
+    return trace
 
 
 # --- Trace metadata reader ---

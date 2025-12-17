@@ -3,8 +3,9 @@ from typing import Dict, Generator, List, Optional
 
 import pandas as pd
 
-from hta.common.trace import get_cpu_gpu_correlation, Trace
+from hta.common import singletrace
 from hta.common.trace_call_stack import CallStackGraph, CallStackIdentity, CallStackNode
+from hta.common.trace_collection import get_cpu_gpu_correlation, TraceCollection
 from hta.common.trace_symbol_table import TraceSymbolTable
 from hta.common.types import DeviceType, infer_device_type
 from hta.configs.config import logger
@@ -27,7 +28,7 @@ class CallGraph:
     launches, AllToAll communications, etc.
 
     Attributes:
-        trace_data (Trace) : A container consisting of a mapping from each trainer to a Trace DataFrame.
+        trace_data (TraceCollection) : A container consisting of a mapping from each trainer to a Trace object.
         ranks (List[int]) : A list of trainer IDs (i.e., ranks).
         rank_to_stacks (Dict[int, Dict[CallStackIdentity, CallStackGraph]]): a map from ranks to their
         CallStackGraph objects, which are represented as another map from CallStackIdentity to CallStackGraph objects.
@@ -54,11 +55,13 @@ class CallGraph:
         "kernel_span",
     ]
 
-    def __init__(self, trace: Trace, ranks: Optional[List[int]] = None) -> None:
-        """Construct a CallGraph object from a Trace object.
+    def __init__(
+        self, trace: TraceCollection, ranks: Optional[List[int]] = None
+    ) -> None:
+        """Construct a CallGraph object from a TraceCollection object.
 
         Args:
-            trace (Trace): The Trace object used to construct this CallGraph object.
+            trace (TraceCollection): The TraceCollection object used to construct this CallGraph object.
             ranks (List[int]) : Only construct the CallGraph objects for the given set of ranks.
                 When not provided, uses all available ranks in <trace>.
                 Caution: this might be time-consuming.
@@ -66,7 +69,7 @@ class CallGraph:
         Raises:
             ValueError: If the trace data is invalid.
         """
-        self.trace_data: Trace = trace
+        self.trace_data: TraceCollection = trace
         _ranks: List[int] = self.trace_data.get_ranks()
         self.ranks: List[int] = [r for r in ranks if r in _ranks] if ranks else _ranks
         if (len(self.ranks)) == 0:
@@ -94,7 +97,7 @@ class CallGraph:
         self._cached_nodes: Dict[int, CallStackNode] = self.rank_to_nodes[
             self._cached_rank
         ]
-        self._cached_df: pd.DataFrame = self.trace_data.get_trace(self._cached_rank)
+        self._cached_df: pd.DataFrame = self.trace_data.get_trace_df(self._cached_rank)
         self._cached_gpu_kernels: pd.DataFrame = self._cached_df.loc[
             self._cached_df["stream"].ne(-1)
         ]
@@ -115,11 +118,11 @@ class CallGraph:
         Returns:
             A CallGraph object.
         """
-        t = Trace(trace_files={}, trace_dir="")
+        t = TraceCollection(trace_files={}, trace_dir="")
         t.symbol_table = (
             symbol_table if symbol_table else TraceSymbolTable.create_from_df(df)
         )
-        t.traces[rank] = df.copy()
+        t.traces[rank] = singletrace.create(None, None, df.copy(), None)
         t.is_parsed = True
 
         cg = CallGraph(t)
@@ -136,7 +139,7 @@ class CallGraph:
             t0 = perf_counter()
             self.rank_to_nodes[rank] = {}
             self.rank_to_stacks[rank] = {}
-            df = self.trace_data.get_trace(rank)
+            df = self.trace_data.get_trace_df(rank)
             # add an "end" column for time interval based filtering
             if "end" not in df.columns:
                 df["end"] = df["ts"] + df["dur"]
@@ -362,7 +365,7 @@ class CallGraph:
         if rank in self.ranks and rank != self._cached_rank:
             self._cached_rank = rank
             self._cached_nodes = self.rank_to_nodes[self._cached_rank]
-            self._cached_df = self.trace_data.get_trace(self._cached_rank)
+            self._cached_df = self.trace_data.get_trace_df(self._cached_rank)
             self._cached_gpu_kernels = self._cached_df.loc[
                 self._cached_df["stream"].ne(-1)
             ]

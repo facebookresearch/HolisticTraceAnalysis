@@ -9,15 +9,15 @@ import pandas as pd
 import plotly.express as px
 
 from hta.analyzers.timeline import _get_unique_values, plot_timeline_gpu_kernels
-from hta.common.trace import Trace
+from hta.common.trace_collection import TraceCollection
 from hta.common.trace_symbol_table import TraceSymbolTable
 
 
-def extract_iteration_info(trace: Trace) -> pd.DataFrame:
+def extract_iteration_info(trace: TraceCollection) -> pd.DataFrame:
     """Extract the iteration information from a trace.
 
     Args:
-          trace (Trace) : a trace object
+          trace (TraceCollection) : Collection of multiple traces.
 
     Returns:
         a DataFrame that contains all the iteration information with rank as a column.
@@ -51,7 +51,7 @@ def extract_iteration_info(trace: Trace) -> pd.DataFrame:
         return p_steps
 
     df_iterations = pd.concat(
-        [_extract_one_rank(trace.get_trace(r)) for r in ranks],
+        [_extract_one_rank(trace.get_trace_df(r)) for r in ranks],
         keys=ranks,
         names=["rank", "iter"],
     ).reset_index()

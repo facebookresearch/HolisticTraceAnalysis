@@ -13,7 +13,7 @@ import hta.configs.env_options as hta_options
 
 import numpy as np
 import pandas as pd
-from hta.common.trace import Trace
+from hta.common.trace_collection import TraceCollection
 from hta.common.trace_filter import Filter
 
 NON_EXISTENT_NODE_INDEX = -2
@@ -450,7 +450,7 @@ class CallGraph:
     includes all CallStackGraph objects in the trace and provides further further query and statistic APIs.
 
     Attributes:
-        trace_data (Trace) : the trace data represented in a Trace object, which
+        trace_data (TraceCollection) : the traces data represented in a TraceCollection object, which
             contains multiple DataFrame objects mapping the traces of each trainer.
         call_stacks (List[CallStackGraph]) : a list of per-thread CallStackGraph objects.
         mapping (pd.DataFrame) : the mapping from CallStackIdentity to CallStackGraph using a DataFrame
@@ -458,16 +458,16 @@ class CallGraph:
 
     def __init__(
         self,
-        trace: Trace,
+        trace: TraceCollection,
         ranks: Optional[List[int]] = None,
         filter_func: Optional[Filter] = None,
         remapped_tids: Optional[Dict[int, Dict[int, int]]] = None,
         pre_process_trace_data: bool = False,
     ) -> None:
-        """Construct a CallGraph from a Trace object <trace_data>
+        """Construct a CallGraph from a TraceCollection object <trace_data>
 
         Args:
-            trace (Trace): the trace data used to construct this CallGraph object.
+            trace (TraceCollection): the traces data used to construct this CallGraph object.
             ranks (List[int]) : filter the traces using the given set of ranks. Using all ranks if None.
             filter_func (Callable) : used to preprocess the trace events and filter events out. Please see filters in hta/common/trace_filter.py for details.
             remapped_tids (Dict[Dict[int, int]]) : a dictionary that stores per-rank thread ID remappings.
@@ -477,7 +477,7 @@ class CallGraph:
         Raises:
             ValueError: the trace data is invalid.
         """
-        self.trace_data: Trace = trace
+        self.trace_data: TraceCollection = trace
         self.mapping: pd.DataFrame = pd.DataFrame()
         self.call_stacks: List[CallStackGraph] = []
         self.pre_process_trace_data = pre_process_trace_data
@@ -522,9 +522,9 @@ class CallGraph:
         for rank in ranks:
             if self.pre_process_trace_data:
                 self.constrain_child_time_withinin_parent(
-                    self.trace_data.get_trace(rank)
+                    self.trace_data.get_trace_df(rank)
                 )
-            df = self.trace_data.get_trace(rank).copy()
+            df = self.trace_data.get_trace_df(rank).copy()
             if remapped_tids and rank in remapped_tids:
                 df = self._remap_tids(df, remapped_tids[rank])
             for (pid, tid), df_thread in df.groupby(["pid", "tid"]):
@@ -568,7 +568,7 @@ class CallGraph:
                         if node_id >= 0
                     }
                 )
-            df = self.trace_data.get_trace(rank)
+            df = self.trace_data.get_trace_df(rank)
             if (
                 not hta_options.disable_call_graph_depth()
                 and call_stack_indices.size > 0
@@ -600,7 +600,7 @@ class CallGraph:
         Raises:
             ValueError when the index is not in the DataFrame.
         """
-        df = self.trace_data.get_trace(rank)
+        df = self.trace_data.get_trace_df(rank)
 
         # If it is a GPU kernel, get the stack from the launch event.
         if df.loc[node_id]["stream"] > -1:

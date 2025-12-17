@@ -2,7 +2,7 @@ import os.path
 import tempfile
 import unittest
 
-from hta.common.trace import Trace
+from hta.common.trace_collection import TraceCollection
 from hta.common.trace_file import write_trace
 from hta.configs.parser_config import AVAILABLE_ARGS, ParserConfig
 
@@ -76,9 +76,9 @@ class CustomTraceParserTestCase(unittest.TestCase):
             ],
         }
 
-    def _create_and_load_trace(self, trace_dir: str) -> Trace:
+    def _create_and_load_trace(self, trace_dir: str) -> TraceCollection:
         write_trace(self.trace_data, os.path.join(trace_dir, "trace_0.json.gz"))
-        t = Trace(trace_dir=trace_dir)
+        t = TraceCollection(trace_dir=trace_dir)
         t.parse_traces(use_multiprocessing=False)
         return t
 
@@ -86,7 +86,7 @@ class CustomTraceParserTestCase(unittest.TestCase):
         with tempfile.TemporaryDirectory() as t_dir:
             t = self._create_and_load_trace(t_dir)
             cfg = ParserConfig.get_default_cfg()
-            df = t.get_trace(self.rank)
+            df = t.get_trace_df(self.rank)
             self.assertTrue(all(arg.name in df.columns for arg in cfg.get_args()))
 
     def test_custom_config(self) -> None:
@@ -119,6 +119,6 @@ class CustomTraceParserTestCase(unittest.TestCase):
         with tempfile.TemporaryDirectory() as t_dir:
             t = self._create_and_load_trace(t_dir)
             cfg = ParserConfig.get_default_cfg()
-            df = t.get_trace(self.rank)
+            df = t.get_trace_df(self.rank)
             self.assertTrue(all(arg.name in df.columns for arg in cfg.get_args()))
             self.assertFalse(all(arg.name in df.columns for arg in removed_args))
