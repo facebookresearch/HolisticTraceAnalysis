@@ -60,6 +60,27 @@ Check the backend with: python3 -c "import ijson; print(ijson.backend)" output =
 For more details see https://pypi.org/project/ijson/#performance-tips, https://anaconda.org/anaconda/yajl, https://pypi.org/project/yajl/"""
 
 
+def _is_gpu_type_intel(name_set: dict[str, int]) -> bool:
+    """
+    Check if the GPU type is Intel XPU based on the symbol ID map (name_set).
+
+    Args:
+        name_set (dict[str, int]): The symbol ID map.
+
+    Returns:
+        bool: True if the GPU type is Intel XPU, False otherwise.
+    """
+    intel_names: list[str] = [
+        "urEnqueueKernelLaunch",
+        "urEnqueueKernelLaunchExp",
+        "urEnqueueKernelLaunchCustomExp",
+        "urEnqueueKernelLaunchWithArgsExp",
+        "urEnqueueCooperativeKernelLaunchExp",
+    ]
+
+    return any(name in name_set for name in intel_names)
+
+
 def infer_gpu_type(
     metadata: Optional[MetaData] = None, name_set: dict[str, int] = {}
 ) -> str:
@@ -87,7 +108,7 @@ def infer_gpu_type(
         return "AMD GPU"
     if "runFunction - job_prep_and_submit_for_execution" in name_set:
         return "MTIA"
-    if "urEnqueueKernelLaunch" in name_set:
+    if _is_gpu_type_intel(name_set):
         return "INTEL XPU"
     return "UNKNOWN GPU"
 
