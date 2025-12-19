@@ -264,3 +264,8 @@ AVAILABLE_ARGS:
     raw_name: sycl queue
     value_type: Int
     default_value: -1
+  inference::pre_grad_nodes:
+    name: pre_grad_nodes
+    raw_name: pre_grad_nodes
+    value_type: Object
+    default_value: []
