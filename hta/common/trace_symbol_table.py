@@ -326,11 +326,13 @@ class TraceSymbolTable:
         urEnqueueUSMMemcpy_id = self.sym_index.get("urEnqueueUSMMemcpy", self.NULL)
         urEnqueueUSMMemcpy2D_id = self.sym_index.get("urEnqueueUSMMemcpy2D", self.NULL)
 
-        urEnqueueKernelLaunch_id = self.sym_index.get(
-            "urEnqueueKernelLaunch", self.NULL
-        )
+        urEnqueueKernelLaunch_id = self.sym_index.get("urEnqueueKernelLaunch", self.NULL)
+        urEnqueueKernelLaunchExp_id = self.sym_index.get("urEnqueueKernelLaunchExp", self.NULL)
         urEnqueueKernelLaunchCustomExp_id = self.sym_index.get(
             "urEnqueueKernelLaunchCustomExp", self.NULL
+        )
+        urEnqueueKernelLaunchWithArgsExp_id = self.sym_index.get(
+            "urEnqueueKernelLaunchWithArgsExp", self.NULL
         )
         urEnqueueCooperativeKernelLaunchExp_id = self.sym_index.get(
             "urEnqueueCooperativeKernelLaunchExp", self.NULL
@@ -358,7 +360,9 @@ class TraceSymbolTable:
             | (df["name"] == urEnqueueUSMMemcpy_id)
             | (df["name"] == urEnqueueUSMMemcpy2D_id)
             | (df["name"] == urEnqueueKernelLaunch_id)
+            | (df["name"] == urEnqueueKernelLaunchExp_id)
             | (df["name"] == urEnqueueKernelLaunchCustomExp_id)
+            | (df["name"] == urEnqueueKernelLaunchWithArgsExp_id)
             | (df["name"] == urEnqueueCooperativeKernelLaunchExp_id)
             | (df["name"] == urEnqueueMemBufferFill_id)
             | (df["name"] == urEnqueueMemBufferRead_id)
