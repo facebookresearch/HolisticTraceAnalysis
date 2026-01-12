@@ -7,7 +7,6 @@ from enum import auto, Flag
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import pandas as pd
-
 from hta.analyzers.breakdown_analysis import BreakdownAnalysis
 from hta.analyzers.communication_analysis import CommunicationAnalysis
 from hta.analyzers.critical_path_analysis import CPGraph, CriticalPathAnalysis

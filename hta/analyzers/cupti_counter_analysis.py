@@ -6,7 +6,6 @@ from typing import Dict, List, Optional
 
 import pandas as pd
 from hta.common.trace import Trace
-
 from hta.common.trace_call_graph import CallGraph
 from hta.configs.config import logger
 

@@ -6,7 +6,6 @@
 import unittest
 
 import pandas as pd
-
 from hta.common.call_stack import (
     CallGraph,
     CallStackGraph,

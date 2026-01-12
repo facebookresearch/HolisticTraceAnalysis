@@ -12,12 +12,10 @@ Note: For the above command to work specify the path to HolisticTraceAnalysis fo
 import argparse
 import logging
 import os
-
 from typing import Optional
 
 import pandas as pd
 import plotly.express as px
-
 from hta.common.trace import Trace
 
 path_to_hta = "~/HolisticTraceAnalysis"

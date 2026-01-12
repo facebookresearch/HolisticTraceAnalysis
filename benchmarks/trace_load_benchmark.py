@@ -6,10 +6,8 @@
 import logging
 
 import pyperf
-
 from hta.common.trace import parse_trace_file, Trace
 from hta.common.trace_parser import set_default_trace_parsing_backend
-
 from hta.configs.config import logger
 from hta.configs.parser_config import ParserBackend
 

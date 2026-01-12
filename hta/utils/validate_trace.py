@@ -3,7 +3,6 @@
 # LICENSE file in the root directory of this source tree.
 
 from collections import defaultdict
-
 from typing import Any, Dict, List, Tuple
 
 import pandas as pd

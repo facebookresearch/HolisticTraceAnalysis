@@ -10,7 +10,6 @@ import plotly.express as px
 import plotly.graph_objects as go
 from hta.common.trace_filter import GPUKernelFilter
 from hta.common.trace_symbol_table import decode_symbol_id_to_symbol_name
-
 from hta.configs.config import logger
 from hta.utils.utils import (
     get_kernel_type,

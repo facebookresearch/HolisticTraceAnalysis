@@ -16,9 +16,7 @@ import warnings
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
-
 import pandas as pd
-
 from hta.common.trace_file import create_rank_to_trace_dict, get_trace_files
 from hta.common.trace_filter import CPUOperatorFilter, GPUKernelFilter
 from hta.common.trace_parser import parse_trace_dataframe, parse_trace_dict

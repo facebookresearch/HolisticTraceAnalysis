@@ -5,9 +5,7 @@ from collections import namedtuple
 from typing import Dict, List
 
 import numpy as np
-
 import pandas as pd
-
 from hta.common.trace_call_stack import (
     _less_than,
     CallStackGraph,

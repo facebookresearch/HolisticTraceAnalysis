@@ -5,7 +5,6 @@ from pathlib import Path
 import pandas as pd
 from hta.common.trace import Trace
 from hta.common.trace_call_graph import CallGraph
-
 from hta.common.trace_call_stack import CallStackGraph, CallStackIdentity
 
 

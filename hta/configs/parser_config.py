@@ -6,7 +6,6 @@ from enum import Enum
 from typing import Dict, List, Optional, Set, Union
 
 import pandas as pd
-
 from hta.configs.default_values import AttributeSpec, EventArgs, ValueType
 from hta.configs.event_args_yaml_parser import (
     parse_event_args_yaml,

@@ -5,7 +5,6 @@
 from typing import Dict, List, Optional
 
 import pandas as pd
-
 from hta.common.trace import Trace
 from hta.configs.config import logger
 from hta.utils.utils import get_kernel_type, get_memory_kernel_type, KernelType

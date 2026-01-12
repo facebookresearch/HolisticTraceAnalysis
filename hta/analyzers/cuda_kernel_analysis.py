@@ -10,7 +10,6 @@ from typing import Any, Dict, List, Optional, Set, Tuple, Union
 import pandas as pd
 import plotly.express as px
 from hta.common.trace import Trace
-
 from hta.common.trace_call_graph import CallGraph
 from hta.configs.config import logger
 from hta.utils.checker import is_valid_directory

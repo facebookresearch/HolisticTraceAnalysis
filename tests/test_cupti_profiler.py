@@ -3,7 +3,6 @@ import unittest
 from pathlib import Path
 
 from hta.analyzers.cupti_counter_analysis import CUDA_SASS_INSTRUCTION_COUNTER_FLOPS
-
 from hta.trace_analysis import TraceAnalysis
 
 

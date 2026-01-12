@@ -8,7 +8,6 @@ import re
 import sys
 import time
 from collections import defaultdict
-
 from copy import deepcopy
 from dataclasses import dataclass
 from enum import Enum
@@ -17,7 +16,6 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 import hta.configs.env_options as hta_options
-
 import networkx as nx
 import pandas as pd
 from hta.analyzers.trace_counters import TraceCounters
@@ -26,7 +24,6 @@ from hta.analyzers.trace_counters import TraceCounters
 # https://github.com/facebookresearch/HolisticTraceAnalysis/issues/113
 # from hta.common.trace_call_graph import CallGraph, CallStackGraph, DeviceType
 from hta.common.call_stack import CallGraph, CallStackGraph, DeviceType
-
 from hta.common.trace import Trace
 from hta.common.trace_symbol_table import decode_symbol_id_to_symbol_name
 from hta.configs.config import logger

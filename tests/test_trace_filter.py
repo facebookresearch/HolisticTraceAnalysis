@@ -5,9 +5,7 @@ from pathlib import Path
 from typing import List, NamedTuple, Union
 
 import hta
-
 import numpy as np
-
 import pandas as pd
 from hta.common.trace import Trace
 from hta.common.trace_filter import (

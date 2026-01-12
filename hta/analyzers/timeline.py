@@ -8,7 +8,6 @@ from typing import List, Optional
 
 import pandas as pd
 import plotly.express as px
-
 from hta.common.trace import Trace
 from hta.common.trace_symbol_table import TraceSymbolTable
 from hta.configs.config import logger

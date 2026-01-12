@@ -3,7 +3,6 @@ from typing import Dict, List, NamedTuple, Optional
 from unittest.mock import MagicMock, patch
 
 import pandas as pd
-
 from hta.configs.default_values import EventArgs, ValueType, YamlVersion
 from hta.configs.event_args_yaml_parser import parse_event_args_yaml
 from hta.configs.parser_config import (

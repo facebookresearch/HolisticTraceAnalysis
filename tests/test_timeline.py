@@ -6,7 +6,6 @@ from typing import List, NamedTuple, Optional
 from unittest.mock import Mock, patch
 
 import hta
-
 import pandas as pd
 from hta.common.timeline import (
     _simplify_name,
