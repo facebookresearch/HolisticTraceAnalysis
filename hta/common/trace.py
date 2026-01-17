@@ -842,17 +842,24 @@ class Trace:
             logger.warning(
                 "ProfilerStep not found in the trace. The analysis result may not be accurate."
             )
-            include_last_profiler_step = True
+            logger.info(
+                "Skipping GPU kernel filtering since no ProfilerStep markers found. All trace events will be preserved."
+            )
         elif len(profiler_step_ids) == 1:
             logger.warning(
                 "There is only one iteration in the trace. The analysis result may not be accurate."
             )
-            include_last_profiler_step = True
-        for rank, trace_df in self.traces.items():
-            if device_type != "MTIA":
-                self.traces[rank] = filter_gpu_kernels_with_cpu_correlation(trace_df)
-            else:
-                self.traces[rank] = filter_mtia_kernels_for_one_rank(trace_df)
+            logger.info(
+                "Skipping GPU kernel filtering since only one ProfilerStep found. All trace events will be preserved."
+            )
+        else:
+            for rank, trace_df in self.traces.items():
+                if device_type != "MTIA":
+                    self.traces[rank] = filter_gpu_kernels_with_cpu_correlation(
+                        trace_df
+                    )
+                else:
+                    self.traces[rank] = filter_mtia_kernels_for_one_rank(trace_df)
 
     def decode_symbol_ids(self, use_shorten_name: bool = True) -> None:
         """Decode the name and cat column to show the original string names.

@@ -384,10 +384,13 @@ class TestMtiaAlignAndFilter(unittest.TestCase):
         self.assertEqual(t.get_device_type(), "MTIA")
         self.assertGreaterEqual(len(t.get_ranks()), 1)
 
-        # Ensure that the trace has the correct iterations
+        # Ensure that the trace has been aligned (timestamps start at 0)
         result_df = t.get_trace(t.get_ranks()[0])
         self.assertTrue(result_df["ts"].ge(0).all())
-        self.assertTrue(result_df["iteration"].ge(0).all())
+
+        # Note: When there's only 1 ProfilerStep, filtering is skipped and
+        # all events are preserved. Some events may have iteration = -1
+        # which is expected behavior for events outside ProfilerStep boundaries.
 
         # Ensure that cpu ops has the correct stream
         cpu_cat_ids = t.symbol_table.get_cpu_event_cat_ids()
@@ -395,18 +398,62 @@ class TestMtiaAlignAndFilter(unittest.TestCase):
         self.assertTrue(len(cpu_ops) > 0)
         self.assertTrue(cpu_ops["stream"].le(0).all())
 
-        # Ensure that cuda ops has the correct stream
+        # Ensure that memory kernels exist
         memory_kernels = result_df[
             result_df["name"].isin(t.symbol_table.get_memory_name_ids())
         ]
         self.assertTrue(len(memory_kernels) > 0)
-        self.assertTrue(memory_kernels["stream"].ge(0).all())
-        self.assertTrue(memory_kernels["iteration"].ge(0).all())
 
+        # Ensure MTIA kernels exist with positive stream and correlation
         mtia_kernels = result_df[
             result_df["stream"].ge(0) & result_df["correlation"].gt(0)
         ]
         self.assertTrue(len(mtia_kernels) > 0)
+
+    def test_align_and_filter_without_profiler_step(self) -> None:
+        """Test that traces without ProfilerStep markers preserve all events.
+
+        This test validates the fix for inference traces that lack ProfilerStep
+        markers. When ProfilerStep is missing, filtering should be skipped and
+        all trace events should be preserved.
+        """
+        # Setup: Use real MTIA inference trace file without ProfilerStep markers
+        mtia_inference_dir: str = add_test_data_path_prefix_if_exists(
+            "tests/data/mtia_inference_trace"
+        )
+        inference_trace_file = os.path.join(
+            mtia_inference_dir, "mtia_inference_rank_0.json.gz"
+        )
+        t: Trace = Trace(
+            trace_files=[inference_trace_file], trace_dir=mtia_inference_dir
+        )
+        t.parse_traces()
+
+        # Verify this trace has no ProfilerStep markers
+        profiler_step_ids = t.symbol_table.get_profiler_step_ids()
+        self.assertEqual(
+            len(profiler_step_ids),
+            0,
+            "Inference trace should not have ProfilerStep markers.",
+        )
+
+        # Get event count before filtering
+        rank = t.get_ranks()[0]
+        events_before_filtering = len(t.get_trace(rank))
+
+        # Execute align_and_filter_trace - should preserve all events
+        t.align_and_filter_trace()
+
+        # Get event count after filtering
+        events_after_filtering = len(t.get_trace(rank))
+
+        # Assert: All events should be preserved when ProfilerStep is missing
+        self.assertEqual(
+            events_before_filtering,
+            events_after_filtering,
+            "All events should be preserved when ProfilerStep markers are missing. "
+            f"Expected {events_before_filtering} events, got {events_after_filtering}.",
+        )
 
 
 class TraceParseConfigTestCase(unittest.TestCase):
