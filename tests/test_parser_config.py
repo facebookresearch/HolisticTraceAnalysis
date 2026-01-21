@@ -182,6 +182,29 @@ class ParserConfigTestCase(unittest.TestCase):
             cfg.set_parser_backend(backend)
             self.assertEqual(cfg.parser_backend, backend)
 
+    def test_drop_gpu_user_annotation_default(self) -> None:
+        """Test that drop_gpu_user_annotation defaults to False.
+
+        This ensures GPU user annotations are preserved by default during parsing,
+        which is required for features like get_gpu_kernels_with_user_annotations.
+        """
+        cfg = ParserConfig()
+        self.assertFalse(cfg.drop_gpu_user_annotation)
+
+    def test_set_drop_gpu_user_annotation(self) -> None:
+        """Test that drop_gpu_user_annotation can be set and retrieved correctly."""
+        cfg = ParserConfig()
+        # Test default is False
+        self.assertFalse(cfg.drop_gpu_user_annotation)
+
+        # Test setting to True
+        cfg.set_drop_gpu_user_annotation(True)
+        self.assertTrue(cfg.drop_gpu_user_annotation)
+
+        # Test setting back to False
+        cfg.set_drop_gpu_user_annotation(False)
+        self.assertFalse(cfg.drop_gpu_user_annotation)
+
     @data_provider(
         lambda: [
             {

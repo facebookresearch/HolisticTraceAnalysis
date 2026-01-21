@@ -102,7 +102,7 @@ class ParserConfig:
         )
 
         self.min_required_cols: List[str] = self.DEFAULT_MIN_REQUIRED_COLS
-        self.drop_gpu_user_annotation: bool = True
+        self.drop_gpu_user_annotation: bool = False
         self.version: YamlVersion = version
         self.parse_all_args: bool = parse_all_args
         self.selected_arg_keys: Optional[List[str]] = None
