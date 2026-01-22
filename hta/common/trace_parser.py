@@ -444,6 +444,19 @@ def _parse_trace_dataframe_ijson(
 
     round_down_time_stamps(df)
 
+    if df["ts"].dtype == np.dtype("float64"):
+        logger.warning(
+            f"Rounding down ns resolution events due to issue with events overlapping."
+            f" ts dtype = {df['ts'].dtype}, dur dtype = {df['dur'].dtype}."
+            f"Please see https://github.com/pytorch/pytorch/pull/122425"
+        )
+        # Don't floor directly, first find the end
+        df["end"] = df["ts"] + df["dur"]
+
+        df["ts"] = df[~df["ts"].isnull()]["ts"].apply(lambda x: math.ceil(x))
+        df["end"] = df[~df["end"].isnull()]["end"].apply(lambda x: math.floor(x))
+        df["dur"] = df["end"] - df["ts"]
+
     # assign an index to each event
     df.reset_index(inplace=True)
     df["index"] = pd.to_numeric(df["index"], downcast="integer")
