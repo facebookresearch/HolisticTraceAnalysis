@@ -328,7 +328,7 @@ class BreakdownAnalysis:
         t: "Trace",
         rank: int,
         expand_names: bool = True,
-        shortern_names: bool = True,
+        shorten_names: bool = True,
     ) -> Optional[pd.DataFrame]:
         """Returns a dataframe of all GPU kernels and associates them to closest or leaf
         GPU user annotation. If the kernel overlaps with multiple user annotations,
@@ -353,7 +353,7 @@ class BreakdownAnalysis:
 
         if expand_names:
             decode_symbol_id_to_symbol_name(
-                gpu_kernels_df, t.symbol_table, shortern_names
+                gpu_kernels_df, t.symbol_table, shorten_names
             )
 
         return gpu_kernels_df.reset_index(drop=True)

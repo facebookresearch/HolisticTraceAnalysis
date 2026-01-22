@@ -381,7 +381,7 @@ class TraceAnalysisTestCase(unittest.TestCase):
         gpu_kernels_df = self.ns_resolution_t.get_gpu_kernels_with_user_annotations(
             rank=0,
             expand_names=True,
-            shortern_names=True,
+            shorten_names=True,
         )
         self.assertEqual(len(gpu_kernels_df), 4876)
         # 3 unique annotations, +one for -1
