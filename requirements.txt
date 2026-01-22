@@ -1,7 +1,7 @@
 # Python dependencies required for users
 jupyterlab>=3.5.1
 numpy>=1.23.5
-networkx>=3.1
+networkx>=3.1,!=3.6  # Version 3.6 of networkx has a bug affecting HTA.
 pandas>=1.5.2
 plotly>=5.11.0
 pydot>=1.3.0  # required by third_party/param/
