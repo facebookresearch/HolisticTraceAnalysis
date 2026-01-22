@@ -1862,8 +1862,14 @@ class CriticalPathAnalysis:
                 f" or (name == {stream_wait_event_id})"
             )
         )
-
-        clipped_df = trace_df.loc[a.index.union(b.index)].copy()
+        # Retrieve the kernels initiated by cudaGraphLaunch
+        if "cudaGraphLaunch" in sym_index:
+            cudaGraphLaunch_id = sym_index.get("cudaGraphLaunch", -200)
+            cudaGraphLaunch_event = a[a["name"] == cudaGraphLaunch_id]["correlation"]
+            graph_launch_kernels = gpu_kernels[gpu_kernels["correlation"].isin(cudaGraphLaunch_event)]
+            clipped_df = trace_df.loc[a.index.union(b.index).union(graph_launch_kernels.index)].copy()
+        else:
+            clipped_df = trace_df.loc[a.index.union(b.index)].copy()
 
         logger.info(f"Clipped dataframe has {len(clipped_df)} events")
 
