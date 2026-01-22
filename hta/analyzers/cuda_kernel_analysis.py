@@ -317,25 +317,25 @@ class CudaKernelAnalysis:
         return raw_trace_content
 
     @classmethod
-    def visualize_aten_op_kernels_and_overhead(cls, rank: int, df: pd.DataFrame):
+    def visualize_op_kernels_and_overhead(cls, rank: int, df: pd.DataFrame):
         fig = go.Figure(
             data=[
                 go.Table(
                     header={
                         "values": [
-                            "ATen Operation",
+                            "Operation",
                             "Kernel Sequence",
                             "Occurrence Count",
-                            "Average ATen Op Launch Delay (us)",
+                            "Average Op Launch Delay (us)",
                             "Average Runtime Delay (us)",
                         ]
                     },
                     cells={
                         "values": [
-                            df["aten_op_name"],
+                            df["op_name"],
                             df["kernel_sequence"],
                             df["occurrence_count"],
-                            df["avg_aten_op_launch_delay"],
+                            df["avg_op_launch_delay"],
                             df["avg_runtime_delay"],
                         ],
                         "height": 30,
@@ -345,8 +345,7 @@ class CudaKernelAnalysis:
             ]
         )
         fig.update_layout(
-            title="ATen Operations, Associated Kernels, ATen and Runtime Delays for Rank %s"
-            % rank,
+            title="Ops, Associated Kernels, Op and Runtime Delays for Rank %s" % rank,
             width=1500,
             height=1500,
             autosize=True,
@@ -401,15 +400,16 @@ class CudaKernelAnalysis:
         fig3.show()
 
     @classmethod
-    def get_aten_op_kernels_and_delay(
+    def get_op_kernels_and_delay(
         cls,
         trace: Trace,
+        op_name_pattern: Optional[str] = None,
         ranks: Optional[List[int]] = None,
         sort_by: Optional[List[str]] = None,
     ) -> Dict[int, pd.DataFrame]:
         """
-        Get ATen op launch statistics.
-        This function gives information about what kernels are launched by each ATen op, their count number, aten op launch delay and runtime delay.
+        Get op launch statistics.
+        This function gives information about what kernels are launched by each op, their count number, op launch delay and runtime delay.
 
         Args:
             ranks: the rank numbers on which the analysis was performed on
@@ -417,8 +417,8 @@ class CudaKernelAnalysis:
 
         Returns:
             Dict[int, pd.DataFrame]:: The function returns a dictionary of dataframes. The key corresponds to the rank
-            and value is the DataFrame containing the path of kernels launch by aten op, the count number of each path,
-            the aten op launch delay and runtime delay.
+            and value is the DataFrame containing the path of kernels launch by op, the count number of each path,
+            the op launch delay and runtime delay.
         """
         if not ranks:
             ranks = [0]
@@ -426,16 +426,19 @@ class CudaKernelAnalysis:
         if not sort_by:
             sort_by = ["occurrence_count"]
 
+        if not op_name_pattern:
+            op_name_pattern = "aten::"
+
         symbol_table = trace.symbol_table
         launch_stats = []
 
-        def find_deepest_aten_op(
-            runtime_start: int, runtime_end: int, aten_operations: pd.DataFrame
+        def find_deepest_op(
+            runtime_start: int, runtime_end: int, operations: pd.DataFrame
         ) -> Optional[pd.Series]:
-            """Find the most deeply nested ATen op that fully wraps the entire runtime event."""
-            matching_ops = aten_operations[
-                (aten_operations["ts"] <= runtime_start)
-                & ((aten_operations["ts"] + aten_operations["dur"]) >= runtime_end)
+            """Find the most deeply nested op that fully wraps the entire runtime event."""
+            matching_ops = operations[
+                (operations["ts"] <= runtime_start)
+                & ((operations["ts"] + operations["dur"]) >= runtime_end)
             ]
             if matching_ops.empty:
                 return None
@@ -445,10 +448,10 @@ class CudaKernelAnalysis:
         for rank in ranks:
             trace_data = trace.get_trace(rank)
             symbol_table.decode_df(trace.traces[rank], create_new_columns=True)
-            aten_operations = trace_data[
-                trace_data["s_name"].str.startswith("aten::")
+            operations = trace_data[
+                trace_data["s_name"].str.startswith(op_name_pattern)
             ].copy()
-            aten_operations = aten_operations[["tid", "s_name", "ts", "dur"]]
+            operations = operations[["tid", "s_name", "ts", "dur"]]
 
             runtime_launch_events = trace_data[
                 trace_data["name"].isin(symbol_table.get_kernel_launch_ids())
@@ -457,10 +460,10 @@ class CudaKernelAnalysis:
             kernels = trace_data[trace_data["stream"] != -1].copy()
 
             for _, event in runtime_launch_events.iterrows():
-                deepest_op = find_deepest_aten_op(
+                deepest_op = find_deepest_op(
                     event["ts"],
                     event["ts"] + event["dur"],
-                    aten_operations,
+                    operations,
                 )
                 if deepest_op is not None:
                     kernel_event = kernels[
@@ -469,17 +472,17 @@ class CudaKernelAnalysis:
                     if len(kernel_event) > 1:
                         print("Error: multiple kernel events found for correlation id")
                     if kernel_event is not None:
-                        aten_op_delay = event["ts"] - deepest_op["ts"]
+                        op_delay = event["ts"] - deepest_op["ts"]
                         runtime_delay = kernel_event["ts"].item() - event["ts"]
 
                         launch_stats.append(
                             {
                                 "thread_id": deepest_op["tid"],
-                                "aten_op_name": deepest_op["s_name"],
-                                "aten_op_start": deepest_op["ts"],
+                                "op_name": deepest_op["s_name"],
+                                "op_start": deepest_op["ts"],
                                 "runtime_start": event["ts"],
                                 "device_start": kernel_event["ts"].item(),
-                                "aten_op_delay": aten_op_delay,
+                                "op_delay": op_delay,
                                 "runtime_delay": runtime_delay,
                                 "correlation_id": event["correlation"],
                                 "kernel_name": kernel_event["s_name"].item(),
@@ -488,12 +491,12 @@ class CudaKernelAnalysis:
             stats_df = pd.DataFrame(launch_stats)
 
             grouped_stats = (
-                stats_df.groupby(["thread_id", "aten_op_name", "aten_op_start"])
+                stats_df.groupby(["thread_id", "op_name", "op_start"])
                 .agg(
                     {
                         "kernel_name": list,
                         "correlation_id": list,
-                        "aten_op_delay": list,
+                        "op_delay": list,
                         "runtime_delay": list,
                     }
                 )
@@ -505,7 +508,7 @@ class CudaKernelAnalysis:
             grouped_stats["correlation_ids"] = grouped_stats["correlation_id"].apply(
                 lambda x: ", ".join(map(str, x))
             )
-            grouped_stats["first_launch_delay"] = grouped_stats["aten_op_delay"].apply(
+            grouped_stats["first_launch_delay"] = grouped_stats["op_delay"].apply(
                 lambda x: x[0]
             )
             grouped_stats["first_runtime_delay"] = grouped_stats["runtime_delay"].apply(
@@ -513,22 +516,22 @@ class CudaKernelAnalysis:
             )
 
             final_stats = (
-                grouped_stats.groupby(["aten_op_name", "kernel_sequence"])
+                grouped_stats.groupby(["op_name", "kernel_sequence"])
                 .agg(
                     occurrence_count=("first_runtime_delay", "count"),
-                    avg_aten_op_launch_delay=("first_launch_delay", "mean"),
+                    avg_op_launch_delay=("first_launch_delay", "mean"),
                     avg_runtime_delay=("first_runtime_delay", "mean"),
                 )
                 .reset_index()
             ).sort_values(sort_by, ascending=False)
 
             final_stats["avg_runtime_delay"] = final_stats["avg_runtime_delay"].round(3)
-            final_stats["avg_aten_op_launch_delay"] = final_stats[
-                "avg_aten_op_launch_delay"
+            final_stats["avg_op_launch_delay"] = final_stats[
+                "avg_op_launch_delay"
             ].round(3)
 
             result_dict[rank] = final_stats
-            cls.visualize_aten_op_kernels_and_overhead(rank, final_stats)
+            cls.visualize_op_kernels_and_overhead(rank, final_stats)
 
         return result_dict
 
