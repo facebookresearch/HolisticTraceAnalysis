@@ -56,6 +56,27 @@ Check the backend with: python3 -c "import ijson; print(ijson.backend)" output =
 For more details see https://pypi.org/project/ijson/#performance-tips, https://anaconda.org/anaconda/yajl, https://pypi.org/project/yajl/"""
 
 
+def _is_gpu_type_intel(name_set: dict[str, int]) -> bool:
+    """
+    Check if the GPU type is Intel XPU based on the symbol ID map (name_set).
+
+    Args:
+        name_set (dict[str, int]): The symbol ID map.
+
+    Returns:
+        bool: True if the GPU type is Intel XPU, False otherwise.
+    """
+    intel_names: list[str] = [
+        "urEnqueueKernelLaunch",
+        "urEnqueueKernelLaunchExp",
+        "urEnqueueKernelLaunchCustomExp",
+        "urEnqueueKernelLaunchWithArgsExp",
+        "urEnqueueCooperativeKernelLaunchExp",
+    ]
+
+    return any(name in name_set for name in intel_names)
+
+
 def infer_gpu_type(
     metadata: Optional[MetaData] = None, name_set: dict[str, int] = {}
 ) -> str:
@@ -83,6 +104,8 @@ def infer_gpu_type(
         return "AMD GPU"
     if "runFunction - job_prep_and_submit_for_execution" in name_set:
         return "MTIA"
+    if _is_gpu_type_intel(name_set):
+        return "INTEL XPU"
     return "UNKNOWN GPU"
 
 
@@ -451,6 +474,20 @@ def _parse_trace_dataframe_ijson(
     df, local_symbol_table = _compress_df(df, cfg)
     return meta, df, local_symbol_table
 
+def _remove_syclqueue_column(df: pd.DataFrame):
+    if "syclqueue" in df.columns:
+        df.drop(columns=["syclqueue"], inplace=True)
+
+def _transform_column_syclqueue_to_stream(df: pd.DataFrame):
+    """
+    Remove stream column and rename syclqueue column to stream.
+
+    Args:
+        df (pd.DataFrame): The trace events DataFrame.
+    """
+    if "syclqueue" in df.columns and "stream" in df.columns:
+        df.drop(columns=["stream"], inplace=True)
+        df.rename(columns={"syclqueue": "stream"}, inplace=True)
 
 def parse_trace_dataframe(
     trace_file_path: str,
@@ -504,6 +541,13 @@ def parse_trace_dataframe(
     # infer device type in trace metadata
     device_type = infer_gpu_type(meta, local_symbol_table.get_sym_id_map())
     meta[str(MetaDataKey.DEVICE_TYPE)] = device_type
+
+    # Intel traces do not have stream argument in the traces.
+    # The equivalent of stream argument in traces from Intel XPU is syclqueue.
+    if device_type == "INTEL XPU":
+        _transform_column_syclqueue_to_stream(df)
+    else:
+        _remove_syclqueue_column(df)
 
     t_end = time.perf_counter()
     logger.warning(
