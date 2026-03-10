@@ -250,6 +250,11 @@ AVAILABLE_ARGS:
     raw_name: Rank
     value_type: Int
     default_value: -1
+  nccl::seq:
+    name: seq_num
+    raw_name: Seq
+    value_type: Int
+    default_value: -1
   inference::batch_size:
     name: batch_size
     raw_name: batchSize
