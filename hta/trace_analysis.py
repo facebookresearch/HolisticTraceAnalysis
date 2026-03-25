@@ -764,3 +764,16 @@ class TraceAnalysis:
             only_show_critical_events,
             show_all_edges,
         )
+    
+    def overlay_critical_change_path_analysis(
+        self,
+        rank: int,
+        critical_path_graph: CPGraph,
+        output_dir: str,
+    ) -> str:
+        return CriticalPathAnalysis.overlay_critical_change_path_analysis(
+            self.t,
+            rank,
+            critical_path_graph,
+            output_dir,
+        )
