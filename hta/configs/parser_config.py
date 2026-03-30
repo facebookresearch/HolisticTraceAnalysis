@@ -3,7 +3,7 @@
 import copy
 import re
 from enum import Enum
-from typing import Dict, List, Optional, Set, Union
+from typing import Dict, List, Optional, Set, Tuple, Union
 
 import pandas as pd
 from hta.configs.default_values import AttributeSpec, EventArgs, ValueType
@@ -116,7 +116,7 @@ class ParserConfig:
     def clone(self) -> "ParserConfig":
         return copy.deepcopy(self)
 
-    def get_fingerprint_key(self) -> tuple[tuple[str, ...], bool]:
+    def get_fingerprint_key(self) -> Tuple[Tuple[str, ...], bool]:
         """Return a hashable key representing the config for caching.
 
         Captures only fields that affect parsing output:
