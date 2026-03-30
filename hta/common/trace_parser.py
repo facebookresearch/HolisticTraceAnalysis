@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import enum
-
 import gzip
 import io
 import json
@@ -17,12 +16,9 @@ from collections.abc import Generator
 from typing import Any, Dict, Optional, Tuple
 
 import hta.configs.env_options as hta_options
-
 import numpy as np
-
 import pandas as pd
 from hta.common.trace_symbol_table import TraceSymbolTable
-
 from hta.configs.config import logger
 from hta.configs.default_values import ValueType
 from hta.configs.parser_config import (

@@ -7,7 +7,6 @@ from typing import Tuple
 
 import pandas as pd
 import plotly.express as px
-
 from hta.analyzers.timeline import _get_unique_values, plot_timeline_gpu_kernels
 from hta.common.trace import Trace
 from hta.common.trace_symbol_table import TraceSymbolTable

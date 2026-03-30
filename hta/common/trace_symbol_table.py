@@ -20,7 +20,6 @@ from hta.common.types import (
     MemoryKernelGroupingPattern,
     ProfilerStepGroupingPattern,
 )
-
 from hta.configs.default_values import MAX_NUM_PROCESSES_SMALL
 from hta.utils.utils import shorten_name
 

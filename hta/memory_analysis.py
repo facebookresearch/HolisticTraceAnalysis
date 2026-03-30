@@ -2,7 +2,6 @@ import enum
 import gzip
 import json
 import os
-
 from typing import List, Tuple
 
 import numpy as np

@@ -10,7 +10,6 @@ from time import perf_counter
 from typing import Callable, Dict, List, NamedTuple, Optional
 
 import hta.configs.env_options as hta_options
-
 import numpy as np
 import pandas as pd
 from hta.common.trace import Trace

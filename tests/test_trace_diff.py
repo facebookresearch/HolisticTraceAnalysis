@@ -6,7 +6,6 @@ import unittest
 from typing import Any, Dict
 
 import pandas as pd
-
 from hta.trace_diff import DeviceType, LabeledTrace, TraceDiff
 
 

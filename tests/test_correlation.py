@@ -5,7 +5,6 @@
 import unittest
 
 import pandas as pd
-
 from hta.common.trace import transform_correlation_to_index
 from hta.common.trace_symbol_table import TraceSymbolTable
 

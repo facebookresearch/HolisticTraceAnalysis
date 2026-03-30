@@ -7,12 +7,10 @@ import json
 import logging
 import sys
 import time
-
 from typing import List
 
 import numpy as np
 import pandas as pd
-
 from hta.common.trace import Trace
 from hta.configs.config import logger
 from hta.utils.utils import normalize_path

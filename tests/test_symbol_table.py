@@ -10,7 +10,6 @@ import unittest
 from typing import Dict, Iterable, List, Set
 
 import pandas as pd
-
 from hta.common.trace_symbol_table import TraceSymbolTable
 from hta.common.types import GroupingPattern
 from hta.utils.test_utils import data_provider

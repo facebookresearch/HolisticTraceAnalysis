@@ -9,7 +9,6 @@ from typing import Dict, List, Optional, Union
 
 import pandas as pd
 import plotly.graph_objects as go
-
 from hta.common.trace import Trace
 from hta.configs.config import logger
 from hta.utils.utils import flatten_column_names, shorten_name

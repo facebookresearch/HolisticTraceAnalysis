@@ -3,7 +3,6 @@ from typing import Dict, List, NamedTuple, Optional
 from unittest.mock import MagicMock, patch
 
 import pandas as pd
-
 from hta.configs.default_values import EventArgs, ValueType, YamlVersion
 from hta.configs.event_args_yaml_parser import parse_event_args_yaml
 from hta.configs.parser_config import (
@@ -268,6 +267,45 @@ class ParserConfigTestCase(unittest.TestCase):
         # Run the following two steps purely for test coverage
         ParserConfig.show_available_args()
         ParserConfig.get_info_args()
+
+    def test_get_fingerprint_key_is_hashable(self) -> None:
+        """Test that fingerprint key is hashable and consistent."""
+        cfg = ParserConfig()
+        key1 = cfg.get_fingerprint_key()
+        key2 = cfg.get_fingerprint_key()
+
+        # Should be hashable
+        self.assertIsInstance(hash(key1), int)
+        # Should be consistent
+        self.assertEqual(key1, key2)
+
+    def test_get_fingerprint_key_differs_with_parse_all_args(self) -> None:
+        """Test different parse_all_args produces different keys."""
+        cfg1 = ParserConfig()
+        cfg2 = ParserConfig().set_parse_all_args(True)
+
+        self.assertNotEqual(cfg1.get_fingerprint_key(), cfg2.get_fingerprint_key())
+
+    def test_get_fingerprint_key_reflects_args_selector(self) -> None:
+        """Test fingerprint reflects selected args."""
+        cfg = ParserConfig(args=ParserConfig.get_minimum_args())
+        key1 = cfg.get_fingerprint_key()
+
+        cfg.set_args_selector(["stream"])
+        key2 = cfg.get_fingerprint_key()
+
+        self.assertNotEqual(key1, key2)
+
+    def test_repr(self) -> None:
+        """Test __repr__ returns a readable string representation."""
+        cfg = ParserConfig()
+        repr_str = repr(cfg)
+
+        # Should contain class name and key fields
+        self.assertIn("ParserConfig(", repr_str)
+        self.assertIn("parse_all_args=", repr_str)
+        self.assertIn("parser_backend=", repr_str)
+        self.assertIn("version=", repr_str)
 
 
 class TestParseEventArgsYaml(unittest.TestCase):

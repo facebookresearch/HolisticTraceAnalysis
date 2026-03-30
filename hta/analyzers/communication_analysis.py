@@ -7,7 +7,6 @@ from typing import Dict, List, TYPE_CHECKING
 
 import pandas as pd
 import plotly.express as px
-
 from hta.utils.utils import get_kernel_type, KernelType, merge_kernel_intervals
 
 # import statement used without the "if TYPE_CHECKING" guard will cause a circular

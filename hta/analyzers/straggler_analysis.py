@@ -5,7 +5,6 @@
 from typing import Callable, List, Optional, TYPE_CHECKING
 
 import pandas as pd
-
 from hta.analyzers.straggler import (
     extract_iteration_info,
     find_stragglers_with_late_start_comm_kernels,

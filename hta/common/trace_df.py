@@ -1,7 +1,6 @@
 from typing import List, Tuple
 
 import pandas as pd
-
 from hta.common.trace_symbol_table import TraceSymbolTable
 
 

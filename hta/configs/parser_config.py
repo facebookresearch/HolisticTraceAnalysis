@@ -6,7 +6,6 @@ from enum import Enum
 from typing import Dict, List, Optional, Set, Union
 
 import pandas as pd
-
 from hta.configs.default_values import AttributeSpec, EventArgs, ValueType
 from hta.configs.event_args_yaml_parser import (
     parse_event_args_yaml,
@@ -116,6 +115,29 @@ class ParserConfig:
 
     def clone(self) -> "ParserConfig":
         return copy.deepcopy(self)
+
+    def get_fingerprint_key(self) -> tuple[tuple[str, ...], bool]:
+        """Return a hashable key representing the config for caching.
+
+        Captures only fields that affect parsing output:
+        - Sorted list of argument names from get_args()
+        - The parse_all_args flag
+
+        Returns:
+            A tuple of (sorted_arg_names, parse_all_args) suitable for hashing.
+        """
+        args_names = tuple(sorted(a.name for a in self.get_args()))
+        return (args_names, self.parse_all_args)
+
+    def __repr__(self) -> str:
+        """Return a human-readable representation of the ParserConfig."""
+        return (
+            f"ParserConfig("
+            f"args={[a.name for a in self.args]}, "
+            f"parse_all_args={self.parse_all_args}, "
+            f"parser_backend={self.parser_backend}, "
+            f"version={self.version.get_version_str()})"
+        )
 
     @classmethod
     def get_default_cfg(cls) -> "ParserConfig":
