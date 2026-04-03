@@ -6,3 +6,5 @@
 # https://forums.developer.nvidia.com/t/maximum-number-of-operations-in-a-stream/255260
 # We anecdotally see 1022 - 1024 to cause blocking of runtime operations.
 CUDA_MAX_LAUNCH_QUEUE_PER_STREAM: int = 1024
+
+MAX_EVENT_DURATION_US: int = 604_800_000_000
