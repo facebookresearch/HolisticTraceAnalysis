@@ -10,9 +10,11 @@ from typing import Any, Dict, Optional, Set
 # import unittest.mock as mock
 
 import pandas as pd
+from hta.common.constants import MAX_EVENT_DURATION_US
 from hta.common.trace import parse_trace_dict, Trace
 from hta.common.trace_parser import (
     _auto_detect_parser_backend,
+    _compress_df,
     _open_trace_file,
     get_default_trace_parsing_backend,
     infer_gpu_type,
@@ -668,6 +670,34 @@ class TraceParseConfigTestCase(unittest.TestCase):
 
         # Validate results
         pd.testing.assert_frame_equal(fixed_df, expected_df)
+
+
+class InvalidDurationFilterTest(unittest.TestCase):
+    """Tests that _compress_df drops events with invalid durations."""
+
+    @data_provider(
+        lambda: (
+            {"durations": [100, -1, 200], "expected_count": 2},
+            {"durations": [100, MAX_EVENT_DURATION_US + 1, 200], "expected_count": 2},
+            {"durations": [0, 1, MAX_EVENT_DURATION_US], "expected_count": 3},
+            {"durations": [-5, MAX_EVENT_DURATION_US + 1], "expected_count": 0},
+        )
+    )
+    def test_invalid_duration_filtering(
+        self, durations: list, expected_count: int
+    ) -> None:
+        df = pd.DataFrame(
+            {
+                "cat": ["kernel"] * len(durations),
+                "name": ["k"] * len(durations),
+                "ts": list(range(len(durations))),
+                "dur": durations,
+                "pid": [0] * len(durations),
+                "tid": [0] * len(durations),
+            }
+        )
+        result, _ = _compress_df(df)
+        self.assertEqual(len(result), expected_count)
 
 
 class TraceParserErrorRecoveryTest(unittest.TestCase):

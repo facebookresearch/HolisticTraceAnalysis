@@ -308,6 +308,19 @@ def _compress_df(
     df.dropna(axis=0, subset=["dur", "cat"], inplace=True)
     df.drop(df[df["cat"] == "Trace"].index, inplace=True)
 
+    # drop events with invalid durations (negative or exceeding threshold).
+    # Corrupted CUPTI timestamps can produce durations of 100+ years.
+    max_dur = cfg.max_event_duration_us
+    if max_dur is not None:
+        invalid_dur = (df["dur"] < 0) | (df["dur"] > max_dur)
+        n_invalid = invalid_dur.sum()
+        if n_invalid > 0:
+            logger.warning(
+                f"Dropping {n_invalid} trace events with invalid duration "
+                f"(dur < 0 or dur > {max_dur} us)."
+            )
+            df.drop(df[invalid_dur].index, inplace=True)
+
     # drop columns
     columns_to_drop = {"ph", "id", "bp", "s"}.intersection(set(df.columns))
     df.drop(list(columns_to_drop), axis=1, inplace=True)
