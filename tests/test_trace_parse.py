@@ -670,5 +670,68 @@ class TraceParseConfigTestCase(unittest.TestCase):
         pd.testing.assert_frame_equal(fixed_df, expected_df)
 
 
+class TraceParserErrorRecoveryTest(unittest.TestCase):
+    """Tests for graceful error recovery in trace parsing."""
+
+    def _create_temp_trace(self, content: bytes, suffix: str = ".json") -> str:
+        """Write content to a temp file and return the path."""
+        import tempfile
+
+        fd, path = tempfile.mkstemp(suffix=suffix)
+        os.write(fd, content)
+        os.close(fd)
+        self.addCleanup(os.remove, path)
+        return path
+
+    def test_parse_trace_dict_raises_on_invalid_utf8(self) -> None:
+        """parse_trace_dict raises UnicodeDecodeError on corrupted trace files."""
+        import json as json_mod
+
+        valid_json = json_mod.dumps(
+            {
+                "schemaVersion": 1,
+                "traceEvents": [
+                    {
+                        "ph": "X",
+                        "cat": "kernel",
+                        "name": "k",
+                        "pid": 0,
+                        "tid": 0,
+                        "ts": 100,
+                        "dur": 50,
+                    },
+                ],
+            }
+        )
+        # Inject invalid UTF-8 bytes before the closing brace
+        bad_content = valid_json.encode("utf-8")
+        bad_content = bad_content[:-1] + b"\xff\xfe" + bad_content[-1:]
+        path = self._create_temp_trace(bad_content)
+
+        with self.assertRaises(UnicodeDecodeError):
+            parse_trace_dict(path)
+
+    def test_parse_trace_dataframe_ijson_fallback_on_large_integer(self) -> None:
+        """parse_trace_dataframe falls back to JSON when ijson hits large integers.
+
+        Uses a real trace containing Comms Id = 10159970886766084423 which
+        exceeds yajl's signed int64 max (9223372036854775807). This is the
+        exact pattern from Kineto traces that causes PPS parsing failures.
+        Source: mvai_gpu_traces fire-longwg-gwatch-ifr-mtml-opt-v37 rank-70.
+        """
+        trace_dir = add_test_data_path_prefix_if_exists(
+            "tests/data/large_integer_trace"
+        )
+        trace_file = os.path.join(
+            trace_dir, "rank-70.Mar_25_20_48_12.2861.pt.trace.json.gz"
+        )
+        cfg = ParserConfig(ParserConfig.get_minimum_args())
+        cfg.parser_backend = ParserBackend.IJSON_BATCH_AND_COMPRESS
+
+        meta, df, sym_table = parse_trace_dataframe(trace_file, cfg)
+        self.assertFalse(df.empty)
+        self.assertIn("device_type", meta)
+
+
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()
