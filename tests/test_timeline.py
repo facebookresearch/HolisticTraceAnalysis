@@ -87,11 +87,19 @@ class TestTimelineAnalysis(unittest.TestCase):
         plot_setting = TimelinePlotSetting(task_height=50, plot_format=PlotFormat.File)
 
         mock_figure = Mock()
-        mock_figure.show.side_effects = [None for i in range(len(test_cases))]
-        mock_figure.update_layout.side_effects = [None for i in range(len(test_cases))]
-        mock_figure.write_html.side_effects = [None for i in range(len(test_cases))]
-        mock_figure.write_image.side_effects = [None for i in range(len(test_cases))]
-        mock_figure.data = [Mock(x=i, name=str(i)) for i in range(10)]
+        mock_figure.show.return_value = None
+        mock_figure.update_layout.return_value = mock_figure
+        mock_figure.write_html.return_value = None
+        mock_figure.write_image.return_value = None
+        mock_figure.layout = Mock()
+        mock_figure.layout.xaxis = Mock()
+        mock_data_items = []
+        for i in range(10):
+            item = Mock()
+            item.name = str(i)
+            item.x = list(range(i))
+            mock_data_items.append(item)
+        mock_figure.data = mock_data_items
         mock_timeline.return_value = mock_figure
 
         for i, tc in enumerate(test_cases):

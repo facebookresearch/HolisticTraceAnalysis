@@ -239,9 +239,9 @@ class TraceSymbolTable:
         """
         if (
             ("name" in df.columns)
-            and (df["name"].dtype.kind == "O")
+            and (pd.api.types.is_string_dtype(df["name"]))
             and ("cat" in df.columns)
-            and (df["cat"].dtype == "O")
+            and (pd.api.types.is_string_dtype(df["cat"]))
         ):
             symbols = set(df["cat"].unique()).union(set(df["name"].unique()))
             symbol_table = TraceSymbolTable()
@@ -268,7 +268,7 @@ class TraceSymbolTable:
     def encode_df(self, df: pd.DataFrame) -> None:
         """Encode the name and cat columns of a DataFrame with this symbol table."""
         for col in ["name", "cat"]:
-            if col in df.columns and df[col].dtype.kind == "O":
+            if col in df.columns and pd.api.types.is_string_dtype(df[col]):
                 df[col] = df[col].apply(lambda sym: self.sym_index[sym])
 
     def decode_df(self, df: pd.DataFrame, create_new_columns: bool = True) -> None:

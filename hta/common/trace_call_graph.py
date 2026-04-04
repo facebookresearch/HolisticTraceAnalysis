@@ -256,7 +256,7 @@ class CallGraph:
             df.loc[indices_no_kernel_child, "last_kernel_end"] = -1
 
             for col in ["depth", "height", "parent", "num_kernels"]:
-                df[col] = pd.to_numeric(df[col], errors="coerce", downcast="integer")
+                df[col] = pd.to_numeric(df[col], errors="coerce")
 
     def _connect_stacks(self, rank: int) -> None:
         """Connect the CallStackGraph of the main threads and the backward threads."""

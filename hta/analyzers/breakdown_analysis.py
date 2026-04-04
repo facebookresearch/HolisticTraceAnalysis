@@ -889,7 +889,7 @@ class BreakdownAnalysis:
             member.value: name.lower()
             for name, member in IdleTimeType.__members__.items()
         }
-        result_df.rename(mapper=idle_category_name_map, axis=0, inplace=True)
+        result_df.rename(index=idle_category_name_map, inplace=True)
         result_df.reset_index(inplace=True)
 
         if visualize:  # pragma: no cover
@@ -924,9 +924,7 @@ class BreakdownAnalysis:
         if interval_stats_df is not None:
             # add rank column to the starting
             interval_stats_df.insert(0, "rank", rank)
-            interval_stats_df.rename(
-                mapper=idle_category_name_map, axis=0, inplace=True
-            )
+            interval_stats_df.rename(index=idle_category_name_map, inplace=True)
 
         result_df = result_df[
             ["rank", "stream", "idle_category", "idle_time", "idle_time_ratio"]

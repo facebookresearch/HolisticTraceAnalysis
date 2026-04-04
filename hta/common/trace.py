@@ -126,7 +126,9 @@ def transform_correlation_to_index(
     merged = on_cpu.merge(on_gpu, on="correlation", how="inner")
     df.loc[merged["index_x"], "index_correlation"] = merged["index_y"].values
     df.loc[merged["index_y"], "index_correlation"] = merged["index_x"].values
-    df["index_correlation"] = pd.to_numeric(df["index_correlation"], downcast="integer")
+    df["index_correlation"] = (
+        pd.to_numeric(df["index_correlation"]).fillna(-1).astype(int)
+    )
     return df
 
 
@@ -221,7 +223,7 @@ def add_iteration(df: pd.DataFrame, symbol_table: TraceSymbolTable) -> pd.DataFr
     df.loc[df["stream"].gt(0), "iteration"] = df["index_correlation"].apply(
         lambda x: df.loc[x, "iteration"] if x > 0 else -1
     )
-    df["iteration"] = pd.to_numeric(df["iteration"], downcast="integer")
+    df["iteration"] = pd.to_numeric(df["iteration"]).fillna(-1).astype(int)
 
     return profiler_steps
 

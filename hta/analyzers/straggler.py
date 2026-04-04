@@ -46,7 +46,7 @@ def extract_iteration_info(trace: Trace) -> pd.DataFrame:
         p_steps["iter"] = p_steps["profiler_step"].apply(get_iter_nbr)
         p_steps["end"] = p_steps["ts"] + p_steps["dur"]
         p_steps.set_index("iter", inplace=True)
-        p_steps.drop(["profiler_step"], axis=1, inplace=True)
+        p_steps.drop(columns=["profiler_step"], inplace=True)
         return p_steps
 
     df_iterations = pd.concat(

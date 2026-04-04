@@ -294,7 +294,7 @@ def _compress_df(
 
     # drop columns
     columns_to_drop = {"ph", "id", "bp", "s"}.intersection(set(df.columns))
-    df.drop(list(columns_to_drop), axis=1, inplace=True)
+    df.drop(columns=list(columns_to_drop), inplace=True)
     columns = set(df.columns)
 
     # performance counters appear as args
@@ -334,7 +334,7 @@ def _compress_df(
                     else arg.default_value
                 )
             )
-        df.drop(["args"], axis=1, inplace=True)
+        df.drop(columns=["args"], inplace=True)
 
     normalize_gpu_stream_numbers(df)
 
@@ -347,10 +347,10 @@ def _compress_df(
     for col in ["cat", "name"]:
         df[col] = df[col].apply(lambda s: sym_index[s])
 
-    # data type downcast
+    # data type downcast (downcast removed in pandas 3.0, keep as int64)
     for col in df.columns:
         if df[col].dtype.kind == "i":
-            df[col] = pd.to_numeric(df[col], errors="coerce", downcast="integer")
+            df[col] = pd.to_numeric(df[col], errors="coerce")
 
     return df, local_symbol_table
 
@@ -398,7 +398,7 @@ def _parse_trace_dataframe_json(
 
         # assign an index to each event
         df.reset_index(inplace=True)
-        df["index"] = pd.to_numeric(df["index"], downcast="integer")
+        df["index"] = pd.to_numeric(df["index"])
 
         df, local_symbol_table = _compress_df(df, cfg)
 
@@ -446,7 +446,7 @@ def _parse_trace_dataframe_ijson(
 
     # assign an index to each event
     df.reset_index(inplace=True)
-    df["index"] = pd.to_numeric(df["index"], downcast="integer")
+    df["index"] = pd.to_numeric(df["index"])
 
     df, local_symbol_table = _compress_df(df, cfg)
     return meta, df, local_symbol_table

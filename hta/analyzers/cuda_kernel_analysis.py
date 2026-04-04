@@ -220,7 +220,7 @@ class CudaKernelAnalysis:
             )
             fig.update_xaxes(type="category")
             fig.show()
-        return patterns_df.drop("pattern_indices", axis=1)
+        return patterns_df.drop(columns="pattern_indices")
 
     @classmethod
     def _overlay_frequent_patterns_with_trace(
@@ -244,7 +244,7 @@ class CudaKernelAnalysis:
         """
         raw_trace_content = t.get_raw_trace_for_one_rank(rank=rank)
         raw_trace_df = pd.DataFrame(raw_trace_content["traceEvents"]).reset_index()
-        raw_trace_df["index"] = pd.to_numeric(raw_trace_df["index"], downcast="integer")
+        raw_trace_df["index"] = pd.to_numeric(raw_trace_df["index"])
         sym_id_map: Dict[str, int] = t.symbol_table.get_sym_id_map()
 
         # get a counter of patterns that each CPU operator/GPU kernel is in.
@@ -264,7 +264,7 @@ class CudaKernelAnalysis:
         )
         # ensure the index column to be removed for merging with the original events
         if "index" in top_patterns_df.columns:
-            top_patterns_df.drop(["index"], axis=1, inplace=True)
+            top_patterns_df.drop(columns=["index"], inplace=True)
 
         # join the pattern counter with the original events on their indices
         merged_df = raw_trace_df.merge(
@@ -309,7 +309,7 @@ class CudaKernelAnalysis:
             ]
         # drop unused columns before writing back to the overlaid trace file
         merged_df.drop(
-            ["index", "active_patterns", "pattern_indices"], axis=1, inplace=True
+            columns=["index", "active_patterns", "pattern_indices"], inplace=True
         )
         raw_trace_content["traceEvents"] = list(
             merged_df.apply(lambda row: row.dropna().to_dict(), axis=1)

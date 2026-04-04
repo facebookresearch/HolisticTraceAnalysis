@@ -473,17 +473,17 @@ class CPGraph(nx.DiGraph):
         ops_df_start = events_df.copy()
         ops_df_end = events_df.copy()
 
-        ops_df_start.drop(axis=1, columns=["dur"], inplace=True)
+        ops_df_start.drop(columns=["dur"], inplace=True)
         ops_df_start["is_start"] = True
 
         ops_df_end["end"] = ops_df_end["ts"] + ops_df_end["dur"]
-        ops_df_end.drop(axis=1, columns=["dur", "ts"], inplace=True)
+        ops_df_end.drop(columns=["dur", "ts"], inplace=True)
         ops_df_end.rename(columns={"end": "ts"}, inplace=True)
         ops_df_end["is_start"] = False
 
         nodes_df = (
             pd.concat([ops_df_start, ops_df_end])
-            .sort_values(by=["ts", "ev_idx"], axis=0)
+            .sort_values(by=["ts", "ev_idx"])
             .reset_index(drop=True)
             .reset_index(names="idx")
         )
@@ -815,7 +815,7 @@ class CPGraph(nx.DiGraph):
                     self.symbol_table.get_runtime_launch_events_mask(self.full_trace_df)
                 ]
                 .copy()
-                .sort_values(by="ts", axis=0)
+                .sort_values(by="ts")
             )
             .merge(
                 gpu_kernels[["stream", "index", "pid"]],
@@ -894,7 +894,7 @@ class CPGraph(nx.DiGraph):
         cuda_record_calls_ = (
             self.full_trace_df.query(f"name == {cudaEventRecord_id}")
             .copy()
-            .sort_values(by="ts", axis=0)
+            .sort_values(by="ts")
         )
 
         # Each CUDA Event Record has a specific stream, gpu the event was recorded on.
@@ -919,7 +919,7 @@ class CPGraph(nx.DiGraph):
             """Correlates the closes CUDA kernel launch to a CUDA Record Event"""
             comb = (
                 pd.concat([runtime_calls, cuda_record_calls])
-                .sort_values(by="ts", axis=0)
+                .sort_values(by="ts")
                 .query(f"gpu == {gpu} and stream == {stream}")
                 .copy()
             )
@@ -929,7 +929,7 @@ class CPGraph(nx.DiGraph):
 
             comb_launches = comb.loc[comb.name != cudaEventRecord_id].copy()
             comb_cuda_records = comb.loc[comb.name == cudaEventRecord_id].copy()
-            comb_cuda_records.drop(axis=1, columns="launch_id", inplace=True)
+            comb_cuda_records.drop(columns="launch_id", inplace=True)
 
             # Now join the previous_launch_id to actual kernel launch events.
             return pd.merge(
@@ -955,14 +955,11 @@ class CPGraph(nx.DiGraph):
         if len(cuda_record_dfs) == 0:
             return None
 
-        cuda_record_calls = pd.concat(cuda_record_dfs, axis=0).sort_values(
-            by="ts", axis=0
-        )
+        cuda_record_calls = pd.concat(cuda_record_dfs, axis=0).sort_values(by="ts")
 
         # Cleanup temporary columns
         # PS: you can comment the below if you need to debug any issue
         cuda_record_calls.drop(
-            axis=1,
             columns=["launch_id", "previous_launch_id"],
             inplace=True,
         )
@@ -992,7 +989,7 @@ class CPGraph(nx.DiGraph):
 
         # CUDA launch runtime calls
         runtime_calls = self._get_cuda_runtime_calls_df()
-        runtime_calls.drop(axis=1, columns=["stream"], inplace=True)
+        runtime_calls.drop(columns=["stream"], inplace=True)
         runtime_calls.rename(columns={"stream_kernel": "stream"}, inplace=True)
 
         gpu_kernels = self.full_trace_df.query("stream != -1 and index_correlation > 0")
@@ -1015,7 +1012,7 @@ class CPGraph(nx.DiGraph):
                     ]
                 ]
                 .copy()
-                .sort_values(by="ts", axis=0)
+                .sort_values(by="ts")
             )
             .merge(
                 gpu_kernels[["stream", "index"]],
@@ -1032,7 +1029,7 @@ class CPGraph(nx.DiGraph):
             # on the same pid, tid, stream
             comb = (
                 pd.concat([runtime_calls, cuda_stream_wait_events])
-                .sort_values(by="ts", axis=0)
+                .sort_values(by="ts")
                 .query(f"pid == {pid} and tid == {tid} and stream == {stream}")
                 .copy()
             )
@@ -1046,7 +1043,7 @@ class CPGraph(nx.DiGraph):
             comb_stream_wait_events = comb.loc[
                 comb.name == cudaStreamWaitEvent_id
             ].copy()
-            comb_stream_wait_events.drop(axis=1, columns="launch_id", inplace=True)
+            comb_stream_wait_events.drop(columns="launch_id", inplace=True)
 
             # Now join the next_launch_id to actual kernel launch events.
             return pd.merge(
@@ -1070,11 +1067,10 @@ class CPGraph(nx.DiGraph):
                 for r in pid_tid_streams
             ],
             axis=0,
-        ).sort_values(by="ts", axis=0)
+        ).sort_values(by="ts")
 
         # Cleanup temporary columns
         cuda_stream_wait_events.drop(
-            axis=1,
             columns=["launch_id", "next_launch_id", "correlation_launch_event"],
             inplace=True,
         )
@@ -1175,14 +1171,18 @@ class CPGraph(nx.DiGraph):
         ):
             # Join the event sync event with the index of the kernel/memcpy launch
             # that is was syncing on.
-            gpu_kernels = pd.merge(
-                gpu_kernels,
-                cuda_record_calls[["correlation", "index_previous_launch"]],
-                left_on="wait_on_cuda_event_record_corr_id",
-                right_on="correlation",
-                how="left",
-                suffixes=("", "_cuda_record"),
-            ).fillna(-1)
+            gpu_kernels = (
+                pd.merge(
+                    gpu_kernels,
+                    cuda_record_calls[["correlation", "index_previous_launch"]],
+                    left_on="wait_on_cuda_event_record_corr_id",
+                    right_on="correlation",
+                    how="left",
+                    suffixes=("", "_cuda_record"),
+                )
+                .fillna({"index_previous_launch": -1, "correlation_cuda_record": -1})
+                .astype({"index_previous_launch": int, "correlation_cuda_record": int})
+            )
             # Note convert NAN to -1 and then turn all records to int
 
         # Sort kernels by start timestamp but use end time_stamp for sync events.
@@ -1195,7 +1195,7 @@ class CPGraph(nx.DiGraph):
         gpu_kernels.loc[gpu_kernels.cat == sync_cat, "sort_by"] = gpu_kernels[
             gpu_kernels.cat == sync_cat
         ]["end_ts"]
-        gpu_kernels.sort_values(by="sort_by", axis=0, inplace=True)
+        gpu_kernels.sort_values(by="sort_by", inplace=True)
 
         # Last node on a stream
         last_node: Dict[int, CPNode] = {}

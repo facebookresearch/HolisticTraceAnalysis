@@ -51,7 +51,7 @@ class TraceCounters:
         runtime_calls: pd.DataFrame = trace_df[
             t.symbol_table.get_runtime_launch_events_mask(trace_df)
         ].copy()
-        runtime_calls.drop(["stream", "pid", "tid"], axis=1, inplace=True)
+        runtime_calls.drop(columns=["stream", "pid", "tid"], inplace=True)
         runtime_calls["queue"] = 1
 
         # GPU kernel events

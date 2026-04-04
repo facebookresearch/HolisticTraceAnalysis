@@ -5,6 +5,7 @@
 
 import unittest
 
+import numpy as np
 import pandas as pd
 from hta.common.call_stack import (
     CallGraph,
@@ -137,6 +138,28 @@ class CallStackTestCase(unittest.TestCase):
         self.assertDictEqual(depth_from_csg, depth_from_nodes)
         # Verify df is used
         self.assertIsNotNone(df)
+
+    def test_events_array_numeric_dtype(self):
+        """astype(int) ensures kind column is numeric for np.unique(axis=0)."""
+        df = pd.DataFrame(
+            {"index": [0, 1], "ts": [100, 200], "dur": [10, 20], "stream": [-1, -1]}
+        )
+        df["end"] = df["ts"] + df["dur"]
+        events = (
+            df.melt(
+                id_vars=["index", "dur"],
+                value_vars=["ts", "end"],
+                var_name="kind",
+                value_name="time",
+            )
+            .replace({"ts": -1, "end": 1})
+            .assign(kind=lambda x: x["kind"].astype(int))
+            .to_numpy()
+        )
+        # kind column must be numeric, not object, for np.unique(axis=0)
+        # to work on newer numpy versions.
+        self.assertTrue(events.dtype.kind in ("i", "f"))  # int or float
+        self.assertIsNotNone(np.unique(events, axis=0))
 
 
 class CallGraphTestCase(unittest.TestCase):

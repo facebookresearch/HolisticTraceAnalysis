@@ -182,7 +182,7 @@ def _set_task_names(events: pd.DataFrame, setting: TimelinePlotSetting) -> pd.Se
     def _compute_label_col(prefix: str, col: pd.Series) -> pd.Series:
         return pd.Series(
             f"{prefix} " + col.str.pad(width=5, side="right")
-            if col.dtype == object
+            if pd.api.types.is_string_dtype(col)
             else f"{prefix} " + col.astype(str).str.zfill(3)
         )
 
@@ -289,14 +289,22 @@ def align_module_with_kernels(
     cpu_events = events_df.loc[
         events_df["stream"].eq(CPUStreamID) & events_df["num_kernels"].ge(1)
     ]
-    if sym_table and "name" in events_df.columns and events_df["name"].dtype != object:
+    if (
+        sym_table
+        and "name" in events_df.columns
+        and not pd.api.types.is_string_dtype(events_df["name"])
+    ):
         indices_to_annotate = find_events_by_name_patterns_using_symbol_table(
             cpu_events, module_list, sym_table
         )
     else:
-        if "name" in events_df.columns and events_df["name"].dtype == object:
+        if "name" in events_df.columns and pd.api.types.is_string_dtype(
+            events_df["name"]
+        ):
             column = "name"
-        elif "s_name" in events_df.columns and events_df["s_name"].dtype == object:
+        elif "s_name" in events_df.columns and pd.api.types.is_string_dtype(
+            events_df["s_name"]
+        ):
             column = "s_name"
         else:
             error_msg = (
