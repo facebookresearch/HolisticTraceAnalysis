@@ -307,6 +307,19 @@ class ParserConfigTestCase(unittest.TestCase):
         self.assertIn("parser_backend=", repr_str)
         self.assertIn("version=", repr_str)
 
+    def test_default_max_event_duration(self) -> None:
+        """ParserConfig should default max_event_duration_us to 7 days in microseconds."""
+        cfg = ParserConfig()
+        seven_days_us = 7 * 24 * 60 * 60 * 1_000_000
+        self.assertEqual(cfg.max_event_duration_us, seven_days_us)
+
+    def test_set_default_cfg_propagates_max_event_duration(self) -> None:
+        """set_default_cfg should propagate max_event_duration_us to the global default."""
+        custom_cfg = ParserConfig()
+        custom_cfg.max_event_duration_us = 999
+        ParserConfig.set_default_cfg(custom_cfg)
+        self.assertEqual(ParserConfig.get_default_cfg().max_event_duration_us, 999)
+
 
 class TestParseEventArgsYaml(unittest.TestCase):
     @data_provider(
