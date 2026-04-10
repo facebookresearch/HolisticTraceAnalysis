@@ -3,18 +3,43 @@ All notable changes to this project will be documented in this file. The format 
 Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic
 Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.6.0] - Unreleased
+## [0.6.0] - 2026-04-08
+
+#### Added
+- Added `MAX_EVENT_DURATION_US` constant and `max_event_duration_us` to `ParserConfig` to filter corrupted trace events exceeding maximum duration.
+- Added NCCL `seq_num` (sequence number) field mapping to event args config for tracking collective operations.
+- Added NCCL `collective_name` field parsing to identify collective operation types.
+- Added `get_device_type()` method and MTIA trace support including device type inference from trace metadata.
+- Added configurable timestamp integer conversion via parser config.
+- Added `KERNEL_KERNEL_DELAY_THRESHOLD_US` constant to identify unrecognized dependencies in critical path analysis.
+- Added event duration trimming based on tree hierarchy in CallGraph library.
+- Added `pre_grad_nodes` to parser config for inference trace support.
+
 #### Changed
 - Dropped support for Python 3.8 and 3.9 (both EOL). Minimum supported version is now Python 3.10.
 - Added Python 3.12 to supported versions and CI matrix.
 - Updated GitHub Actions to latest versions (checkout@v4, setup-python@v5).
+- Fixed GitHub Actions Node.js 16 deprecation warnings by upgrading to Node 20.
+- Improved CI workflow: added pip caching, switched to `actions/checkout` submodules support, consolidated pip install steps.
 - Aligned pre-commit CI Python versions with main CI workflow (3.10, 3.12).
 - Updated pre-commit hooks: pre-commit-hooks v4.6.0, flake8 7.1.0, mypy v1.11.0.
 - Updated ReadTheDocs build environment to ubuntu-22.04 with Python 3.12.
 - Updated Sphinx documentation dependencies (sphinx>=7.0.0, sphinx_rtd_theme>=2.0.0).
+- Updated kernel patterns for correct analysis in zoomer.
+- Updated trace parser to handle unknown event names and values between `start_array` and `end_array`.
 
 #### Fixed
 - Fixed placeholder author email in setup.py.
+- Fixed empty DataFrame crash when `ProfilerStep` markers are missing.
+- Fixed typo: `shortern_names` → `shorten_names`.
+- Fixed spelling: "Dowloading" → "Downloading" in print statement.
+- Fixed spelling: "Crttical" → "Critical" in error message.
+- Return `False` instead of raising an error if critical path graph validation fails.
+
+#### Performance
+- Optimized GPU kernel annotation association with indexed symbol table lookups.
+- Faster trimming of trace events.
+- Switched to `to_numeric` in `normalize_gpu_stream_numbers` for improved performance.
 
 
 ## [0.5.0] - 2023-05-27
