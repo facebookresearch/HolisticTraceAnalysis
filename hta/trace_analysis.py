@@ -539,7 +539,7 @@ class TraceAnalysis:
     def get_memory_bw_summary(
         self,
         ranks: Optional[List[int]] = None,
-    ) -> pd.DataFrame:
+    ) -> Optional[pd.DataFrame]:
         r"""
         Summarizes the memory bandwidth statistics for memory copy and memset operations. This includes memory
         bandwidth for copies from Device to Host, Host to Device and Device to Device transfers. Note, this does
@@ -675,7 +675,7 @@ class TraceAnalysis:
         annotation: str,
         instance_id: Union[Optional[int], Tuple[int, int]],
         data_load_events: Optional[List[str]] = None,
-    ) -> Tuple[CPGraph, bool]:
+    ) -> Optional[Tuple[CPGraph, bool]]:
         r"""
         Perform critical path analysis for trace events within a rank.
         We further reduce the region of interest by selecting

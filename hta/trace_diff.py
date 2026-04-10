@@ -35,12 +35,12 @@ class LabeledTrace:
 
     def __init__(
         self,
-        label: str = None,
+        label: Optional[str] = None,
         t: Optional[Trace] = None,
         trace_dir: Optional[str] = None,
     ):
         """Construct a LabeledTrace from either a Trace object or trace files in trace_dir."""
-        self.label = label if label else f"t{random.randint(0,10)}"
+        self.label = label if label else f"t{random.randint(0, 10)}"
         if t is not None:
             self.t = t
         elif trace_dir is not None and os.path.isdir(trace_dir):

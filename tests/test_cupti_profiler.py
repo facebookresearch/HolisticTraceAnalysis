@@ -1,14 +1,14 @@
 import os
 import unittest
-from pathlib import Path
 
 from hta.analyzers.cupti_counter_analysis import CUDA_SASS_INSTRUCTION_COUNTER_FLOPS
 from hta.trace_analysis import TraceAnalysis
+from hta.utils.test_utils import get_test_data_dir
 
 
 class CuptiTestCase(unittest.TestCase):
     def setUp(self):
-        self.base_data_dir = str(Path(__file__).parent.parent.joinpath("tests/data"))
+        self.base_data_dir = get_test_data_dir()
 
     def test_get_cupti_counter_data_with_operators(self):
         # regular trace should return empty list since it will not have cuda_profiler_range events

@@ -56,15 +56,15 @@ REQUIRED_COLUMNS_FOR_CPU_GPU_ALIGNMENT = {
 
 
 class EventType(Enum):
-    GPUEvents: int = 0
-    CPUEvents: int = 1
-    AllEvents: int = 2
+    GPUEvents = 0
+    CPUEvents = 1
+    AllEvents = 2
 
 
 class PlotFormat(Enum):
-    HTML: str = "html"  # Return figure as an HTML string, don't show figure.
-    Inline: str = "inline"  # Show the figure inline
-    File: str = "file"  # Save the figure to a file, don't show figure.
+    HTML = "html"  # Return figure as an HTML string, don't show figure.
+    Inline = "inline"  # Show the figure inline
+    File = "file"  # Save the figure to a file, don't show figure.
 
 
 @dataclass
@@ -147,7 +147,7 @@ def _check_timeline_input(df: pd.DataFrame, setting: TimelinePlotSetting) -> boo
     }
     if not must_have.issubset(set(df.columns)):
         logger.error(
-            f"The dataframe doesn't contain the required column(s): {must_have-set(df.columns)}"
+            f"The dataframe doesn't contain the required column(s): {must_have - set(df.columns)}"
         )
         return False
     return True
@@ -182,7 +182,7 @@ def _set_task_names(events: pd.DataFrame, setting: TimelinePlotSetting) -> pd.Se
     def _compute_label_col(prefix: str, col: pd.Series) -> pd.Series:
         return pd.Series(
             f"{prefix} " + col.str.pad(width=5, side="right")
-            if col.dtype == object
+            if pd.api.types.is_string_dtype(col)
             else f"{prefix} " + col.astype(str).str.zfill(3)
         )
 
@@ -220,6 +220,8 @@ def _set_task_names(events: pd.DataFrame, setting: TimelinePlotSetting) -> pd.Se
         if "depth" in events.columns:
             labels = _compute_label_col("cpu level", events["depth"])
             tasks = tasks + " " + labels if not tasks.empty else labels
+        if tasks.empty:
+            tasks = pd.Series("cpu events", index=events.index)
     else:
         labels = pd.Series(events.apply(lambda row: _compute_label_row(row), axis=1))
         tasks = tasks + " " + labels if not tasks.empty else labels
@@ -280,7 +282,7 @@ def align_module_with_kernels(
     required_columns = REQUIRED_COLUMNS_FOR_CPU_GPU_ALIGNMENT
 
     if not required_columns.issubset(set(events_df.columns)):
-        error_msg = f"The input df doesn't contain required columns: {required_columns-set(events_df.columns)}"
+        error_msg = f"The input df doesn't contain required columns: {required_columns - set(events_df.columns)}"
         logger.warning(error_msg)
         raise ValueError(error_msg)
 
@@ -289,14 +291,22 @@ def align_module_with_kernels(
     cpu_events = events_df.loc[
         events_df["stream"].eq(CPUStreamID) & events_df["num_kernels"].ge(1)
     ]
-    if sym_table and "name" in events_df.columns and events_df["name"].dtype != object:
+    if (
+        sym_table
+        and "name" in events_df.columns
+        and not pd.api.types.is_string_dtype(events_df["name"])
+    ):
         indices_to_annotate = find_events_by_name_patterns_using_symbol_table(
             cpu_events, module_list, sym_table
         )
     else:
-        if "name" in events_df.columns and events_df["name"].dtype == object:
+        if "name" in events_df.columns and pd.api.types.is_string_dtype(
+            events_df["name"]
+        ):
             column = "name"
-        elif "s_name" in events_df.columns and events_df["s_name"].dtype == object:
+        elif "s_name" in events_df.columns and pd.api.types.is_string_dtype(
+            events_df["s_name"]
+        ):
             column = "s_name"
         else:
             error_msg = (

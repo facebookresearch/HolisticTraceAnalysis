@@ -291,7 +291,7 @@ class CPGraph(nx.DiGraph):
         self._add_edge(e)
         return e
 
-    def _attribute_edge(self, e: CPEdge, src_parent: int) -> None:
+    def _attribute_edge(self, e: CPEdge, src_parent: Optional[int]) -> None:
         """Attribute an edge to nearest matching event by updating edge_to_event_map.
 
         Args:
@@ -344,6 +344,7 @@ class CPGraph(nx.DiGraph):
             ev_idx = dest.ev_idx  # Case 3
         else:
             ev_idx = src_parent  # Case 4
+        assert ev_idx is not None, "ev_idx must not be None for edge attribution"
         self.edge_to_event_map[(src.idx, dest.idx)] = int(ev_idx)
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug(
@@ -473,11 +474,11 @@ class CPGraph(nx.DiGraph):
         ops_df_start = events_df.copy()
         ops_df_end = events_df.copy()
 
-        ops_df_start.drop(axis=1, columns=["dur"], inplace=True)
+        ops_df_start.drop(columns=["dur"], inplace=True)
         ops_df_start["is_start"] = True
 
         ops_df_end["end"] = ops_df_end["ts"] + ops_df_end["dur"]
-        ops_df_end.drop(axis=1, columns=["dur", "ts"], inplace=True)
+        ops_df_end.drop(columns=["dur", "ts"], inplace=True)
         ops_df_end.rename(columns={"end": "ts"}, inplace=True)
         ops_df_end["is_start"] = False
 
@@ -640,6 +641,7 @@ class CPGraph(nx.DiGraph):
             remapped_tids = {self.rank: {bwd_thread_tid: fwd_thread_tid}}
         else:
             remapped_tids = None
+        assert self.t is not None
         cg = CallGraph(self.t, ranks=[self.rank], remapped_tids=remapped_tids)
 
         cpu_call_stacks = (
@@ -923,13 +925,13 @@ class CPGraph(nx.DiGraph):
                 .query(f"gpu == {gpu} and stream == {stream}")
                 .copy()
             )
-            comb.launch_id.fillna(-1, inplace=True)
+            comb["launch_id"] = comb["launch_id"].fillna(-1)
             # previous_launch_id is max of launch ids seen uptill now
-            comb.loc[:, "previous_launch_id"] = comb.launch_id.cummax(skipna=False)
+            comb.loc[:, "previous_launch_id"] = comb["launch_id"].cummax(skipna=False)
 
             comb_launches = comb.loc[comb.name != cudaEventRecord_id].copy()
             comb_cuda_records = comb.loc[comb.name == cudaEventRecord_id].copy()
-            comb_cuda_records.drop(axis=1, columns="launch_id", inplace=True)
+            comb_cuda_records.drop(columns="launch_id", inplace=True)
 
             # Now join the previous_launch_id to actual kernel launch events.
             return pd.merge(
@@ -962,14 +964,15 @@ class CPGraph(nx.DiGraph):
         # Cleanup temporary columns
         # PS: you can comment the below if you need to debug any issue
         cuda_record_calls.drop(
-            axis=1,
             columns=["launch_id", "previous_launch_id"],
             inplace=True,
         )
         cuda_record_calls.rename(
             columns={"index_launch_event": "index_previous_launch"}, inplace=True
         )
-        cuda_record_calls.index_previous_launch.fillna(-1, inplace=True)
+        cuda_record_calls["index_previous_launch"] = cuda_record_calls[
+            "index_previous_launch"
+        ].fillna(-1)
 
         return cuda_record_calls
 
@@ -992,7 +995,7 @@ class CPGraph(nx.DiGraph):
 
         # CUDA launch runtime calls
         runtime_calls = self._get_cuda_runtime_calls_df()
-        runtime_calls.drop(axis=1, columns=["stream"], inplace=True)
+        runtime_calls.drop(columns=["stream"], inplace=True)
         runtime_calls.rename(columns={"stream_kernel": "stream"}, inplace=True)
 
         gpu_kernels = self.full_trace_df.query("stream != -1 and index_correlation > 0")
@@ -1036,7 +1039,7 @@ class CPGraph(nx.DiGraph):
                 .query(f"pid == {pid} and tid == {tid} and stream == {stream}")
                 .copy()
             )
-            comb.launch_id.fillna(sys.maxsize, inplace=True)
+            comb["launch_id"] = comb["launch_id"].fillna(sys.maxsize)
 
             # Next launch ID is the next lowest launch ID in the sorted dataframe
             comb["next_launch_id"] = comb["launch_id"].iloc[::-1].cummin()
@@ -1046,7 +1049,7 @@ class CPGraph(nx.DiGraph):
             comb_stream_wait_events = comb.loc[
                 comb.name == cudaStreamWaitEvent_id
             ].copy()
-            comb_stream_wait_events.drop(axis=1, columns="launch_id", inplace=True)
+            comb_stream_wait_events.drop(columns="launch_id", inplace=True)
 
             # Now join the next_launch_id to actual kernel launch events.
             return pd.merge(
@@ -1074,14 +1077,15 @@ class CPGraph(nx.DiGraph):
 
         # Cleanup temporary columns
         cuda_stream_wait_events.drop(
-            axis=1,
             columns=["launch_id", "next_launch_id", "correlation_launch_event"],
             inplace=True,
         )
         cuda_stream_wait_events.rename(
             columns={"index_launch_event": "index_next_launch"}, inplace=True
         )
-        cuda_stream_wait_events.index_next_launch.fillna(-1, inplace=True)
+        cuda_stream_wait_events["index_next_launch"] = cuda_stream_wait_events[
+            "index_next_launch"
+        ].fillna(-1)
 
         return cuda_stream_wait_events.set_index("index")
 
@@ -1111,6 +1115,8 @@ class CPGraph(nx.DiGraph):
     def _add_gpu_cpu_sync_edge(self, gpu_node: CPNode, runtime_eid: int) -> None:
         """Add an edge between gpu_node and the runtime event on CPU"""
         _, end_node = self.get_nodes_for_event(runtime_eid)
+        if end_node is None:
+            return
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug(
                 f"Adding a GPU->CPU sync edge between nodes {gpu_node} -> {end_node}"
@@ -1153,6 +1159,9 @@ class CPGraph(nx.DiGraph):
         # Note getting queue length on the clipped dataframe was showing errors,
         # it is worthwhile to consider the entire trace instead, hence use t_full
         q = TraceCounters._get_queue_length_time_series_for_rank(self.t_full, self.rank)
+        assert (
+            q is not None
+        ), "Queue length time series is required for kernel graph construction"
 
         gpu_kernels = (
             self.trace_df.query(
@@ -1202,7 +1211,7 @@ class CPGraph(nx.DiGraph):
 
         # Scheduled a GPU-GPU sync on a stream
         #  map from dest kernel event ID -> event ID of kernel to sync on
-        kernel_sync: Dict[int, int] = {}
+        kernel_sync: Dict[int, Optional[int]] = {}
 
         def handle_cuda_sync(row):
             nonlocal last_node
@@ -1285,8 +1294,8 @@ class CPGraph(nx.DiGraph):
         # Loop through all the kernels/sync events
         # ---------------------------------------
 
-        for row in gpu_kernels.itertuples(index=False):
-            # row = row_.astype(int, errors="ignore")
+        for row_ in gpu_kernels.itertuples(index=False):
+            row: Any = row_
 
             if row.cat == sync_cat:
                 handle_cuda_sync(row)
@@ -1306,6 +1315,8 @@ class CPGraph(nx.DiGraph):
                 )
 
             start_node, end_node = self.get_nodes_for_event(eid)
+            if start_node is None or end_node is None:
+                continue
             e = self._add_edge_helper(start_node, end_node, CPEdgeType.OPERATOR_KERNEL)
             self._attribute_edge(e, -1)
 
@@ -1328,6 +1339,7 @@ class CPGraph(nx.DiGraph):
                     kernel_sync_index = None
                 else:
                     # note that the sync dependency has 0 weight
+                    assert start_node is not None
                     self._add_edge_helper(
                         kernel_sync_end, start_node, CPEdgeType.SYNC_DEPENDENCY
                     )
@@ -1362,9 +1374,14 @@ class CPGraph(nx.DiGraph):
                 # and the kernel sync dependency if any finished earlier
                 and (
                     kernel_sync_index is None
-                    or kernel_sync_end.ts < self.full_trace_df.ts.loc[runtime_index]
+                    or (
+                        kernel_sync_end is not None
+                        and kernel_sync_end.ts
+                        < self.full_trace_df.ts.loc[runtime_index]
+                    )
                 )
             ):
+                assert start_node is not None
                 success = self._add_kernel_launch_delay_edge(runtime_index, start_node)
                 assert success, (
                     f"Could not find runtime index = {runtime_index}, current kernel "
@@ -1375,16 +1392,21 @@ class CPGraph(nx.DiGraph):
                 launch_delay_added = True
             elif (
                 last_node.get(stream) is not None
+                and start_node is not None
                 and start_node.ts - last_node[stream].ts
                 < KERNEL_KERNEL_DELAY_THRESHOLD_US
                 # and the kernel sync dependency if any finished earlier than last node
                 and (
                     kernel_sync_index is None
-                    or kernel_sync_end.ts < last_node[stream].ts
+                    or (
+                        kernel_sync_end is not None
+                        and kernel_sync_end.ts < last_node[stream].ts
+                    )
                 )
             ):
                 # If neither launch nor CUDA event sync occurs it is a kernel-kernel
                 # delay
+                assert start_node is not None
                 e = self._add_edge_helper(
                     last_node[stream], start_node, CPEdgeType.KERNEL_KERNEL_DELAY
                 )
@@ -1405,10 +1427,12 @@ class CPGraph(nx.DiGraph):
             # the launch delay is not in critical path.
             if self._add_zero_weight_launch_edges() and not launch_delay_added:
                 # Try adding this if runtime is found
+                assert start_node is not None
                 self._add_kernel_launch_delay_edge(
                     runtime_index, start_node, zero_weight=True
                 )
 
+            assert end_node is not None
             last_node[stream] = end_node
 
     def _show_digraph(self) -> None:
@@ -1430,7 +1454,7 @@ class CPGraph(nx.DiGraph):
             logging.error("Graph is not valid, see prints above for help on debugging")
             return False
         try:
-            self.critical_path_nodes = nx.dag_longest_path(self, weight="weight")
+            self.critical_path_nodes = nx.dag_longest_path(self, weight="weight")  # type: ignore[attr-defined]
         except nx.NetworkXUnfeasible as err:
             logger.error(f"Critical path algorithm failed due to {err}")
             return False
@@ -1522,7 +1546,7 @@ class CPGraph(nx.DiGraph):
             return False
 
         # check for cycles
-        has_cycles = not nx.is_directed_acyclic_graph(self)
+        has_cycles = not nx.is_directed_acyclic_graph(self)  # type: ignore[attr-defined]
         if has_cycles:
             logger.error("This graph has cycles, you can debug this by running -")
             logger.error(" import networkx as nx")
@@ -1621,6 +1645,7 @@ class CPGraph(nx.DiGraph):
         Also see get_critical_path_breakdown().
         """
         edf = self.get_critical_path_breakdown()
+        assert edf is not None, "Critical path breakdown is required for summary"
         summary = edf.groupby("bound_by").duration.sum() / edf.duration.sum() * 100
         print("Critical Path broken down by boundedness = (in % of duration)")
         return summary
@@ -1676,7 +1701,7 @@ class CPGraph(nx.DiGraph):
 
         graph_pkl_path = os.path.join(out_dir, "cp_graph.pkl")
         # first convert the data in node link format
-        d = nx.node_link_data(self)
+        d = nx.node_link_data(self)  # type: ignore[attr-defined]
         # we cannot use json as CPEdge needs to be serialized and de-serialized
         with open(graph_pkl_path, "wb") as f:
             pickle.dump(d, f)
@@ -1720,7 +1745,7 @@ def restore_cpgraph(zip_filename: str, t_full: "Trace", rank: int) -> CPGraph:
     logger.warning(f"Restoring graph from {graph_pkl_path}")
     with open(graph_pkl_path, "rb") as f:
         pickled_graph = pickle.load(f)
-    G = nx.node_link_graph(pickled_graph)
+    G = nx.node_link_graph(pickled_graph)  # type: ignore[attr-defined]
 
     # Use restored Graph to initialize CPGraph
     restored_instance = CPGraph(None, t_full, rank, G)
@@ -1759,7 +1784,7 @@ class CriticalPathAnalysis:
         annotation: str,
         instance_id: Union[Optional[int], Tuple[int, int]],
         data_load_events: Optional[List[str]] = None,
-    ) -> Tuple[CPGraph, bool]:
+    ) -> Optional[Tuple[CPGraph, bool]]:
         r"""
         Perform critical path analysis for trace events within a rank.
         We further reduce the region of interest by selecting
@@ -1793,7 +1818,6 @@ class CriticalPathAnalysis:
             CPGraph is also a subinstance of a networkx.DiGraph.
             Run 'CPGraph?' for more info and APIs.
         """
-        global PROFILE_TIMES
         t0 = time.perf_counter()
         trace_df: pd.DataFrame = t.get_trace(rank)
         sym_index = t.symbol_table.get_sym_id_map()
@@ -1808,7 +1832,6 @@ class CriticalPathAnalysis:
                 "events https://github.com/pytorch/pytorch/pull/105187"
             )
 
-        annotation_id = sym_index.get(annotation, None)
         annotation_ids = [val for key, val in sym_index.items() if annotation in key]
 
         if len(annotation_ids) == 0:
@@ -1823,7 +1846,7 @@ class CriticalPathAnalysis:
             instance_start, instance_end = instance_id, instance_id
         else:
             logger.error("Unexpected input type instance_id")
-            return
+            return None
 
         logger.info(
             f"Looking up events under [{instance_start}, {instance_end}) "

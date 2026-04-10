@@ -5,7 +5,6 @@
 import json
 import os
 import unittest
-from pathlib import Path
 from unittest.mock import patch
 
 from hta.configs.config import HtaConfig
@@ -80,10 +79,6 @@ class HtaConfigTestCase(unittest.TestCase):
 
     def test_get_env_options(self):
         self.assertNotEqual(get_options(), "")
-
-    def test_get_test_data_path(self):
-        data_path = HtaConfig.get_test_data_path("h100")
-        self.assertTrue(Path(data_path).exists())
 
 
 class HTAEnvOptionsTestCase(unittest.TestCase):

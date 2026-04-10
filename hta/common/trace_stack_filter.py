@@ -92,8 +92,8 @@ class OperatorFilter(Filter):
         if (
             name_column not in df.columns
             or cat_column not in df.columns
-            or df.dtypes[name_column] != "object"
-            or df.dtypes[cat_column] != "object"
+            or not pd.api.types.is_string_dtype(df[name_column])
+            or not pd.api.types.is_string_dtype(df[cat_column])
         ):
             logger.error(f"df has no string column {name_column} of {cat_column}")
             return df

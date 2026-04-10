@@ -1,6 +1,39 @@
 import copy
 import functools
+import os
+from pathlib import Path
 from typing import Any, Callable, Iterable
+
+
+def get_test_data_dir(*subdirs: str) -> str:
+    """Return the path to the test data directory, handling both Buck and open-source layouts.
+
+    In Buck tests, the env var TEST_DATA_PREFIX_PATH is set (e.g. "HolisticTraceAnalysis")
+    and data is at "<prefix>/tests/data/". In open-source (pip install), data is relative
+    to the caller's source tree at "<repo_root>/tests/data/".
+
+    Args:
+        *subdirs: Optional path components appended after "tests/data".
+            Example: get_test_data_dir("vision_transformer") returns ".../tests/data/vision_transformer"
+
+    Returns:
+        Absolute path to the test data directory (or subdirectory).
+    """
+    prefix = os.environ.get("TEST_DATA_PREFIX_PATH", "")
+    if prefix:
+        test_data_dir = os.path.join(prefix, "tests", "data", *subdirs)
+    else:
+        # Fallback: assume this file is at hta/utils/test_utils.py, so repo root is two levels up.
+        repo_root = Path(__file__).resolve().parent.parent.parent
+        test_data_dir = str(
+            repo_root / "tests" / "data" / Path(*subdirs)
+            if subdirs
+            else repo_root / "tests" / "data"
+        )
+
+    if not os.path.isdir(test_data_dir):
+        raise FileNotFoundError(f"Test data directory does not exist: {test_data_dir}")
+    return test_data_dir
 
 
 def data_provider(

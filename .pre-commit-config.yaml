@@ -3,7 +3,7 @@ default_language_version:
 
 repos:
 -   repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.3.0
+    rev: v4.6.0
     hooks:
     -   id: trailing-whitespace
     -   id: check-ast
@@ -23,14 +23,14 @@ repos:
           - usort == 1.0.4
 
 -   repo: https://github.com/pycqa/flake8
-    rev: 5.0.3
+    rev: 7.1.0
     hooks:
     -   id: flake8
         args: [--show-source, --statistics]
 
 -   repo: https://github.com/pre-commit/mirrors-mypy
-    rev: 'v1.2.0'
+    rev: 'v1.11.0'
     hooks:
     -   id: mypy
         args: [--no-strict-optional, --ignore-missing-imports, --explicit-package-bases, --scripts-are-modules, --pretty]
-        additional_dependencies: [numpy==1.23.5, types-requests]
+        additional_dependencies: [numpy>=1.23.5, types-requests]

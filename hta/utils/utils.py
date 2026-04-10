@@ -209,11 +209,11 @@ def get_symbol_column_names(df: pd.DataFrame) -> Tuple[str, str]:
     """
     name_column, cat_column = "", ""
     for column_name in ["name", "s_name"]:
-        if column_name in df.columns and df.dtypes[column_name] == "object":
+        if column_name in df.columns and pd.api.types.is_string_dtype(df[column_name]):
             name_column = column_name
             break
     for column_name in ["cat", "s_cat"]:
-        if column_name in df.columns and df.dtypes[column_name] == "object":
+        if column_name in df.columns and pd.api.types.is_string_dtype(df[column_name]):
             cat_column = column_name
             break
     return name_column, cat_column

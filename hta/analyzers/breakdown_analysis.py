@@ -307,7 +307,7 @@ class BreakdownAnalysis:
             # Loop over all GPU user annotation intervals and match them with GPU
             # kernel intervals. Build updates using integer positions.
             for row in gpu_user_anno_df_filt.itertuples():
-                interval, anno_name = row.Index, row.name
+                interval, anno_name = row.Index, row.name  # type: ignore[attr-defined]
 
                 # Check overlap only on the pre-filtered kernel positions
                 overlaps = kernel_positions.overlaps(interval)

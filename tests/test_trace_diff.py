@@ -2,18 +2,21 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+import os
 import unittest
 from typing import Any, Dict
 
 import pandas as pd
 from hta.trace_diff import DeviceType, LabeledTrace, TraceDiff
+from hta.utils.test_utils import get_test_data_dir
 
 
 class TraceCompareTestCase(unittest.TestCase):
     def setUp(self):
+        data_dir = get_test_data_dir()
         self.base_trace: Dict[str, Any] = {
             "label": "Base Trace",
-            "trace_dir": "tests/data/trace_compare/base",
+            "trace_dir": os.path.join(data_dir, "trace_compare", "base"),
             "ranks": [1],
             "iterations": [1009, 1010],
             "test_rank": 1,
@@ -41,7 +44,7 @@ class TraceCompareTestCase(unittest.TestCase):
         }
         self.test_trace: Dict[str, Any] = {
             "label": "Test Trace",
-            "trace_dir": "tests/data/trace_compare/test",
+            "trace_dir": os.path.join(data_dir, "trace_compare", "test"),
             "ranks": [1],
             "iterations": [1009, 1010],
             "test_rank": 1,

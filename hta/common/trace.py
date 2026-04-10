@@ -187,6 +187,7 @@ def add_iteration(df: pd.DataFrame, symbol_table: TraceSymbolTable) -> pd.DataFr
         """
         s = s_tab[profiler_step_name_id]
         m = re.match(r"ProfilerStep\s*#\s*(\d+)", s)
+        assert m is not None, f"Failed to parse profiler step from: {s}"
         return int(m.group(1))
 
     # Extract the profiler steps
@@ -520,7 +521,7 @@ class Trace:
             local_table = local_symbol_tables[rank].get_sym_table()
             for col in ["cat", "name"]:
                 self.traces[rank][col] = self.traces[rank][col].apply(
-                    lambda idx: global_map[local_table[idx]]
+                    lambda idx, _lt=local_table: global_map[_lt[idx]]
                 )
 
         t1 = time.perf_counter()
@@ -949,7 +950,7 @@ class Trace:
             "name": name,
         }
         if args is not None:
-            res["args"] = args
+            res["args"] = args  # type: ignore[assignment]
         if not is_start:
             res["bp"] = "e"
         return res

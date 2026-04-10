@@ -1,20 +1,21 @@
 # (c) Meta Platforms, Inc. and affiliates. Confidential and proprietary.
+import os
 import unittest
-from pathlib import Path
 
 import pandas as pd
 from hta.common.trace import Trace
 from hta.common.trace_call_graph import CallGraph
 from hta.common.trace_call_stack import CallStackGraph, CallStackIdentity
+from hta.utils.test_utils import get_test_data_dir
 
 
 class TraceCallGraphTestCase(unittest.TestCase):
     def setUp(self) -> None:
         super().setUp()
-        test_data_path = Path(__file__).parent.parent.joinpath(
-            "tests/data/call_stack/backward_thread.json"
+        test_data_path = os.path.join(
+            get_test_data_dir(), "call_stack", "backward_thread.json"
         )
-        self.test_trace_backward_threads: str = str(test_data_path)
+        self.test_trace_backward_threads: str = test_data_path
         self.t_backward_threads: Trace = Trace(
             trace_files={0: self.test_trace_backward_threads},
             trace_dir="",
@@ -107,7 +108,7 @@ class TraceCallGraphTestCase(unittest.TestCase):
 
     def test_skip_gpu_threads(self) -> None:
         trace_file = self.test_trace_backward_threads
-        t: Trace = Trace(trace_files={i: trace_file for i in range(4)})
+        t: Trace = Trace(trace_files={i: trace_file for i in range(4)}, trace_dir="")
         t.parse_traces()
         # set a new pid for the traces
         for rank, df in t.get_all_traces().items():

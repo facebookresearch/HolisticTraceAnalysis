@@ -142,7 +142,7 @@ class CallGraph:
             self._build_call_stacks(df, self.trace_data.symbol_table, rank)
             t1 = perf_counter()
             logger.debug(
-                f"constructed {len(self.rank_to_stacks[rank])} call stacks for rank {rank} in {t1-t0:.2f} seconds"
+                f"constructed {len(self.rank_to_stacks[rank])} call stacks for rank {rank} in {t1 - t0:.2f} seconds"
             )
 
     def _build_call_stacks(
@@ -191,7 +191,7 @@ class CallGraph:
         nodes: Dict[int, CallStackNode] = self.rank_to_nodes[rank]
         nodes.clear()
 
-        for (pid, tid), df_thread in df.groupby(["pid", "tid"]):
+        for (pid, tid), df_thread in df.groupby(["pid", "tid"]):  # type: ignore[misc]
             csi = CallStackIdentity(rank, pid, tid)
             device = infer_device_type(df_thread)
 
@@ -229,7 +229,7 @@ class CallGraph:
             t1 = perf_counter()
             logger.debug(
                 f"Created CallStackGraph of {csg.identity}: num_events={csg.df.shape[0]}, num_nodes={len(csg.nodes)}"
-                f"in {t1-t0:.2f} seconds"
+                f"in {t1 - t0:.2f} seconds"
             )
 
         logger.debug("connecting stacks of forward and backward threads")

@@ -14,6 +14,7 @@ from hta.common.trace_call_stack import (
     sort_events,
 )
 from hta.common.trace_symbol_table import TraceSymbolTable
+from hta.common.types import DeviceType
 
 
 class CallStackTestCase(unittest.TestCase):
@@ -169,8 +170,8 @@ class CallStackTestCase(unittest.TestCase):
         s = set(csg2.nodes[new_root_index].children)
         s1 = set(self.nodes_1[self.root_index_1].children)
         s2 = set(self.nodes_2[new_root_index].children)
-        self.assertTrue(s.issuperset(s1), f"nodes {s1-s} is in {s1} but not in {s}")
-        self.assertTrue(s.issuperset(s2), f"nodes {s2-s} is in {s2} but not in {s}")
+        self.assertTrue(s.issuperset(s1), f"nodes {s1 - s} is in {s1} but not in {s}")
+        self.assertTrue(s.issuperset(s2), f"nodes {s2 - s} is in {s2} but not in {s}")
 
         for c in csg1.nodes[new_root_index].children:
             path = csg1.get_path_to_root(c)
@@ -404,3 +405,110 @@ class CallStackTestCase(unittest.TestCase):
                 continue
             got = stack.get_root(idx)
             self.assertEqual(got, self.root_index_1, f"{stack}\n node={idx} root={got}")
+
+    # AI-assisted test
+    def test_duplicate_events_logged(self) -> None:
+        """Test that duplicate events in the sorted array trigger a log error (line 367)."""
+        from unittest.mock import patch
+
+        # Create a DataFrame where the melted events array will contain
+        # duplicate tuples. We patch sort_events to inject a duplicate row.
+        df = pd.DataFrame(
+            {
+                "index": [0, 1, 2],
+                "ts": [0, 5, 10],
+                "dur": [3, 3, 3],
+                "stream": [-1, -1, -1],
+                "index_correlation": [-1, -1, -1],
+                "pid": [1, 1, 1],
+                "tid": [2, 2, 2],
+                "cat": [1, 1, 1],
+            }
+        )
+        correlations = pd.DataFrame(columns=["cpu_index", "gpu_index"])
+
+        original_sort_events = sort_events
+
+        def sort_and_inject_dup(events):
+            """Sort then duplicate the first row to trigger the duplicate check."""
+            original_sort_events(events)
+            # Overwrite the second row with a copy of the first to create a duplicate
+            events[1] = events[0].copy()
+
+        with patch(
+            "hta.common.trace_call_stack.sort_events", side_effect=sort_and_inject_dup
+        ):
+            with self.assertLogs("hta", level="ERROR") as cm:
+                try:
+                    CallStackGraph(
+                        df,
+                        self.csi_1,
+                        correlations,
+                        df,
+                        self.s_table,
+                    )
+                except Exception:
+                    pass  # graph construction may fail with injected duplicates
+        self.assertTrue(
+            any("duplicates" in msg for msg in cm.output),
+            f"Expected 'duplicates' error log, got: {cm.output}",
+        )
+
+    # AI-assisted test
+    def test_add_kernel_info_to_cpu_ops(self) -> None:
+        """Test _add_kernel_info_to_cpu_ops with KernelInfo NamedTuple (lines 790-854).
+
+        Verifies that KernelInfo.num_kernels (renamed from count) is used correctly
+        and that kernel statistics are propagated to cpu ops in full_df.
+        """
+        # Build a small trace: one CPU op (index=0) launching one GPU kernel (index=1)
+        # via index_correlation.
+        full_df = pd.DataFrame(
+            {
+                "index": [0, 1],
+                "cat": [1, 3],  # 1=cpu_op, 3=kernel
+                "ts": [0, 5],
+                "dur": [20, 10],
+                "pid": [1, 1],
+                "tid": [2, 2],
+                "stream": [-1, 7],  # -1=CPU, 7=GPU stream
+                "index_correlation": [-1, 0],  # kernel correlates to cpu op 0
+                # Stack columns required by _add_kernel_info_to_cpu_ops
+                "depth": pd.array([-1, -1], dtype=pd.Int16Dtype()),
+                "height": pd.array([-1, -1], dtype=pd.Int16Dtype()),
+                "parent": pd.array([-1, -1], dtype=pd.Int64Dtype()),
+                "num_kernels": pd.array([0, 0], dtype=pd.Int64Dtype()),
+                "kernel_dur_sum": pd.array([0, 0], dtype=pd.Int64Dtype()),
+                "kernel_span": pd.array([0, 0], dtype=pd.Int64Dtype()),
+                "first_kernel_start": pd.array([-1, -1], dtype=pd.Int64Dtype()),
+                "last_kernel_end": pd.array([-1, -1], dtype=pd.Int64Dtype()),
+            }
+        )
+        full_df["end"] = full_df["ts"] + full_df["dur"]
+        cpu_df = full_df.loc[full_df["stream"].eq(-1)]
+        correlations = pd.DataFrame({"cpu_index": [0], "gpu_index": [1]})
+
+        csg = CallStackGraph(
+            cpu_df,
+            self.csi_1,
+            correlations,
+            full_df,
+            self.s_table,
+            save_call_stack_to_df=False,
+        )
+
+        # Manually link the GPU kernel as a child of the CPU op
+        csg._add_edge(0, 1, DeviceType.GPU)
+        csg.nodes[1] = CallStackNode(
+            parent=0, depth=1, height=0, device=DeviceType.GPU, children=[]
+        )
+
+        # Now call _add_kernel_info_to_cpu_ops
+        csg._add_kernel_info_to_cpu_ops()
+
+        # Verify kernel info was propagated to the CPU op (index=0)
+        row = full_df.loc[full_df["index"] == 0].iloc[0]
+        self.assertEqual(row["num_kernels"], 1, "CPU op should have 1 kernel")
+        self.assertEqual(row["kernel_dur_sum"], 10, "Kernel duration should be 10")
+        self.assertEqual(row["first_kernel_start"], 5, "First kernel start should be 5")
+        self.assertEqual(row["last_kernel_end"], 15, "Last kernel end should be 15")
