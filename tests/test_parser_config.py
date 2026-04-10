@@ -307,6 +307,55 @@ class ParserConfigTestCase(unittest.TestCase):
         self.assertIn("parser_backend=", repr_str)
         self.assertIn("version=", repr_str)
 
+    def test_max_event_duration_us_default(self) -> None:
+        """Test that max_event_duration_us defaults to MAX_EVENT_DURATION_US constant."""
+        from hta.common.constants import MAX_EVENT_DURATION_US
+
+        cfg = ParserConfig()
+        self.assertEqual(cfg.max_event_duration_us, MAX_EVENT_DURATION_US)
+        self.assertEqual(cfg.max_event_duration_us, 604_800_000_000)
+
+    def test_max_event_duration_us_settable(self) -> None:
+        """Test that max_event_duration_us can be overridden."""
+        cfg = ParserConfig()
+        cfg.max_event_duration_us = 1_000_000
+        self.assertEqual(cfg.max_event_duration_us, 1_000_000)
+
+    def test_max_event_duration_us_none_disables(self) -> None:
+        """Test that setting max_event_duration_us to None disables filtering."""
+        cfg = ParserConfig()
+        cfg.max_event_duration_us = None
+        self.assertIsNone(cfg.max_event_duration_us)
+
+    def test_set_default_cfg_propagates_max_event_duration(self) -> None:
+        """Test that set_default_cfg propagates max_event_duration_us."""
+        custom_cfg = ParserConfig()
+        custom_cfg.max_event_duration_us = 999
+        ParserConfig.set_default_cfg(custom_cfg)
+        self.assertEqual(ParserConfig.get_default_cfg().max_event_duration_us, 999)
+
+    def test_clone_preserves_max_event_duration(self) -> None:
+        """Test that clone preserves max_event_duration_us."""
+        cfg = ParserConfig()
+        cfg.max_event_duration_us = 42
+        cloned = cfg.clone()
+        self.assertEqual(cloned.max_event_duration_us, 42)
+
+
+class TestMaxEventDurationConstant(unittest.TestCase):
+    def test_constant_value(self) -> None:
+        """Test MAX_EVENT_DURATION_US is 7 days in microseconds."""
+        from hta.common.constants import MAX_EVENT_DURATION_US
+
+        seven_days_us = 7 * 24 * 60 * 60 * 1_000_000
+        self.assertEqual(MAX_EVENT_DURATION_US, seven_days_us)
+
+    def test_constant_is_positive_int(self) -> None:
+        from hta.common.constants import MAX_EVENT_DURATION_US
+
+        self.assertIsInstance(MAX_EVENT_DURATION_US, int)
+        self.assertGreater(MAX_EVENT_DURATION_US, 0)
+
 
 class TestParseEventArgsYaml(unittest.TestCase):
     @data_provider(
