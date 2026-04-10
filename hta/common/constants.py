@@ -2,7 +2,12 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+# pyre-strict
+
 # The Max queue size is not really documented and is an implementation detail
 # https://forums.developer.nvidia.com/t/maximum-number-of-operations-in-a-stream/255260
 # We anecdotally see 1022 - 1024 to cause blocking of runtime operations.
 CUDA_MAX_LAUNCH_QUEUE_PER_STREAM: int = 1024
+
+# Max valid trace event duration. Events beyond this are corrupted (CUPTI timestamp overflow).
+MAX_EVENT_DURATION_US: int = 604_800_000_000  # 7 days in microseconds
