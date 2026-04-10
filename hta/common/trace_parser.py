@@ -57,7 +57,7 @@ For more details see https://pypi.org/project/ijson/#performance-tips, https://a
 
 
 def infer_gpu_type(
-    metadata: Optional[MetaData] = None, name_set: dict[str, int] = {}
+    metadata: Optional[MetaData] = None, name_set: Optional[dict[str, int]] = None
 ) -> str:
     """
     Infer the GPU type from a trace metadata or it's symbold ID map (name_set).
@@ -77,6 +77,8 @@ def infer_gpu_type(
             and "mtia:hccl" in str(backend)
         ):
             return "MTIA"
+    if name_set is None:
+        name_set = {}
     if "cudaLaunchKernel" in name_set:
         return "NVIDIA GPU"
     if "hipLaunchKernel" in name_set:
@@ -431,7 +433,7 @@ def _parse_trace_dataframe_ijson(
         t_end = time.perf_counter_ns()
         logger.info(
             f"Parsed {trace_file_path} metadata in "
-            f"{(t_end - t_start)/1000000:.2f} milli seconds"
+            f"{(t_end - t_start) / 1000000:.2f} milli seconds"
         )
 
     logger.info(
@@ -513,7 +515,7 @@ def parse_trace_dataframe(
         current, peak = tracemalloc.get_traced_memory()
         tracemalloc.stop()
         logger.warning(
-            f"Parser Memory usage peak = {(peak/1024/1024):.2f} MB, current = {(current/1024/1024):.2f} MB"
+            f"Parser Memory usage peak = {(peak / 1024 / 1024):.2f} MB, current = {(current / 1024 / 1024):.2f} MB"
         )
     return meta, df, local_symbol_table
 
@@ -592,7 +594,7 @@ def parse_metadata_ijson(fh: io.BufferedIOBase) -> MetaData:
             meta_so_far[key] = value
             return handle_nested_map(generator, "", meta_so_far)
 
-    cur_key = None
+    cur_key: Optional[str] = None
     nested_map: MetaData = {}
 
     for prefix, event, value in trace_parser:
@@ -603,12 +605,14 @@ def parse_metadata_ijson(fh: io.BufferedIOBase) -> MetaData:
 
         # Handle a nested map like "distributedInfo"
         if prefix == cur_key and event == "start_map":
+            assert cur_key is not None
             nested_map = {}
             meta[cur_key] = handle_nested_map(trace_parser, "", nested_map)
             continue
 
         # Handle a nested array map like "deviceProperties"
         if prefix == cur_key and event == "start_array":
+            assert cur_key is not None
             meta[cur_key] = []
             # For deviceProperties this should be start_map or end_array
             _, _event_, _event_value = next(trace_parser)
@@ -626,7 +630,7 @@ def parse_metadata_ijson(fh: io.BufferedIOBase) -> MetaData:
         #  map_key schemaVersion
         # schemaVersion number 1
         if event == "map_key" and prefix == "":
-            cur_key = value
+            cur_key = str(value)
         if prefix == cur_key:
             assert (
                 cur_key is not None

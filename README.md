@@ -37,7 +37,7 @@ HTA provides the following features:
 
 ## Installation
 
-HTA runs on Linux and Mac with Python >= 3.8.
+HTA runs on Linux and Mac with Python >= 3.10.
 
 ### Setup a Conda environment (optional)
 

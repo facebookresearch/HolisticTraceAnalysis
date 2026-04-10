@@ -1,4 +1,4 @@
-from collections import defaultdict, namedtuple
+from collections import defaultdict
 from dataclasses import dataclass, field
 from functools import cmp_to_key
 from time import perf_counter
@@ -364,7 +364,7 @@ class CallStackGraph:
         if not is_events_sorted(events):
             logger.fatal("BUG: the events array is not sorted.")
             raise SystemError("BUG: the events array is not sorted.")
-        if len(np.unique(events, axis=0)) != len(events):
+        if len(set(map(tuple, events))) != len(events):
             logger.error("BUG: the sorted array contains duplicates")
 
         stack: List[int] = []
@@ -787,9 +787,14 @@ class CallStackGraph:
         s_dur: Dict[int, int] = gpu_kernels["dur"]
 
         t1 = perf_counter()
-        KernelInfo = namedtuple(
-            "KernelInfo", "count sum_dur kernel_span first_start last_end"
-        )
+
+        class KernelInfo(NamedTuple):
+            num_kernels: int
+            sum_dur: int
+            kernel_span: int
+            first_start: int
+            last_end: int
+
         kernel_info: Dict[int, KernelInfo] = {}
 
         t_max: int = self.full_df["ts"].max() * 2
@@ -815,7 +820,7 @@ class CallStackGraph:
 
             for c in node.children:
                 c_info = _dfs(c)
-                count = count + c_info.count
+                count = count + c_info.num_kernels
                 sum_dur = sum_dur + c_info.sum_dur
                 start = min(start, c_info.first_start)
                 end = max(end, c_info.last_end)
@@ -846,7 +851,7 @@ class CallStackGraph:
         if df_info.empty:
             logger.error("df_info is empty.")
             return
-        self.full_df.loc[df_info.index, "num_kernels"] = df_info["count"].astype(
+        self.full_df.loc[df_info.index, "num_kernels"] = df_info["num_kernels"].astype(
             self.full_df.dtypes["num_kernels"]
         )
         self.full_df.loc[df_info.index, "kernel_dur_sum"] = df_info["sum_dur"].astype(

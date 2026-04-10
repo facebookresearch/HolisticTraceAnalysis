@@ -210,7 +210,7 @@ class ParserConfig:
     def set_drop_gpu_user_annotation(self, should_drop: bool) -> None:
         self.drop_gpu_user_annotation = should_drop
 
-    def set_parser_backend(self, parser_backend: ParserBackend) -> None:
+    def set_parser_backend(self, parser_backend: Optional[ParserBackend]) -> None:
         self.parser_backend = parser_backend
 
     def set_parse_all_args(self, parse_all_args: bool) -> "ParserConfig":
@@ -226,7 +226,9 @@ class ParserConfig:
     def set_skip_event_types(
         self, skip_event_types: Optional[Set[str]] = None
     ) -> "ParserConfig":
-        self.skip_event_types = skip_event_types
+        self.skip_event_types = (
+            skip_event_types if skip_event_types is not None else set()
+        )
         return self
 
     @classmethod

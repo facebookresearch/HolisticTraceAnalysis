@@ -2,7 +2,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Dict, List, Optional
+from typing import cast, Dict, List, Optional
 
 import pandas as pd
 from hta.common.trace import Trace
@@ -74,11 +74,10 @@ class TraceCounters:
         assert len(runtime_calls_filt) == len(gpu_kernels_filt)
 
         # Concat the series of runtime launch events and GPU kernel events
-        merged_df = (
-            pd.concat([runtime_calls_filt, gpu_kernels_filt])
-            .sort_values(by="ts")
-            .set_index("index")
+        merged_df = cast(
+            pd.DataFrame, pd.concat([runtime_calls_filt, gpu_kernels_filt])
         )
+        merged_df = merged_df.sort_values(by="ts").set_index("index")
 
         result_df_list = []
         for stream, stream_df in merged_df.groupby("stream"):
@@ -302,13 +301,17 @@ class TraceCounters:
         membw_time_series_b.ts = membw_time_series_b.ts + membw_time_series_b.dur
         membw_time_series_b.memory_bw_gbps = -membw_time_series_b.memory_bw_gbps
 
-        membw_time_series = pd.concat(
-            [
-                membw_time_series_a,
-                membw_time_series_b[["ts", "pid", "name", "memory_bw_gbps"]],
-            ],
-            ignore_index=True,
-        ).sort_values(by="ts")
+        membw_time_series = cast(
+            pd.DataFrame,
+            pd.concat(
+                [
+                    membw_time_series_a,
+                    membw_time_series_b[["ts", "pid", "name", "memory_bw_gbps"]],
+                ],
+                ignore_index=True,
+            ),
+        )
+        membw_time_series = membw_time_series.sort_values(by="ts")
 
         result_df_list = []
         for _, membw_df in membw_time_series.groupby("name"):

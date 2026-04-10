@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import List, Optional
+from typing import cast, List, Optional
 
 import pandas as pd
 from hta.common.trace_df import find_op_occurrence
@@ -92,8 +92,8 @@ class OperatorFilter(Filter):
         if (
             name_column not in df.columns
             or cat_column not in df.columns
-            or df.dtypes[name_column] != "object"
-            or df.dtypes[cat_column] != "object"
+            or not pd.api.types.is_string_dtype(df[name_column])
+            or not pd.api.types.is_string_dtype(df[cat_column])
         ):
             logger.error(f"df has no string column {name_column} of {cat_column}")
             return df
@@ -129,8 +129,7 @@ class OperatorFilter(Filter):
 
         if self.include_gpu_kernels:
             df_kernels = get_matching_kernels(df_ops, df, cat_column)
-            result = pd.concat([df_ops, df_kernels])
-            return result
+            return cast(pd.DataFrame, pd.concat([df_ops, df_kernels]))
         else:
             return df_ops
 
