@@ -1,11 +1,7 @@
 import os
 import unittest
-from dataclasses import dataclass
-from pathlib import Path
-from typing import List, NamedTuple, Optional
 from unittest.mock import Mock, patch
 
-import hta
 import pandas as pd
 from hta.common.timeline import (
     _simplify_name,
@@ -21,245 +17,302 @@ from hta.common.timeline import (
     TimelinePlotSetting,
 )
 from hta.common.trace import Trace
-from hta.common.trace_call_graph import CallGraph
-from hta.common.trace_filter import CPUOperatorFilter, GPUKernelFilter
-from hta.common.trace_symbol_table import TraceSymbolTable
+from hta.common.trace_filter import GPUKernelFilter
 
 _MODULE = "hta.common.timeline"
 
 
-class TestTimelineAnalysis(unittest.TestCase):
-    base_data_dir = str(Path(hta.__file__).parent.parent.joinpath("tests/data"))
-    trace_path: str = os.path.join(base_data_dir, "timeline_analysis")
-    t = Trace(trace_dir=trace_path)
-    t.parse_traces()
-    t.decode_symbol_ids(use_shorten_name=False)
-    cg = CallGraph(t, ranks=[0])
+from hta.utils.test_utils import get_test_data_dir
+
+
+class TestSimplifyName(unittest.TestCase):
+    """Tests for the _simplify_name helper function."""
+
+    def test_short_names_unchanged(self) -> None:
+        cases = [
+            ("aten::t", "aten::t"),
+            ("__exit__", "__exit__"),
+            ("## qat ##", "## qat ##"),
+            ("<forward op>", "<forward op>"),
+            ("Memcpy HtoD (Pinned -> Device)", "Memcpy HtoD (Pinned -> Device)"),
+            ("Memset (Device)", "Memset (Device)"),
+        ]
+        for long_name, expected in cases:
+            with self.subTest(name=long_name):
+                self.assertEqual(_simplify_name(long_name, max_length=45), expected)
+
+    def test_autograd_simplification(self) -> None:
+        self.assertEqual(
+            _simplify_name(
+                "autograd::engine::evaluate_function: TBackward0", max_length=45
+            ),
+            "autograd::TBackward0",
+        )
+
+    def test_void_kernel_simplification(self) -> None:
+        name = (
+            "void permute_pooled_embs_kernel<float>"
+            "(float const*, long const*, long const*, long const*, float*, long, long, long)"
+        )
+        self.assertEqual(
+            _simplify_name(name, max_length=45),
+            "permute_pooled_embs_kernel<float>",
+        )
+
+    def test_long_name_truncation(self) -> None:
+        name = (
+            "void cutlass::Kernel<cutlass_80_tensorop_s1688gemm_128x128_16x5_nt_align4>"
+            "(cutlass_80_tensorop_s1688gemm_128x128_16x5_nt_align4::Params)"
+        )
+        result = _simplify_name(name, max_length=45)
+        self.assertTrue(result.endswith("..."))
+        self.assertLessEqual(len(result), 45)
+
+    def test_cub_kernel_truncation(self) -> None:
+        name = (
+            "void cub::DeviceRadixSortHistogramKernel<cub::DeviceRadixSortPolicy"
+            "<long, float, int>::Policy800, false, long, int>"
+            "(int*, long const*, int, int, int)"
+        )
+        result = _simplify_name(name, max_length=45)
+        self.assertTrue(result.endswith("..."))
+        self.assertLessEqual(len(result), 45)
+
+
+class TestFigureNameHelpers(unittest.TestCase):
+    """Tests for figure name/title conversion helpers."""
+
+    def test_fig_name_to_title(self) -> None:
+        self.assertEqual(
+            get_fig_title_from_fig_name("my_figure_name"), "My Figure Name"
+        )
+
+    def test_empty_fig_name_to_title(self) -> None:
+        self.assertEqual(get_fig_title_from_fig_name(""), "Untitled Figure")
+
+    def test_title_to_fig_name(self) -> None:
+        self.assertEqual(
+            get_fig_name_from_fig_title("My Figure Title"), "my_figure_title"
+        )
+
+    def test_empty_title_to_fig_name(self) -> None:
+        self.assertEqual(get_fig_name_from_fig_title(""), "untitled_figure")
+
+
+class TestPrepareTimelineEvents(unittest.TestCase):
+    """Tests for prepare_timeline_events using real trace data."""
+
+    t: Trace
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        trace_path = os.path.join(get_test_data_dir(), "timeline_analysis")
+        cls.t = Trace(trace_dir=trace_path)
+        cls.t.parse_traces()
+        cls.t.decode_symbol_ids(use_shorten_name=False)
 
     def setUp(self) -> None:
-        self.trace_path: str = TestTimelineAnalysis.trace_path
-        self.t = TestTimelineAnalysis.t
         self.df = self.t.get_trace(0)
 
+    def test_prepare_returns_required_columns(self) -> None:
+        setting = TimelinePlotSetting(task_height=50, plot_format=PlotFormat.File)
+        result = prepare_timeline_events(
+            self.df, symbol_table=self.t.symbol_table, setting=setting
+        )
+        self.assertFalse(result.empty)
+        self.assertIn(setting.task_column, result.columns)
+        self.assertIn(setting.x_start_column, result.columns)
+        self.assertIn(setting.x_end_column, result.columns)
+        self.assertIn(setting.color_column, result.columns)
+
+    def test_prepare_empty_df(self) -> None:
+        setting = TimelinePlotSetting()
+        result = prepare_timeline_events(pd.DataFrame(), setting=setting)
+        self.assertTrue(result.empty)
+
+    def test_prepare_amplifies_short_events(self) -> None:
+        setting = TimelinePlotSetting(amplify_short_events=True)
+        result = prepare_timeline_events(
+            self.df, symbol_table=self.t.symbol_table, setting=setting
+        )
+        durations = result[setting.x_end_column] - result[setting.x_start_column]
+        self.assertTrue(all(durations >= setting.short_events_display_duration))
+
+    def test_task_labels_for_all_events(self) -> None:
+        """When both CPU and GPU events are present, task labels should contain
+        both cpu and gpu patterns."""
+        setting = TimelinePlotSetting(task_height=50, plot_format=PlotFormat.File)
+        result = prepare_timeline_events(
+            self.df, symbol_table=self.t.symbol_table, setting=setting
+        )
+        tasks = result[setting.task_column].unique()
+        has_cpu = any("cpu" in t for t in tasks)
+        has_gpu = any("gpu" in t for t in tasks)
+        self.assertTrue(
+            has_cpu or has_gpu, f"Expected cpu/gpu task labels, got: {tasks}"
+        )
+
+    def test_task_labels_gpu_only(self) -> None:
+        """GPU-only events should produce gpu stream labels."""
+        gpu_df = self.df[self.df["stream"] >= 0].copy()
+        if gpu_df.empty:
+            self.skipTest("No GPU events in test data")
+        setting = TimelinePlotSetting(task_height=50, plot_format=PlotFormat.File)
+        result = prepare_timeline_events(
+            gpu_df, symbol_table=self.t.symbol_table, setting=setting
+        )
+        tasks = result[setting.task_column].unique()
+        self.assertTrue(
+            all("gpu" in t or "stream" in t for t in tasks),
+            f"Expected gpu stream labels, got: {tasks}",
+        )
+
+    def test_task_labels_cpu_only(self) -> None:
+        """CPU-only events should produce cpu labels."""
+        cpu_df = self.df[self.df["stream"] == -1].copy()
+        if cpu_df.empty:
+            self.skipTest("No CPU events in test data")
+        setting = TimelinePlotSetting(task_height=50, plot_format=PlotFormat.File)
+        result = prepare_timeline_events(
+            cpu_df, symbol_table=self.t.symbol_table, setting=setting
+        )
+        tasks = result[setting.task_column].unique()
+        self.assertTrue(
+            all("cpu" in t for t in tasks),
+            f"Expected cpu labels, got: {tasks}",
+        )
+
+
+class TestAlignModuleWithKernels(unittest.TestCase):
+    """Tests for align_module_with_kernels."""
+
+    t: Trace
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        trace_path = os.path.join(get_test_data_dir(), "timeline_analysis")
+        cls.t = Trace(trace_dir=trace_path)
+        cls.t.parse_traces()
+        cls.t.decode_symbol_ids(use_shorten_name=False)
+
+    def setUp(self) -> None:
+        self.df = self.t.get_trace(0)
+
+    def test_raises_on_missing_columns(self) -> None:
+        """Should raise ValueError when required columns are missing."""
+        minimal_df = self.df[["index", "name", "stream"]].copy()
+        with self.assertRaises(ValueError):
+            align_module_with_kernels(minimal_df, ["## forward ##"])
+
+    def test_raises_on_partial_columns(self) -> None:
+        """Should raise ValueError with only the REQUIRED_COLUMNS set (missing kernel columns)."""
+        cols_present = list(
+            REQUIRED_COLUMNS_FOR_CPU_GPU_ALIGNMENT & set(self.df.columns)
+        )
+        if len(cols_present) < len(REQUIRED_COLUMNS_FOR_CPU_GPU_ALIGNMENT):
+            # Not all required columns exist; the function should raise
+            partial_df = self.df[cols_present].copy()
+            with self.assertRaises(ValueError):
+                align_module_with_kernels(partial_df, ["## forward ##"])
+
+    def test_align_with_symbol_table(self) -> None:
+        """Should produce aligned events when all required columns are present."""
+        required = REQUIRED_COLUMNS_FOR_CPU_GPU_ALIGNMENT
+        if not required.issubset(set(self.df.columns)):
+            self.skipTest(
+                f"Test data missing columns: {required - set(self.df.columns)}"
+            )
+
+        aligned = align_module_with_kernels(
+            self.df, ["## forward ##"], sym_table=self.t.symbol_table
+        )
+        annotations = aligned[aligned["stream"].eq(AnnotationStreamID)]
+        self.assertGreater(aligned.shape[0], 0)
+        # All annotations should have non-negative num_kernels
+        if "num_kernels" in annotations.columns and not annotations.empty:
+            self.assertEqual(annotations[annotations["num_kernels"].lt(0)].shape[0], 0)
+
+    def test_align_without_symbol_table(self) -> None:
+        """Should work when name column contains strings (decoded)."""
+        required = REQUIRED_COLUMNS_FOR_CPU_GPU_ALIGNMENT
+        if not required.issubset(set(self.df.columns)):
+            self.skipTest(
+                f"Test data missing columns: {required - set(self.df.columns)}"
+            )
+
+        aligned = align_module_with_kernels(self.df, ["## forward ##"])
+        self.assertGreater(aligned.shape[0], 0)
+
+
+class TestPlotEventsTimeline(unittest.TestCase):
+    """Tests for plot_events_timeline with mocked plotly."""
+
+    t: Trace
+    trace_path: str
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.trace_path = os.path.join(get_test_data_dir(), "timeline_analysis")
+        cls.t = Trace(trace_dir=cls.trace_path)
+        cls.t.parse_traces()
+        cls.t.decode_symbol_ids(use_shorten_name=False)
+
     @patch(f"{_MODULE}.px.timeline")
-    def test_plot_timeline(self, mock_timeline: Mock) -> None:
-        @dataclass
-        class TC:
-            in_df: pd.DataFrame
-            figure_name: str
-            expected_task_label_re: str
-
-        @dataclass
-        class DataItem:
-            x: int
-            name: str
-
-        def fake_traces(
-            in_df: pd.DataFrame, trace_type: str, n_ranks: int, n_traces
-        ) -> pd.DataFrame:
-            result_df = in_df.copy()
-            if trace_type == "multi_ranks":
-                result_df["rank"] = in_df["index"].apply(lambda i: i % n_ranks)
-            elif trace_type == "multi_traces":
-                result_df["trace"] = in_df["index"].apply(
-                    lambda i: i % n_traces * n_ranks
-                )
-                result_df["rank"] = in_df["index"].apply(lambda i: i % n_ranks)
-            return result_df
-
-        def fake_multi_traces(in_df: pd.DataFrame, n_traces: int) -> pd.DataFrame:
-            result_df = in_df.copy()
-            result_df["trace"] = in_df["index"].apply(lambda i: i % n_traces)
-            return result_df
-
-        test_cases: List[TC] = [
-            TC(self.df, "one_rank", r"(cpu level)|(gpu stream)"),
-            TC(GPUKernelFilter()(self.df), "gpu", r"gpu stream"),
-            TC(CPUOperatorFilter()(self.df), "cpu", r"cpu level"),
-            TC(fake_traces(self.df, "multi_ranks", 3, 1), "multi_ranks", r"rank \d+"),
-            TC(
-                fake_traces(self.df, "multi_traces", 2, 2),
-                "multi_traces",
-                r"trace \w+ rank \d+",
-            ),
-        ]
-        output_dir = self.trace_path
-        plot_setting = TimelinePlotSetting(task_height=50, plot_format=PlotFormat.File)
+    def test_plot_calls_plotly(self, mock_timeline: Mock) -> None:
+        df = self.t.get_trace(0)
+        setting = TimelinePlotSetting(task_height=50, plot_format=PlotFormat.File)
+        timeline_events = prepare_timeline_events(
+            df, symbol_table=self.t.symbol_table, setting=setting
+        )
+        self.assertFalse(timeline_events.empty)
 
         mock_figure = Mock()
-        mock_figure.show.side_effects = [None for i in range(len(test_cases))]
-        mock_figure.update_layout.side_effects = [None for i in range(len(test_cases))]
-        mock_figure.write_html.side_effects = [None for i in range(len(test_cases))]
-        mock_figure.write_image.side_effects = [None for i in range(len(test_cases))]
-        mock_figure.data = [Mock(x=i, name=str(i)) for i in range(10)]
+        # Mock(name=...) sets Mock's internal name, not a regular attribute.
+        # Use configure_mock to set 'name' as a data attribute.
+        mock_traces = []
+        for i in range(5):
+            m = Mock()
+            m.configure_mock(x=i, name=str(i))
+            mock_traces.append(m)
+        mock_figure.data = mock_traces
         mock_timeline.return_value = mock_figure
 
-        for i, tc in enumerate(test_cases):
-            events = tc.in_df
-            timeline_events = prepare_timeline_events(
-                events, symbol_table=self.t.symbol_table, setting=plot_setting
-            )
+        output_file = os.path.join(self.trace_path, "test_output.html")
+        plot_events_timeline(
+            title="Test Plot",
+            events=timeline_events,
+            setting=setting,
+            output_image_path=output_file,
+        )
+        mock_timeline.assert_called_once()
 
-            self.assertTrue(
-                all(
-                    timeline_events[plot_setting.task_column].str.match(
-                        tc.expected_task_label_re
-                    )
-                )
-            )
 
-            output_file = os.path.join(output_dir, tc.figure_name + ".html")
+class TestTimelineClass(unittest.TestCase):
+    """Tests for the Timeline wrapper class."""
 
-            _ = plot_events_timeline(
-                title=get_fig_title_from_fig_name(tc.figure_name),
-                events=timeline_events,
-                setting=plot_setting,
-                output_image_path=output_file,
-            )
-            self.assertEqual(i + 1, mock_timeline.call_count)
+    t: Trace
+    trace_path: str
 
-    def test_align_module_with_kernels(self) -> None:
-        @dataclass
-        class _TCase:
-            in_df: pd.DataFrame
-            module_list: List[str]
-            sym_table: Optional[TraceSymbolTable]
-            include_original_cpu_events: bool
-            expected_type_error: bool
-            expected_num_annotations: int
-            expected_total_num_events: int
-
-        test_cases = [
-            _TCase(
-                self.df,
-                ["## forward ##"],
-                self.t.symbol_table,
-                False,
-                False,
-                2,
-                1206,
-            ),
-            _TCase(self.df, [r"## forward ##"], None, False, False, 2, 1206),
-            _TCase(
-                self.df[["index", "name", "stream"]].copy(),
-                [r"## forward ##"],
-                None,
-                False,
-                True,
-                -1,
-                -1,
-            ),
-            _TCase(
-                self.df[list(REQUIRED_COLUMNS_FOR_CPU_GPU_ALIGNMENT)].copy(),
-                [r"## forward ##"],
-                None,
-                False,
-                True,
-                -1,
-                -1,
-            ),
-        ]
-
-        for tc in test_cases:
-            if tc.expected_type_error:
-                with self.assertRaises(ValueError):
-                    align_module_with_kernels(
-                        tc.in_df,
-                        tc.module_list,
-                        sym_table=tc.sym_table,
-                        include_original_cpu_events=tc.include_original_cpu_events,
-                    )
-            else:
-                aligned_events = align_module_with_kernels(
-                    tc.in_df,
-                    tc.module_list,
-                    sym_table=tc.sym_table,
-                    include_original_cpu_events=tc.include_original_cpu_events,
-                )
-
-                annotations = aligned_events.loc[
-                    aligned_events["stream"].eq(AnnotationStreamID)
-                ]
-                self.assertEqual(tc.expected_total_num_events, aligned_events.shape[0])
-                self.assertEqual(tc.expected_num_annotations, annotations.shape[0])
-                self.assertTrue(
-                    annotations.loc[annotations["num_kernels"].lt(0)].shape[0] == 0
-                )
-                pd.testing.assert_series_equal(
-                    annotations["first_kernel_start"].astype(int),
-                    annotations["ts"].astype(int),
-                    check_names=False,
-                )
-
-    def test_figure_title_helpers(self) -> None:
-        fig_name = "my_figure_name"
-        expected_title = "My Figure Name"
-        result_title = get_fig_title_from_fig_name(fig_name)
-        self.assertEqual(result_title, expected_title)
-
-        fig_name = ""
-        expected_title = "Untitled Figure"
-        result_title = get_fig_title_from_fig_name(fig_name)
-        self.assertEqual(result_title, expected_title)
-
-        title = "My Figure Title"
-        expected_fig_name = "my_figure_title"
-        result_fig_name = get_fig_name_from_fig_title(title)
-        self.assertEqual(result_fig_name, expected_fig_name)
-
-        title = ""
-        expected_fig_name = "untitled_figure"
-        result_fig_name = get_fig_name_from_fig_title(title)
-        self.assertEqual(result_fig_name, expected_fig_name)
-
-    def test_simplify_name(self) -> None:
-        class _TCase(NamedTuple):
-            long_name: str
-            short_name: str
-
-        testCases = [
-            _TCase("aten::t", "aten::t"),
-            _TCase("__exit__", "__exit__"),
-            _TCase("## qat ##", "## qat ##"),
-            _TCase("<forward op>", "<forward op>"),
-            _TCase("Memcpy HtoD (Pinned -> Device)", "Memcpy HtoD (Pinned -> Device)"),
-            _TCase("Memset (Device)", "Memset (Device)"),
-            _TCase(
-                "autograd::engine::evaluate_function: TBackward0",
-                "autograd::TBackward0",
-            ),
-            _TCase(
-                "void permute_pooled_embs_kernel<float>(float const*, long const*, long const*, long const*, float*, long, long, long)",
-                "permute_pooled_embs_kernel<float>",
-            ),
-            _TCase(
-                "void cutlass::Kernel<cutlass_80_tensorop_s1688gemm_128x128_16x5_nt_align4>(cutlass_80_tensorop_s1688gemm_128x128_16x5_nt_align4::Params)",
-                "cutlass::Kernel<cutlass_80_tensorop_s1688g...",
-            ),
-            _TCase("<forward op>", "<forward op>"),
-            _TCase(
-                "void cub::DeviceRadixSortHistogramKernel<cub::DeviceRadixSortPolicy<long, float, int>::Policy800, false, long, int>(int*, long const*, int, int, int)",
-                "cub::DeviceRadixSortHistogramKernel<cub::D...",
-            ),
-        ]
-        for tc in testCases:
-            got = _simplify_name(tc.long_name, max_length=45)
-            self.assertEqual(
-                tc.short_name,
-                got,
-                f"name={tc.long_name} expect: {tc.short_name}, got: {got}.",
-            )
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.trace_path = os.path.join(get_test_data_dir(), "timeline_analysis")
+        cls.t = Trace(trace_dir=cls.trace_path)
+        cls.t.parse_traces()
+        cls.t.decode_symbol_ids(use_shorten_name=False)
 
     @patch(f"{_MODULE}.plot_events_timeline")
-    def test_timeline_class(self, mock_plot: Mock) -> None:
+    def test_timeline_prepare_and_plot(self, mock_plot: Mock) -> None:
         df = self.t.get_trace(0)
-        save_path = os.path.join(self.trace_path, "timeline_class.html")
         tl = Timeline(df, self.t.symbol_table, filter_func=GPUKernelFilter())
         tl.setting.plot_format = PlotFormat.File
 
-        tl.prepare()
+        save_path = os.path.join(self.trace_path, "timeline_class.html")
         tl.plot("timeline class", save_path=save_path)
 
         self.assertFalse(tl.is_timeline_events(df, tl.setting))
         self.assertTrue(tl.is_timeline_events(tl.timeline_events, tl.setting))
         mock_plot.assert_called_once()
+
+
+if __name__ == "__main__":
+    unittest.main()

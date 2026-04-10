@@ -226,7 +226,8 @@ class NameStringColumnFilter(Filter):
     ) -> pd.DataFrame:
         name_column, _ = get_symbol_column_names(df)
         if name_column == "" or (
-            name_column in df.columns and df[name_column].dtype != object
+            name_column in df.columns
+            and not pd.api.types.is_string_dtype(df[name_column])
         ):
             logger.warning("The DataFrame doesn't have a name column of string type")
             return df

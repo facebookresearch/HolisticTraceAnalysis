@@ -35,14 +35,14 @@ class LabeledTrace:
 
     def __init__(
         self,
-        label: str = None,
+        label: Optional[str] = None,
         t: Optional[Trace] = None,
         trace_dir: Optional[str] = None,
-    ):
+    ) -> None:
         """Construct a LabeledTrace from either a Trace object or trace files in trace_dir."""
-        self.label = label if label else f"t{random.randint(0,10)}"
+        self.label: str = label if label else f"t{random.randint(0, 10)}"
         if t is not None:
-            self.t = t
+            self.t: Trace = t
         elif trace_dir is not None and os.path.isdir(trace_dir):
             self.t = Trace(trace_dir=trace_dir)
         else:
@@ -53,7 +53,7 @@ class LabeledTrace:
 
         self.s_map = pd.Series(self.t.symbol_table.get_sym_id_map())
         self.s_tab = pd.Series(self.t.symbol_table.get_sym_table())
-        self.iteration_df = self._extract_iterations()
+        self.iteration_df: pd.DataFrame = self._extract_iterations()
 
     def ranks(self) -> List[int]:
         """Get all available ranks."""

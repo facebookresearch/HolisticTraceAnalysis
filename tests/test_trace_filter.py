@@ -1,10 +1,8 @@
 import os
 import unittest
 from dataclasses import dataclass
-from pathlib import Path
 from typing import List, NamedTuple, Union
 
-import hta
 import numpy as np
 import pandas as pd
 from hta.common.trace import Trace
@@ -20,16 +18,19 @@ from hta.common.trace_filter import (
     TimeRangeFilter,
 )
 from hta.common.trace_stack_filter import CombinedOperatorFilter, UnderOperatorFilter
+from hta.utils.test_utils import get_test_data_dir
 
 
 class TestTraceFilters(unittest.TestCase):
-    base_data_dir = str(Path(hta.__file__).parent.parent.joinpath("tests/data"))
-    trace_dir: str = os.path.join(base_data_dir, "trace_filter")
-    htaTrace: Trace = Trace(trace_dir=trace_dir)
-    htaTrace.parse_traces()
+    htaTrace: Trace
 
-    def setUp(self):
-        self.htaTrace = TestTraceFilters.htaTrace
+    @classmethod
+    def setUpClass(cls) -> None:
+        trace_dir = os.path.join(get_test_data_dir(), "trace_filter")
+        cls.htaTrace = Trace(trace_dir=trace_dir)
+        cls.htaTrace.parse_traces()
+
+    def setUp(self) -> None:
         self.df = self.htaTrace.get_trace(0)
 
     def testIterationFilter(self) -> None:
@@ -87,22 +88,19 @@ class TestTraceFilters(unittest.TestCase):
     def testNameFilterWithoutSymbolTable(self) -> None:
         name_filter = NameFilter("^nccl", name_column="s_name")
         original_df = self.df.copy()
+        sym_table_list = self.htaTrace.symbol_table.sym_table
         original_df["s_name"] = original_df["name"].apply(
-            lambda idx: self.htaTrace.symbol_table.sym_table[idx]
+            lambda idx: sym_table_list[idx]
         )
         filtered_df = name_filter(original_df)
-        filtered_df_names = filtered_df["name"].apply(
-            lambda idx: self.htaTrace.symbol_table.sym_table[idx]
-        )
 
-        # should match "^nccl"
-        self.assertTrue(
-            filtered_df_names[filtered_df_names.str.match("^nccl")].size > 0
-        )
+        # Filter should return non-empty results
+        self.assertGreater(filtered_df.shape[0], 0)
 
-        # others should not match "^nccl"
+        # All returned rows should have s_name matching "^nccl"
         self.assertTrue(
-            filtered_df_names[~filtered_df_names.str.match("^nccl")].size == 0
+            filtered_df["s_name"].str.match("^nccl").all(),
+            "All filtered rows should match '^nccl' pattern",
         )
 
     def testGPUKernelFilter(self) -> None:
@@ -166,7 +164,7 @@ class TestTraceFilters(unittest.TestCase):
                 pd.DataFrame(
                     data[2:3],
                     columns=["iteration", "index", "name", "duration"],
-                    index=[2],
+                    index=pd.Index([2]),
                 ),
             ),
             TestCase(
@@ -222,7 +220,9 @@ class TestTraceFilters(unittest.TestCase):
         )
         df = pd.DataFrame(data, columns=["iteration", "index", "name", "duration"])
         expected_df = pd.DataFrame(
-            data[1:2], columns=["iteration", "index", "name", "duration"], index=[1]
+            data[1:2],
+            columns=["iteration", "index", "name", "duration"],
+            index=pd.Index([1]),
         )
         got_df = FirstIterationFilter()(df)
         self.assertTrue(
@@ -269,32 +269,48 @@ class TestTraceFilters(unittest.TestCase):
 
         self.htaTrace.decode_symbol_ids(use_shorten_name=False)
         df = self.htaTrace.traces[0]
+        total_rows = df.shape[0]
         for i, tc in enumerate(test_cases):
-            f = CombinedOperatorFilter(
-                tc.root_op_name,
-                tc.after_op_name,
-                tc.before_op_name,
-                tc.include_gpu_kernels,
-            )
-            got_df = f(df)
-            self.assertEqual(
-                got_df.shape[0],
-                tc.expected_num_events,
-                f"test case #{i}: expect {tc.expected_num_events} events; got {got_df.shape[0]}",
-            )
-            cuda_kernels = got_df.loc[got_df["stream"].gt(0)]
-            self.assertEqual(
-                tc.expected_num_kernels,
-                cuda_kernels.shape[0],
-                f"test case #{i}: expect {tc.expected_num_kernels} cuda kernels, got {cuda_kernels.shape[0]}",
-            )
+            with self.subTest(case=i):
+                f = CombinedOperatorFilter(
+                    tc.root_op_name,
+                    tc.after_op_name,
+                    tc.before_op_name,
+                    tc.include_gpu_kernels,
+                )
+                got_df = f(df)
+                # The filter must actually filter (result smaller than input)
+                self.assertLess(
+                    got_df.shape[0],
+                    total_rows,
+                    f"test case #{i}: filter returned unfiltered data ({got_df.shape[0]} rows)",
+                )
+                self.assertEqual(
+                    got_df.shape[0],
+                    tc.expected_num_events,
+                    f"test case #{i}: expect {tc.expected_num_events} events; got {got_df.shape[0]}",
+                )
+                cuda_kernels = got_df.loc[got_df["stream"].gt(0)]
+                self.assertEqual(
+                    tc.expected_num_kernels,
+                    cuda_kernels.shape[0],
+                    f"test case #{i}: expect {tc.expected_num_kernels} cuda kernels, got {cuda_kernels.shape[0]}",
+                )
 
     def testUnderOperatorFilter(self) -> None:
         op_name = "forward"
         self.htaTrace.decode_symbol_ids(use_shorten_name=False)
         df = FirstIterationFilter()(self.htaTrace.traces[0])
+        total_rows = df.shape[0]
         f = UnderOperatorFilter(op_name=op_name, position=0, include_gpu_kernels=True)
-        self.assertEqual(f(df).shape[0], 146)
+        result = f(df)
+        # The filter must actually filter (result smaller than input)
+        self.assertLess(
+            result.shape[0],
+            total_rows,
+            f"filter returned unfiltered data ({result.shape[0]} rows)",
+        )
+        self.assertEqual(result.shape[0], 146)
 
 
 class TestTraceFiltersSyncEvents(unittest.TestCase):
@@ -303,13 +319,15 @@ class TestTraceFiltersSyncEvents(unittest.TestCase):
     also on the GPU and running device events.
     """
 
-    base_data_dir = str(Path(hta.__file__).parent.parent.joinpath("tests/data"))
-    trace_dir: str = os.path.join(base_data_dir, "critical_path/cuda_event_sync")
-    htaTrace: Trace = Trace(trace_dir=trace_dir)
-    htaTrace.parse_traces()
+    htaTrace: Trace
 
-    def setUp(self):
-        self.htaTrace = TestTraceFiltersSyncEvents.htaTrace
+    @classmethod
+    def setUpClass(cls) -> None:
+        trace_dir = os.path.join(get_test_data_dir(), "critical_path/cuda_event_sync")
+        cls.htaTrace = Trace(trace_dir=trace_dir)
+        cls.htaTrace.parse_traces()
+
+    def setUp(self) -> None:
         self.df = self.htaTrace.get_trace(0)
 
     def testGPUKernelFilter(self) -> None:

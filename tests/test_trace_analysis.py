@@ -15,6 +15,7 @@ import hta
 import pandas as pd
 from hta.common.trace import PHASE_COUNTER
 from hta.trace_analysis import TimeSeriesTypes, TraceAnalysis
+from hta.utils.test_utils import get_test_data_dir
 
 
 class TraceAnalysisTestCase(unittest.TestCase):
@@ -22,7 +23,7 @@ class TraceAnalysisTestCase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         super(TraceAnalysisTestCase, cls).setUpClass()
-        cls.base_data_dir = add_test_data_path_prefix_if_exists("tests/data")
+        cls.base_data_dir = get_test_data_dir()
         cls.vision_transformer_trace_dir: str = os.path.join(
             cls.base_data_dir, "vision_transformer"
         )
@@ -621,14 +622,6 @@ class TraceAnalysisTestCase(unittest.TestCase):
                 expval,
                 msg=f"Stream 1 idle stats mismatch key={key}",
             )
-
-
-def add_test_data_path_prefix_if_exists(test_path):
-    """Add TEST_DATA_PREFIX_PATH to the test path if it exists"""
-    needs_prefix = os.environ.get("TEST_DATA_PREFIX_PATH", "")
-    if needs_prefix:
-        return needs_prefix + "/" + test_path
-    return test_path
 
 
 if __name__ == "__main__":  # pragma: no cover

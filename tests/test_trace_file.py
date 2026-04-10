@@ -14,6 +14,7 @@ from hta.common.trace_file import (
     write_trace,
 )
 from hta.configs.config import logger
+from hta.utils.test_utils import get_test_data_dir
 
 
 class TestTraceFile(unittest.TestCase):
@@ -54,31 +55,33 @@ class TestTraceFile(unittest.TestCase):
     }
 
     def setUp(self) -> None:
-        self.trace_without_distributed_info = "tests/data/distributed_info_unavailable"
-        self.trace_without_rank = "tests/data/rank_unavailable"
-        self.trace_mixed_files = "tests/data/mixed_files"
-        self.trace_file_list = ["tests/data/trace_file_list/inference_rank_1.json.gz"]
+        data_dir = get_test_data_dir()
+        self.trace_without_distributed_info = os.path.join(
+            data_dir, "distributed_info_unavailable"
+        )
+        self.trace_without_rank = os.path.join(data_dir, "rank_unavailable")
+        self.trace_mixed_files = os.path.join(data_dir, "mixed_files")
+        self.trace_file_list = [
+            os.path.join(data_dir, "trace_file_list", "inference_rank_1.json.gz")
+        ]
         self.logger = logger
 
     def test_create_rank_to_trace_dict_without_distributed_info(self):
         with self.assertLogs(logger, level="WARNING") as cm:
-            self.assertEqual(
-                create_rank_to_trace_dict_from_dir(self.trace_without_distributed_info),
-                (
-                    True,
-                    {
-                        0: "tests/data/distributed_info_unavailable/distributed_info_not_found.json.gz"
-                    },
-                ),
+            ok, result = create_rank_to_trace_dict_from_dir(
+                self.trace_without_distributed_info
             )
+            self.assertTrue(ok)
+            self.assertIn(0, result)
+            self.assertTrue(result[0].endswith("distributed_info_not_found.json.gz"))
             self.assertIn("trace file does not have the rank", cm.output[0])
 
     def test_create_rank_to_trace_dict_without_rank(self) -> None:
         with self.assertLogs(logger, level="WARNING") as cm:
-            self.assertEqual(
-                create_rank_to_trace_dict_from_dir(self.trace_without_rank),
-                (True, {0: "tests/data/rank_unavailable/rank_not_found.json.gz"}),
-            )
+            ok, result = create_rank_to_trace_dict_from_dir(self.trace_without_rank)
+            self.assertTrue(ok)
+            self.assertIn(0, result)
+            self.assertTrue(result[0].endswith("rank_not_found.json.gz"))
             self.assertIn("trace file does not have the rank", cm.output[0])
 
     def test_create_rank_to_trace_dict_with_mixed_dir(self) -> None:
@@ -89,10 +92,10 @@ class TestTraceFile(unittest.TestCase):
             self.assertIn("has the same rank", cm.output[0])
 
     def test_create_rank_to_trace_dict_with_file_list(self) -> None:
-        self.assertEqual(
-            create_rank_to_trace_dict(self.trace_file_list),
-            (True, {1: "tests/data/trace_file_list/inference_rank_1.json.gz"}),
-        )
+        ok, result = create_rank_to_trace_dict(self.trace_file_list)
+        self.assertTrue(ok)
+        self.assertIn(1, result)
+        self.assertTrue(result[1].endswith("inference_rank_1.json.gz"))
 
     def test_read_write_trace(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdirname:

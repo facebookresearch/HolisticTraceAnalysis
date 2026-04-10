@@ -2,9 +2,11 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+import os
 import unittest
 
 from hta.memory_analysis import MemoryAnalysis
+from hta.utils.test_utils import get_test_data_dir
 
 
 class MemoryAnalysisTestCase(unittest.TestCase):
@@ -12,7 +14,9 @@ class MemoryAnalysisTestCase(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        memory_events_path: str = "tests/data/memory_analysis/memory_timeline.raw.gz"
+        memory_events_path = os.path.join(
+            get_test_data_dir(), "memory_analysis", "memory_timeline.raw.gz"
+        )
         cls.memory_analyzer = MemoryAnalysis(path=memory_events_path)
 
     def test_process_raw_events(self):

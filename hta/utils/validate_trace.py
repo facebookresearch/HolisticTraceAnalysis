@@ -2,6 +2,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+from argparse import Namespace
 from collections import defaultdict
 from typing import Any, Dict, List, Tuple
 
@@ -62,7 +63,6 @@ def get_expected_arguments(attribute_specs: List[AttributeSpec]) -> pd.DataFrame
     return df
 
 
-# pyre-ignore[3]
 def _get_argument_value_types(df: pd.DataFrame) -> Dict[str, Tuple[ValueType, Any]]:
     """Extract the argument value types from the given DataFrame.
 
@@ -86,7 +86,6 @@ def _get_argument_value_types(df: pd.DataFrame) -> Dict[str, Tuple[ValueType, An
 
 def _check_args(
     args: Dict[str, Any],
-    # pyre-ignore[2]
     arg_type_map: Dict[str, Tuple[ValueType, Any]],
     skipped_arguments: Dict[str, int],
     type_violations: Dict[str, str],
@@ -107,8 +106,10 @@ def _check_args(
             skipped_arguments[k] += 1
             continue
         else:
-            # pyre-ignore[23]
-            arg_type, arg_value = arg_type_map.get(k)
+            entry = arg_type_map.get(k)
+            if entry is None:
+                continue
+            arg_type, arg_value = entry
             if arg_type != ValueType.Object:
                 if (
                     isinstance(v, type(arg_value))
@@ -212,7 +213,7 @@ if __name__ == "__main__":
         choices=["minimal", "standard", "complete"],
         help="The level of validation",
     )
-    args = parser.parse_args()
+    args: Namespace = parser.parse_args()
 
     ok, errors = validate_trace_format(args.trace_file, args.level)
     print(f"Validation result: {ok}")

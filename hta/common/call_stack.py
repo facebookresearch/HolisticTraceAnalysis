@@ -214,8 +214,8 @@ class CallStackGraph:
         self.identity: CallStackIdentity = identity
         self.device_type: DeviceType = infer_device_type(df)
         self.nodes: Dict[int, CallStackNode] = {}
-        self.correlations: pd.Series = None
-        self.depth: pd.Series = None
+        self.correlations: Optional[pd.Series] = None
+        self.depth: Optional[pd.Series] = None
         self.filter_func: Optional[Filter] = filter_func
         self._construct_call_stack_graph(df)
         self._compute_depth()
@@ -388,7 +388,7 @@ class CallStackGraph:
 
     def _compute_depth(self) -> None:
         """Add the depth information to the DataFrame"""
-        if self.device_type == DeviceType.GPU:
+        if self.device_type == DeviceType.GPU and self.correlations is not None:
             self.depth = pd.Series(
                 data=np.full(self.correlations.size, -1),
                 index=self.correlations.index,
@@ -402,7 +402,7 @@ class CallStackGraph:
                 copy=True,
             )
 
-    def get_depth(self) -> pd.Series:
+    def get_depth(self) -> Optional[pd.Series]:
         """Get the depth for all valid node
 
         Return:
@@ -526,7 +526,7 @@ class CallGraph:
             df = self.trace_data.get_trace(rank).copy()
             if remapped_tids and rank in remapped_tids:
                 df = self._remap_tids(df, remapped_tids[rank])
-            for (pid, tid), df_thread in df.groupby(["pid", "tid"]):
+            for (pid, tid), df_thread in df.groupby(["pid", "tid"]):  # type: ignore[misc]
                 if df_thread.stream.gt(0).any():
                     # Filter out gpu annotations and sync events
                     df_thread = df_thread[df_thread["stream"].gt(0)]

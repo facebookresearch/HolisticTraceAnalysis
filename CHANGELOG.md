@@ -3,12 +3,18 @@ All notable changes to this project will be documented in this file. The format 
 Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic
 Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
-#### Added
-
+## [0.6.0] - Unreleased
 #### Changed
+- Dropped support for Python 3.8 and 3.9 (both EOL). Minimum supported version is now Python 3.10.
+- Added Python 3.12 to supported versions and CI matrix.
+- Updated GitHub Actions to latest versions (checkout@v4, setup-python@v5).
+- Aligned pre-commit CI Python versions with main CI workflow (3.10, 3.12).
+- Updated pre-commit hooks: pre-commit-hooks v4.6.0, flake8 7.1.0, mypy v1.11.0.
+- Updated ReadTheDocs build environment to ubuntu-22.04 with Python 3.12.
+- Updated Sphinx documentation dependencies (sphinx>=7.0.0, sphinx_rtd_theme>=2.0.0).
 
 #### Fixed
+- Fixed placeholder author email in setup.py.
 
 
 ## [0.5.0] - 2023-05-27
