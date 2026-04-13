@@ -290,6 +290,17 @@ def _compress_df(
     """
     cfg = cfg or ParserConfig.get_default_cfg()
 
+    # Guard: traces with only metadata events (phase 'M') have no 'dur' or 'cat'
+    # columns. Return an empty DataFrame instead of crashing downstream.
+    required_cols = {"dur", "cat"}
+    if not required_cols.issubset(set(df.columns)):
+        missing = required_cols - set(df.columns)
+        logger.warning(
+            f"Trace is missing required columns {missing} "
+            f"(likely contains only metadata events). Skipping."
+        )
+        return pd.DataFrame(), TraceSymbolTable()
+
     # drop rows with null values
     df.dropna(axis=0, subset=["dur", "cat"], inplace=True)
     df.drop(df[df["cat"] == "Trace"].index, inplace=True)
