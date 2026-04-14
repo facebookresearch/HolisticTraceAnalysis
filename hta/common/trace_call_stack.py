@@ -356,6 +356,7 @@ class CallStackGraph:
                 value_name="time",
             )
             .replace({"ts": -1, "end": 1})
+            .assign(kind=lambda x: x["kind"].astype(int))
             .sort_values("time")
         ).to_numpy()
 

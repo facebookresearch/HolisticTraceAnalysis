@@ -140,10 +140,26 @@ def parse_trace_dict(trace_file_path: str) -> Dict[str, Any]:
     trace_record: Dict[str, Any] = {}
     if trace_file_path.endswith(".gz"):
         with gzip.open(trace_file_path, "rb") as fh:
-            trace_record = json.loads(fh.read())
+            data = fh.read()
+            try:
+                trace_record = json.loads(data)
+            except UnicodeDecodeError as e:
+                logger.error(
+                    f"Trace file {trace_file_path} contains invalid UTF-8 "
+                    f"bytes and cannot be parsed: {e}"
+                )
+                raise
     elif trace_file_path.endswith(".json"):
-        with open(trace_file_path, "r") as fh2:
-            trace_record = json.loads(fh2.read())
+        with open(trace_file_path, "rb") as fh2:
+            data = fh2.read()
+            try:
+                trace_record = json.loads(data)
+            except UnicodeDecodeError as e:
+                logger.error(
+                    f"Trace file {trace_file_path} contains invalid UTF-8 "
+                    f"bytes and cannot be parsed: {e}"
+                )
+                raise
     else:
         raise ValueError(
             f"expect the value of trace_file ({trace_file_path}) ends with '.gz' or 'json'"
@@ -293,6 +309,19 @@ def _compress_df(
     # drop rows with null values
     df.dropna(axis=0, subset=["dur", "cat"], inplace=True)
     df.drop(df[df["cat"] == "Trace"].index, inplace=True)
+
+    # drop events with invalid durations (negative or exceeding threshold).
+    # Corrupted CUPTI timestamps can produce durations of 100+ years.
+    max_dur = cfg.max_event_duration_us
+    if max_dur is not None:
+        invalid_dur = (df["dur"] < 0) | (df["dur"] > max_dur)
+        n_invalid = invalid_dur.sum()
+        if n_invalid > 0:
+            logger.warning(
+                f"Dropping {n_invalid} trace events with invalid duration "
+                f"(dur < 0 or dur > {max_dur} us)."
+            )
+            df.drop(df[invalid_dur].index, inplace=True)
 
     # drop columns
     columns_to_drop = {"ph", "id", "bp", "s"}.intersection(set(df.columns))
@@ -486,20 +515,28 @@ def parse_trace_dataframe(
 
     if parser_backend == ParserBackend.JSON:
         meta, df, local_symbol_table = _parse_trace_dataframe_json(trace_file_path, cfg)
-    elif parser_backend == ParserBackend.IJSON:
-        meta, df, local_symbol_table = _parse_trace_dataframe_ijson(
-            trace_file_path, cfg
+    elif parser_backend in (
+        ParserBackend.IJSON,
+        ParserBackend.IJSON_BATCHED,
+        ParserBackend.IJSON_BATCH_AND_COMPRESS,
+    ):
+        batched = parser_backend in (
+            ParserBackend.IJSON_BATCHED,
+            ParserBackend.IJSON_BATCH_AND_COMPRESS,
         )
-    elif parser_backend == ParserBackend.IJSON_BATCHED:
-        meta, df, local_symbol_table = _parse_trace_dataframe_ijson(
-            trace_file_path,
-            cfg,
-            batched=True,
-        )
-    elif parser_backend == ParserBackend.IJSON_BATCH_AND_COMPRESS:
-        meta, df, local_symbol_table = _parse_trace_dataframe_ijson(
-            trace_file_path, cfg, batched=True, compress_on_fly=True
-        )
+        compress = parser_backend == ParserBackend.IJSON_BATCH_AND_COMPRESS
+        try:
+            meta, df, local_symbol_table = _parse_trace_dataframe_ijson(
+                trace_file_path, cfg, batched=batched, compress_on_fly=compress
+            )
+        except Exception as e:
+            logger.warning(
+                f"ijson (yajl) parser failed for {trace_file_path}: {e}. "
+                f"Falling back to json parser."
+            )
+            meta, df, local_symbol_table = _parse_trace_dataframe_json(
+                trace_file_path, cfg
+            )
     else:
         raise ValueError(f"unexpected or unsupported parser = {parser_backend}")
 
