@@ -13,6 +13,7 @@ import pandas as pd
 from hta.common.trace import parse_trace_dict, Trace
 from hta.common.trace_parser import (
     _auto_detect_parser_backend,
+    _compress_df,
     _open_trace_file,
     get_default_trace_parsing_backend,
     infer_gpu_type,
@@ -644,6 +645,89 @@ class TraceParseConfigTestCase(unittest.TestCase):
 
         # Validate results
         pd.testing.assert_frame_equal(fixed_df, expected_df)
+
+
+class TestMetadataOnlyTrace(unittest.TestCase):
+    """Test handling of traces with only metadata events (no dur/cat columns)."""
+
+    def test_compress_df_missing_dur_and_cat(self):
+        """_compress_df should return empty DataFrame when dur and cat columns are missing."""
+        # Simulate a trace with only metadata events (phase 'M')
+        metadata_events = [
+            {
+                "ph": "M",
+                "name": "process_name",
+                "pid": 1,
+                "tid": 1,
+                "ts": 0,
+                "args": {"name": "GPU 0"},
+            },
+            {
+                "ph": "M",
+                "name": "thread_name",
+                "pid": 1,
+                "tid": 2,
+                "ts": 0,
+                "args": {"name": "stream 7"},
+            },
+        ]
+        df = pd.DataFrame(metadata_events)
+        result_df, result_sym = _compress_df(df)
+        self.assertTrue(result_df.empty)
+        self.assertIsInstance(result_sym, TraceSymbolTable)
+
+    def test_compress_df_with_valid_events(self):
+        """_compress_df should work normally when dur and cat columns exist."""
+        events = [
+            {
+                "ph": "X",
+                "name": "kernel_a",
+                "cat": "Kernel",
+                "pid": 1,
+                "tid": 1,
+                "ts": 100,
+                "dur": 50,
+            },
+            {
+                "ph": "X",
+                "name": "kernel_b",
+                "cat": "Kernel",
+                "pid": 1,
+                "tid": 1,
+                "ts": 200,
+                "dur": 30,
+            },
+        ]
+        df = pd.DataFrame(events)
+        result_df, result_sym = _compress_df(df)
+        self.assertFalse(result_df.empty)
+        self.assertEqual(len(result_df), 2)
+
+    def test_compress_df_mixed_events_filters_nulls(self):
+        """_compress_df should drop rows where dur/cat are null in mixed traces."""
+        events = [
+            {
+                "ph": "X",
+                "name": "kernel_a",
+                "cat": "Kernel",
+                "pid": 1,
+                "tid": 1,
+                "ts": 100,
+                "dur": 50,
+            },
+            {
+                "ph": "M",
+                "name": "process_name",
+                "pid": 1,
+                "tid": 1,
+                "ts": 0,
+                "cat": None,
+                "dur": None,
+            },
+        ]
+        df = pd.DataFrame(events)
+        result_df, result_sym = _compress_df(df)
+        self.assertEqual(len(result_df), 1)
 
 
 if __name__ == "__main__":  # pragma: no cover
