@@ -172,8 +172,7 @@ us. To learn more about how to contribute, see our [contributing guidelines](htt
 Please let us know if you encounter a bug by filing an [issue](https://github.com/facebookresearch/HolisticTraceAnalysis/issues).
 
 ## The Team
-HTA is currently maintained by: [Xizhou Feng](https://github.com/fengxizhou), [Wei Sun](https://github.com/HugeEngine), [Chengguang Zhu](https://github.com/Chenguang-Zhu), [Yifan Liu](https://github.com/yifanliu112), and
-[Louis Feng](https://github.com/louisfeng). Past contributors include [Brian Coutinho](https://github.com/briancoutinho), [Sung-Han Lin](https://github.com/sunghlin), and [Yuzhen Huang](https://github.com/Yuzhen11).
+HTA is currently maintained by: [Xizhou Feng](https://github.com/fengxizhou), [Wei Sun](https://github.com/HugeEngine), [Chengguang Zhu](https://github.com/Chenguang-Zhu), [Yifan Liu](https://github.com/yifanliu112), [Louis Feng](https://github.com/louisfeng) and [Michael Au-Yeung](https://github.com/michaelay). Past contributors include [Brian Coutinho](https://github.com/briancoutinho), [Sung-Han Lin](https://github.com/sunghlin), and [Yuzhen Huang](https://github.com/Yuzhen11).
 
 ## License
 Holistic Trace Analysis is licensed under the [MIT License](https://github.com/facebookresearch/HolisticTraceAnalysis/blob/main/LICENSE).
