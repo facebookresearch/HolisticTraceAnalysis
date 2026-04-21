@@ -3,6 +3,13 @@ All notable changes to this project will be documented in this file. The format 
 Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic
 Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.1] - 2026-04-21
+
+#### Fixed
+- Added `readme = "README.md"` to `pyproject.toml` to fix missing `long_description` on PyPI.
+- Updated package description in `pyproject.toml`.
+- Bumped `black` from 24.3.0 to >=26.3.1 to fix path traversal vulnerability in `--python-cell-magics` cache filename.
+
 ## [0.6.0] - 2026-04-21
 
 #### Added
