@@ -35,10 +35,16 @@ jobs:
         run: |
           python -m pip install -U pip setuptools wheel
           pip install -r requirements.txt
-          pip install pytest pytest-cov
+          pip install pytest pytest-cov build twine
 
       - name: Run tests
         run: |
           pytest tests --doctest-modules \
             --junitxml=junit/test-results.xml \
             --cov-report=xml --cov-report=html
+
+      - name: Smoke test build
+        run: python -m build
+
+      - name: Validate built distributions
+        run: python -m twine check dist/*

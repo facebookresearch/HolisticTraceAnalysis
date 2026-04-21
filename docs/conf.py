@@ -37,7 +37,7 @@ def find_version(version_file_path) -> str:
 
 # -- Project information -----------------------------------------------------
 
-project = "Holistic Trace Analysis"
+project = "TraceInsight"
 copyright = "2023-2026, Meta Platforms Inc."
 author = "Meta Platforms Inc."
 repo_root_path = pathlib.Path(__file__).absolute().parents[1]

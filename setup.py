@@ -3,36 +3,5 @@
 # LICENSE file in the root directory of this source tree.
 
 import setuptools
-from docs.conf import find_version
 
-
-def fetch_requirements():
-    with open("requirements.txt") as f:
-        reqs = f.read().strip().split("\n")
-    return reqs
-
-
-setuptools.setup(
-    name="HolisticTraceAnalysis",
-    description="A python library for analyzing PyTorch Profiler traces",
-    version=find_version("hta/version.py"),
-    url="https://github.com/facebookresearch/HolisticTraceAnalysis",
-    python_requires=">=3.10",
-    author="Meta Platforms Inc.",
-    author_email="opensource@meta.com",
-    license="MIT",
-    install_requires=fetch_requirements(),
-    include_package_data=True,
-    package_dir={
-        "hta": "hta",
-        "param_bench": "third_party/param/",
-    },
-    classifiers=[
-        "Programming Language :: Python :: 3.10",
-        "Programming Language :: Python :: 3.11",
-        "Programming Language :: Python :: 3.12",
-        "License :: OSI Approved :: MIT License",
-        "Topic :: Scientific/Engineering :: Artificial Intelligence",
-        "Operating System :: OS Independent",
-    ],
-)
+setuptools.setup()
