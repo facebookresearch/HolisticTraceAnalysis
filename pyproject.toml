@@ -1,3 +1,38 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "traceinsight"
+version = "0.6.0"
+description = "Brand package for TraceInsight"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [
+    {name = "Meta Platforms Inc.", email = "opensource@meta.com"},
+]
+classifiers = [
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Operating System :: OS Independent",
+]
+dynamic = ["dependencies"]
+
+[project.urls]
+Homepage = "https://github.com/facebookresearch/HolisticTraceAnalysis"
+Issues = "https://github.com/facebookresearch/HolisticTraceAnalysis/issues"
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}
+
+[tool.setuptools.packages.find]
+include = ["hta*"]
+
+[tool.setuptools.package-data]
+hta = ["configs/*.config", "configs/*.json"]
+
 [tool.black]
 line-length = 88
 exclude = '''

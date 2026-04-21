@@ -3,3 +3,4 @@
 # LICENSE file in the root directory of this source tree.
 
 __version_tuple__ = (0, 6, 0)
+__version__ = ".".join(str(x) for x in __version_tuple__)
