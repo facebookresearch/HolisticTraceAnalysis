@@ -3,9 +3,18 @@ All notable changes to this project will be documented in this file. The format 
 Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic
 Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.6.0] - 2026-04-08
+## [0.6.1] - 2026-04-21
+
+#### Fixed
+- Added `readme = "README.md"` to `pyproject.toml` to fix missing `long_description` on PyPI.
+- Updated package description in `pyproject.toml`.
+- Bumped `black` from 24.3.0 to >=26.3.1 to fix path traversal vulnerability in `--python-cell-magics` cache filename.
+
+## [0.6.0] - 2026-04-21
 
 #### Added
+- Added automated PyPI and GitHub release workflow triggered on `v*` tag push, with test matrix, OIDC trusted publishing, and GitHub Release creation (#339).
+- Handle metadata-only traces gracefully instead of crashing with `KeyError` when `dur`/`cat` columns are absent (#337).
 - Added `MAX_EVENT_DURATION_US` constant and `max_event_duration_us` to `ParserConfig` to filter corrupted trace events exceeding maximum duration.
 - Added NCCL `seq_num` (sequence number) field mapping to event args config for tracking collective operations.
 - Added NCCL `collective_name` field parsing to identify collective operation types.
@@ -16,6 +25,10 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 - Added `pre_grad_nodes` to parser config for inference trace support.
 
 #### Changed
+- Changed pypi package name from 'HolisticTraceAnalysis' to 'tracesinght' (#339).
+- Updated project maintainers (#338/327).
+- Moved `pytest` from `requirements.txt` to `requirements-dev.txt` (dev-only dependency) (#339).
+- Migrated package metadata from `setup.py` to `pyproject.toml` (#339).
 - Dropped support for Python 3.8 and 3.9 (both EOL). Minimum supported version is now Python 3.10.
 - Added Python 3.12 to supported versions and CI matrix.
 - Updated GitHub Actions to latest versions (checkout@v4, setup-python@v5).
@@ -29,6 +42,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 - Updated trace parser to handle unknown event names and values between `start_array` and `end_array`.
 
 #### Fixed
+- Fixed numerous test issues and flakiness (#333).
 - Fixed placeholder author email in setup.py.
 - Fixed empty DataFrame crash when `ProfilerStep` markers are missing.
 - Fixed typo: `shortern_names` → `shorten_names`.

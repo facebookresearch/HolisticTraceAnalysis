@@ -2,5 +2,5 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-__version_tuple__ = (0, 6, 0)
+__version_tuple__ = (0, 6, 1)
 __version__ = ".".join(str(x) for x in __version_tuple__)
