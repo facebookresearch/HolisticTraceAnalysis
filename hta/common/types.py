@@ -143,7 +143,7 @@ KERNEL_LAUNCH_CATEGORY_PATTERN = GroupingPattern(
 )
 
 CPU_OP_CATEGORY_PATTERN: GroupingPattern = GroupingPattern(
-    re.compile("(cpu_op)|(user_annotation)"), False, "CPU Ops"
+    re.compile(r"(^cpu_op)|(^user_annotation$)"), False, "CPU Ops"
 )
 
 DEVICE_RUNTIME_CATEGORY_PATTERN = GroupingPattern(
@@ -160,16 +160,22 @@ GPU_EVENT_CATEGORY_PATTERN: GroupingPattern = GroupingPattern(
     inverse_match=False,
 )
 
+POST_PROCESSED_ANNOTATION_CATEGORY_PATTERN: GroupingPattern = GroupingPattern(
+    group_name="Post-Processed Annotations",
+    pattern=re.compile(r"(^gpu_user_annotation)"),
+    inverse_match=False,
+)
+
 CPU_EVENTS_CATEGORY_PATTERN: GroupingPattern = GroupingPattern(
     group_name="CPU Events",
-    pattern=re.compile(r"(cpu_op)|(user_annotation)|(^(.+)_runtime)"),
+    pattern=re.compile(r"(^cpu_op)|(^user_annotation$)|(^(.+)_runtime)"),
     inverse_match=False,
 )
 
 CPU_AND_GPU_EVENTS_CATEGORY_PATTERN: GroupingPattern = GroupingPattern(
     group_name="CPU/GPU Events",
     pattern=re.compile(
-        r"(cpu_op)|(user_annotation)|(cuda_runtime)"
+        r"(^cpu_op)|(^user_annotation$)|(cuda_runtime)"
         + r"|(.*kernel)|(^gpu_mem)|(^mtia_ccp_events)|(^cuda_sync)"
     ),
     inverse_match=False,
