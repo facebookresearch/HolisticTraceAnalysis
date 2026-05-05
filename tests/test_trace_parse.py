@@ -729,6 +729,50 @@ class TestMetadataOnlyTrace(unittest.TestCase):
         result_df, result_sym = _compress_df(df)
         self.assertEqual(len(result_df), 1)
 
+    def test_compress_df_drops_negative_duration_events(self):
+        """_compress_df should drop events with negative dur.
+
+        Sub-microsecond events can get negative durations after timestamp
+        rounding (round_down_time_stamps), which in turn causes negative mean
+        kernel durations in get_gpu_kernel_breakdown() (#317).
+        """
+        events = [
+            # Valid event: should be kept
+            {
+                "name": "kernel_a",
+                "cat": "Kernel",
+                "pid": 1,
+                "tid": 1,
+                "ts": 100,
+                "dur": 50,
+            },
+            # Negative-duration event produced by rounding: must be dropped
+            {
+                "name": "kernel_b",
+                "cat": "Kernel",
+                "pid": 1,
+                "tid": 1,
+                "ts": 101,
+                "dur": -1,
+            },
+            # Another valid event: should be kept
+            {
+                "name": "kernel_c",
+                "cat": "Kernel",
+                "pid": 1,
+                "tid": 1,
+                "ts": 200,
+                "dur": 30,
+            },
+        ]
+        df = pd.DataFrame(events)
+        result_df, _ = _compress_df(df)
+
+        # The two valid events should survive; the negative-dur one is dropped
+        self.assertEqual(len(result_df), 2)
+        # All remaining durations must be non-negative
+        self.assertTrue((result_df["dur"] >= 0).all())
+
 
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()
