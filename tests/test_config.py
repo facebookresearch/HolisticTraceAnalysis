@@ -4,6 +4,7 @@
 
 import json
 import os
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -19,7 +20,8 @@ from hta.configs.env_options import (
 
 class HtaConfigTestCase(unittest.TestCase):
     def setUp(self) -> None:
-        self.test_config_path = "/tmp/test_config.json"
+        self._tmp_dir = tempfile.mkdtemp()
+        self.test_config_path = os.path.join(self._tmp_dir, "test_config.json")
         self.test_config = {
             "a": 1,
             "b": ["s", "t"],
@@ -27,6 +29,10 @@ class HtaConfigTestCase(unittest.TestCase):
         }
         with open(self.test_config_path, "w+") as fp:
             json.dump(self.test_config, fp)
+
+    def tearDown(self) -> None:
+        os.unlink(self.test_config_path)
+        os.rmdir(self._tmp_dir)
 
     def test_get_default_paths(self):
         paths = HtaConfig.get_default_paths()
