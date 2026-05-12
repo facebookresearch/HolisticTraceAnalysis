@@ -1,9 +1,15 @@
 import unittest
 from dataclasses import dataclass
 from typing import List
+from unittest.mock import MagicMock
 
 import pandas as pd
-from hta.common.trace_df import find_op_occurrence, get_iterations
+from hta.common.trace_df import (
+    find_events_by_name_patterns_using_decoded_names,
+    find_events_by_name_patterns_using_symbol_table,
+    find_op_occurrence,
+    get_iterations,
+)
 
 
 class TestTraceDF(unittest.TestCase):
@@ -63,3 +69,35 @@ class TestTraceDF(unittest.TestCase):
                 self.assertEqual(event["index"], tc.expected_index)
             else:
                 self.assertTrue(event.empty)
+
+    def test_find_events_by_name_patterns_using_symbol_table(self) -> None:
+        symbol_table = MagicMock()
+        symbol_table.get_sym_id_map.return_value = {
+            "ncclAllReduce": 1,
+            "memcpy": 2,
+            "compute": 3,
+        }
+        df = pd.DataFrame({"name": [1, 2, 3], "index": [10, 20, 30]})
+        result = find_events_by_name_patterns_using_symbol_table(
+            df, ["nccl.*", "memcpy"], symbol_table
+        )
+        self.assertEqual(set(result.tolist()), {10, 20})
+
+    def test_find_events_by_name_patterns_using_decoded_names(self) -> None:
+        # df.loc[indices] requires the pandas index to match the "index" column values
+        df = pd.DataFrame(
+            {"s_name": ["ncclAllReduce", "memcpy", "compute"], "index": [10, 20, 30]},
+            index=pd.Index([10, 20, 30]),
+        )
+        result = find_events_by_name_patterns_using_decoded_names(
+            df, ["nccl.*", "memcpy"]
+        )
+        self.assertEqual(set(result.tolist()), {10, 20})
+
+    def test_find_events_by_name_patterns_decoded_no_match(self) -> None:
+        df = pd.DataFrame(
+            {"s_name": ["compute_a", "compute_b"], "index": [10, 20]},
+            index=pd.Index([10, 20]),
+        )
+        result = find_events_by_name_patterns_using_decoded_names(df, ["nccl.*"])
+        self.assertEqual(len(result), 0)
