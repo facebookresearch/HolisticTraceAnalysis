@@ -218,7 +218,7 @@ class TimeRangeFilter(Filter):
 
 
 class NameStringColumnFilter(Filter):
-    def __init__(self, name_pattern: str):
+    def __init__(self, name_pattern: str) -> None:
         self.name_pattern = name_pattern
 
     def __call__(
@@ -319,7 +319,7 @@ ZeroDurationFilter = QueryFilter("dur > 0")
 
 def _filter_gpu_kernels_with_cuda_sync(
     df: pd.DataFrame, symbol_table: TraceSymbolTable
-):
+) -> pd.Series:
     """Helper function that finds rows in the dataframe that are either
     GPU kernels or CUDA synchronization events."""
 
