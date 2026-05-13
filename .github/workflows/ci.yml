@@ -9,6 +9,9 @@ env:
   # Opt in early for Node runtime migration of JS-based actions
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
