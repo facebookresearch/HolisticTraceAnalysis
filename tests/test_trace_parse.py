@@ -2,12 +2,14 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+import gzip
+import json
 import math
 import os
+import tempfile
 import unittest
 from typing import Any, Dict, Optional, Set
-
-# import unittest.mock as mock
+from unittest.mock import patch
 
 import pandas as pd
 from hta.common.trace import parse_trace_dict, Trace
@@ -20,6 +22,7 @@ from hta.common.trace_parser import (
     parse_metadata_ijson,
     parse_trace_dataframe,
     ParserBackend,
+    round_down_time_stamps,
     set_default_trace_parsing_backend,
 )
 from hta.common.trace_symbol_table import TraceSymbolTable
@@ -728,6 +731,46 @@ class TestMetadataOnlyTrace(unittest.TestCase):
         df = pd.DataFrame(events)
         result_df, result_sym = _compress_df(df)
         self.assertEqual(len(result_df), 1)
+
+
+class TestTraceParserCoverage(unittest.TestCase):
+    """Coverage tests for uncovered branches in trace_parser.py."""
+
+    def test_infer_gpu_type_name_set_none(self) -> None:
+        self.assertEqual(infer_gpu_type({}, None), "UNKNOWN GPU")
+
+    def test_infer_gpu_type_cuda(self) -> None:
+        self.assertEqual(infer_gpu_type({}, {"cudaLaunchKernel": 1}), "NVIDIA GPU")
+
+    def test_infer_gpu_type_hip(self) -> None:
+        self.assertEqual(infer_gpu_type({}, {"hipLaunchKernel": 1}), "AMD GPU")
+
+    def test_auto_detect_parser_backend_no_ijson(self) -> None:
+        with patch.dict("sys.modules", {"ijson": None}):
+            result = _auto_detect_parser_backend()
+            self.assertEqual(result, ParserBackend.JSON)
+
+    def test_parse_trace_dict_gz(self) -> None:
+        data = {"traceEvents": [{"name": "test", "ph": "X"}]}
+        with tempfile.NamedTemporaryFile(suffix=".gz", delete=False) as f:
+            f.write(gzip.compress(json.dumps(data).encode()))
+            gz_path = f.name
+        try:
+            result = parse_trace_dict(gz_path)
+            self.assertEqual(result, data)
+        finally:
+            os.unlink(gz_path)
+
+    def test_parse_trace_dict_invalid_extension(self) -> None:
+        with self.assertRaises(ValueError):
+            parse_trace_dict("/tmp/trace.txt")
+
+    def test_round_down_disabled(self) -> None:
+        df = pd.DataFrame({"ts": [1.5, 2.5], "dur": [0.5, 0.5]})
+        with patch("hta.common.trace_parser.hta_options") as mock_opts:
+            mock_opts.disable_ns_rounding.return_value = True
+            round_down_time_stamps(df)
+            self.assertEqual(df["ts"].tolist(), [1.5, 2.5])
 
 
 if __name__ == "__main__":  # pragma: no cover

@@ -756,6 +756,95 @@ class TestPrepareTimelineGPUEvents(unittest.TestCase):
         mock_px_timeline.assert_called_once()
 
 
+# ---- parser_config.py coverage tests ----
+
+
+class TestParserConfigCoverage(unittest.TestCase):
+    def test_repr(self) -> None:
+        from hta.configs.parser_config import ParserConfig
+
+        cfg = ParserConfig.get_default_cfg()
+        r = repr(cfg)
+        self.assertIn("ParserConfig(", r)
+        self.assertIn("parse_all_args=", r)
+
+    def test_get_versioned_cfg(self) -> None:
+        from hta.configs.parser_config import DEFAULT_PARSE_VERSION, ParserConfig
+
+        cfg = ParserConfig.get_versioned_cfg(DEFAULT_PARSE_VERSION)
+        self.assertIsInstance(cfg, ParserConfig)
+
+    def test_get_info_args(self) -> None:
+        from hta.configs.parser_config import ParserConfig
+
+        args = ParserConfig.get_info_args()
+        self.assertIsInstance(args, list)
+        self.assertGreater(len(args), 0)
+
+    def test_set_and_get_args_with_selector(self) -> None:
+        from hta.configs.parser_config import ParserConfig
+
+        cfg = ParserConfig.get_default_cfg()
+        all_args = cfg.get_args()
+        if all_args:
+            cfg.selected_arg_keys = [all_args[0].name]
+            selected = cfg.get_args()
+            self.assertEqual(len(selected), 1)
+            self.assertEqual(selected[0].name, all_args[0].name)
+            cfg.selected_arg_keys = None
+
+    def test_set_min_required_cols(self) -> None:
+        from hta.configs.parser_config import ParserConfig
+
+        cfg = ParserConfig.get_default_cfg()
+        cfg.set_min_required_cols(["a", "b"])
+        self.assertEqual(cfg.get_min_required_cols(), ["a", "b"])
+
+    def test_enable_communication_args(self) -> None:
+        from hta.configs.parser_config import ParserConfig
+
+        cfg = ParserConfig.get_default_cfg()
+        before = len(cfg.get_args())
+        ParserConfig.enable_communication_args(cfg)
+        self.assertGreaterEqual(len(cfg.get_args()), before)
+
+    def test_set_global_parser_config_version(self) -> None:
+        from hta.configs.parser_config import DEFAULT_PARSE_VERSION, ParserConfig
+
+        ParserConfig.set_global_parser_config_version(DEFAULT_PARSE_VERSION)
+        self.assertIsNotNone(ParserConfig.ARGS_MINIMUM)
+        self.assertIsNotNone(ParserConfig.ARGS_DEFAULT)
+
+    def test_show_available_args(self) -> None:
+        from hta.configs.parser_config import ParserConfig
+
+        with patch("builtins.print"):
+            ParserConfig.show_available_args()
+
+    def test_transform_arg_name_special(self) -> None:
+        from hta.configs.parser_config import ParserConfig
+
+        self.assertEqual(ParserConfig.transform_arg_name("name"), "arg_name")
+        self.assertEqual(
+            ParserConfig.transform_arg_name("Input Dims (MB)"), "input_dims"
+        )
+
+    def test_make_attribute_spec_types(self) -> None:
+        from hta.configs.parser_config import ParserConfig
+
+        spec_int = ParserConfig.make_attribute_spec("count", 42)
+        self.assertEqual(spec_int.raw_name, "count")
+
+        spec_float = ParserConfig.make_attribute_spec("rate", 3.14)
+        self.assertIsNotNone(spec_float)
+
+        spec_str = ParserConfig.make_attribute_spec("label", "hello")
+        self.assertIsNotNone(spec_str)
+
+        spec_obj = ParserConfig.make_attribute_spec("data", [1, 2, 3])
+        self.assertIsNotNone(spec_obj)
+
+
 # ---- trace_file.py additional tests ----
 
 

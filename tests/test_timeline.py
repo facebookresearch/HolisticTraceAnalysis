@@ -112,7 +112,7 @@ class TestPrepareTimelineEvents(unittest.TestCase):
         cls.t.decode_symbol_ids(use_shorten_name=False)
 
     def setUp(self) -> None:
-        self.df = self.t.get_trace(0)
+        self.df = self.t.get_trace(0).copy()
 
     def test_prepare_returns_required_columns(self) -> None:
         setting = TimelinePlotSetting(task_height=50, plot_format=PlotFormat.File)
@@ -196,7 +196,7 @@ class TestAlignModuleWithKernels(unittest.TestCase):
         cls.t.decode_symbol_ids(use_shorten_name=False)
 
     def setUp(self) -> None:
-        self.df = self.t.get_trace(0)
+        self.df = self.t.get_trace(0).copy()
 
     def test_raises_on_missing_columns(self) -> None:
         """Should raise ValueError when required columns are missing."""
@@ -205,15 +205,14 @@ class TestAlignModuleWithKernels(unittest.TestCase):
             align_module_with_kernels(minimal_df, ["## forward ##"])
 
     def test_raises_on_partial_columns(self) -> None:
-        """Should raise ValueError with only the REQUIRED_COLUMNS set (missing kernel columns)."""
-        cols_present = list(
-            REQUIRED_COLUMNS_FOR_CPU_GPU_ALIGNMENT & set(self.df.columns)
-        )
-        if len(cols_present) < len(REQUIRED_COLUMNS_FOR_CPU_GPU_ALIGNMENT):
-            # Not all required columns exist; the function should raise
-            partial_df = self.df[cols_present].copy()
-            with self.assertRaises(ValueError):
-                align_module_with_kernels(partial_df, ["## forward ##"])
+        """Should raise ValueError with a subset of required columns."""
+        required = REQUIRED_COLUMNS_FOR_CPU_GPU_ALIGNMENT
+        cols_present = list(required & set(self.df.columns))
+        if len(cols_present) >= len(required):
+            cols_present = cols_present[: len(required) - 1]
+        partial_df = self.df[cols_present].copy()
+        with self.assertRaises(ValueError):
+            align_module_with_kernels(partial_df, ["## forward ##"])
 
     def test_align_with_symbol_table(self) -> None:
         """Should produce aligned events when all required columns are present."""
@@ -228,8 +227,7 @@ class TestAlignModuleWithKernels(unittest.TestCase):
         )
         annotations = aligned[aligned["stream"].eq(AnnotationStreamID)]
         self.assertGreater(aligned.shape[0], 0)
-        # All annotations should have non-negative num_kernels
-        if "num_kernels" in annotations.columns and not annotations.empty:
+        if "num_kernels" in annotations.columns:
             self.assertEqual(annotations[annotations["num_kernels"].lt(0)].shape[0], 0)
 
     def test_align_without_symbol_table(self) -> None:
@@ -259,7 +257,7 @@ class TestPlotEventsTimeline(unittest.TestCase):
 
     @patch(f"{_MODULE}.px.timeline")
     def test_plot_calls_plotly(self, mock_timeline: Mock) -> None:
-        df = self.t.get_trace(0)
+        df = self.t.get_trace(0).copy()
         setting = TimelinePlotSetting(task_height=50, plot_format=PlotFormat.File)
         timeline_events = prepare_timeline_events(
             df, symbol_table=self.t.symbol_table, setting=setting
@@ -302,7 +300,7 @@ class TestTimelineClass(unittest.TestCase):
 
     @patch(f"{_MODULE}.plot_events_timeline")
     def test_timeline_prepare_and_plot(self, mock_plot: Mock) -> None:
-        df = self.t.get_trace(0)
+        df = self.t.get_trace(0).copy()
         tl = Timeline(df, self.t.symbol_table, filter_func=GPUKernelFilter())
         tl.setting.plot_format = PlotFormat.File
 
