@@ -2,16 +2,18 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+# pyre-strict
+
 import re
 from enum import Enum
-from typing import Dict, List, NamedTuple, Union
+from typing import NamedTuple
 
 # Default Paths
 DEFAULT_TRACE_DIR = "/tmp/trace"
 DEFAULT_CONFIG_FILENAME: str = "trace_analyzer.json"
 
 # Trace related
-DF_SYMBOL_COLUMNS: List[str] = ["cat", "name"]
+DF_SYMBOL_COLUMNS: list[str] = ["cat", "name"]
 
 # Runtime configurations
 IS_DEBUG_ENABLED: bool = True
@@ -60,7 +62,7 @@ class AttributeSpec(NamedTuple):
     name: str
     raw_name: str
     value_type: ValueType
-    default_value: Union[int, float, str, object]
+    default_value: int | float | str | object
     # This property allows for addition of fields that do
     # not break backwards compatibility with other fields (minor version bumps).
     min_supported_version: YamlVersion
@@ -77,13 +79,13 @@ class AttributeSpec(NamedTuple):
 
 
 class EventArgs(NamedTuple):
-    AVAILABLE_ARGS: Dict[str, AttributeSpec]
-    ARGS_INPUT_SHAPE: List[AttributeSpec]
-    ARGS_BANDWIDTH: List[AttributeSpec]
-    ARGS_SYNC: List[AttributeSpec]
-    ARGS_MINIMUM: List[AttributeSpec]
-    ARGS_COMPLETE: List[AttributeSpec]
-    ARGS_INFO: List[AttributeSpec]
-    ARGS_COMMUNICATION: List[AttributeSpec]
-    ARGS_TRITON_KERNELS: List[AttributeSpec]
-    ARGS_DEFAULT: List[AttributeSpec]
+    AVAILABLE_ARGS: dict[str, AttributeSpec]
+    ARGS_INPUT_SHAPE: list[AttributeSpec]
+    ARGS_BANDWIDTH: list[AttributeSpec]
+    ARGS_SYNC: list[AttributeSpec]
+    ARGS_MINIMUM: list[AttributeSpec]
+    ARGS_COMPLETE: list[AttributeSpec]
+    ARGS_INFO: list[AttributeSpec]
+    ARGS_COMMUNICATION: list[AttributeSpec]
+    ARGS_TRITON_KERNELS: list[AttributeSpec]
+    ARGS_DEFAULT: list[AttributeSpec]
