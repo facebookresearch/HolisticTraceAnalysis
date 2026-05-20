@@ -117,7 +117,9 @@ class TestCheckArgs(unittest.TestCase):
         self.assertEqual(len(violations), 0)
 
     def test_object_type_not_checked(self) -> None:
-        arg_type_map = {"obj": (ValueType.Object, {})}
+        arg_type_map: dict[str, tuple[ValueType, dict]] = {
+            "obj": (ValueType.Object, {})
+        }
         skipped: Counter = Counter()
         violations: defaultdict = defaultdict(str)
         args = {"obj": "anything_goes"}
@@ -158,7 +160,7 @@ class TestValidateTraceFormat(unittest.TestCase):
         self.assertEqual(len(errors), 0)
 
     def test_missing_trace_events_section(self) -> None:
-        trace_data = {"other_key": []}
+        trace_data: dict[str, list] = {"other_key": []}
         path = self._write_trace_json(trace_data)
         ok, errors = validate_trace_format(path)
         self.assertFalse(ok)
