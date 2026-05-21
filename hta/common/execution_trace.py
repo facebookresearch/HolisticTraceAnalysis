@@ -177,12 +177,12 @@ def add_et_column(trace_df: pd.DataFrame, et: ExecutionTrace, column: str) -> No
 
     elif column == "output_shapes":
 
-        def map_func(node_id):
+        def map_func(node_id) -> Any:
             return et.nodes[node_id].output_shapes
 
     elif column == "output_types":
 
-        def map_func(node_id):
+        def map_func(node_id) -> Any:
             return et.nodes[node_id].output_types
 
     elif column == "et_node_name":
