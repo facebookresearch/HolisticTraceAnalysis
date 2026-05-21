@@ -162,7 +162,7 @@ def add_et_column(trace_df: pd.DataFrame, et: ExecutionTrace, column: str) -> No
         return
     if column == "op_schema":
 
-        def map_func(node_id):
+        def map_func(node_id) -> str:
             return et.nodes[node_id].op_schema
 
     elif column == "input_shapes":
@@ -182,7 +182,7 @@ def add_et_column(trace_df: pd.DataFrame, et: ExecutionTrace, column: str) -> No
 
     elif column == "output_types":
 
-        def map_func(node_id):
+        def map_func(node_id) -> List[str]:
             return et.nodes[node_id].output_types
 
     elif column == "et_node_name":
