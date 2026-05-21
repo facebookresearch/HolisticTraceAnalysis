@@ -12,18 +12,20 @@ from hta.utils.utils import get_symbol_column_names
 def get_matching_kernels(
     df_ops: pd.DataFrame, df_both: pd.DataFrame, cat_column: str
 ) -> pd.DataFrame:
-    """Get CUDA Kernels launched by operators in df_ops.
+    """Get Kernels launched by operators in df_ops.
 
     Args:
         df_ops: a DataFrame that contains cpu operators.
-        df_both: a DataFrame that contains both cpu operators and CUDA kernels.
+        df_both: a DataFrame that contains both cpu operators and kernels.
         cat_column: the column name for cat in string type, which can be either `cat` or `s_cat`
             depending on how the DataFrame symbol columns are encoded/decoded.
 
     Returns:
-        A DataFrame that contains the CUDA kernels launched by ops in df_ops.
+        A DataFrame that contains the kernels launched by ops in df_ops.
     """
-    df_runtimes = df_ops.loc[df_ops[cat_column].eq("cuda_runtime")]
+    df_runtimes = df_ops.loc[
+        df_ops[cat_column].isin(["cuda_runtime", "privateuse1_runtime"])
+    ]
     df_kernels = df_both.loc[df_both["index_correlation"].isin(df_runtimes["index"])]
     return df_kernels
 

@@ -147,7 +147,9 @@ CPU_OP_CATEGORY_PATTERN: GroupingPattern = GroupingPattern(
 )
 
 DEVICE_RUNTIME_CATEGORY_PATTERN = GroupingPattern(
-    re.compile("(cuda_runtime)|(mtia_runtime)"), False, "Device Runtimes"
+    re.compile("(cuda_runtime)|(mtia_runtime)|(privateuse1_runtime)"),
+    False,
+    "Device Runtimes",
 )
 
 MEMORY_CATEGORY_PATTERN = GroupingPattern(
