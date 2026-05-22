@@ -220,7 +220,7 @@ class CallStackGraph:
         self._construct_call_stack_graph(df)
         self._compute_depth()
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         ret = "\n"
         for key, item in self.nodes.items():
             ret = ret + f"    {key}: {item}\n"
