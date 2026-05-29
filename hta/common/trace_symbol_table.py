@@ -387,7 +387,7 @@ def decode_symbol_id_to_symbol_name(
     if use_shorten_name:
         s_tab = [shorten_name(s) for s in s_tab]
 
-    def get_sym(idx):
+    def get_sym(idx: int) -> str:
         return s_tab[idx] if idx >= 0 else ""
 
     if "name" in df.columns and df["name"].dtype.kind == "i":
