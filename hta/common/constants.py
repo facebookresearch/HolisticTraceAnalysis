@@ -2,7 +2,6 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-# pyre-strict
 
 # The Max queue size is not really documented and is an implementation detail
 # https://forums.developer.nvidia.com/t/maximum-number-of-operations-in-a-stream/255260
