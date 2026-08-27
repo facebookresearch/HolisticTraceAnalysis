@@ -1,5 +1,3 @@
-# pyre-strict
-
 import copy
 import re
 from enum import Enum
