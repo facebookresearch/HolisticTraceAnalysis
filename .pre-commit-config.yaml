@@ -29,8 +29,8 @@ repos:
         args: [--show-source, --statistics]
 
 -   repo: https://github.com/pre-commit/mirrors-mypy
-    rev: 'v1.11.0'
+    rev: 'v1.18.2'
     hooks:
     -   id: mypy
         args: [--no-strict-optional, --ignore-missing-imports, --explicit-package-bases, --scripts-are-modules, --pretty]
-        additional_dependencies: [numpy>=1.23.5, types-requests]
+        additional_dependencies: ['numpy>=1.23.5,<3', types-requests]
