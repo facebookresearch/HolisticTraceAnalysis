@@ -1166,13 +1166,20 @@ class CPGraph(nx.DiGraph):
             q is not None
         ), "Queue length time series is required for kernel graph construction"
 
+        # ROCm can associate one runtime launch with multiple kernels, producing
+        # duplicate event indices. Collapse them before joining so a kernel is not
+        # duplicated in the graph and linked back to itself.
+        queue_length = q[["queue_length"]]
+        if not queue_length.index.is_unique:
+            queue_length = queue_length.groupby(level=0, sort=False).max()
+
         gpu_kernels = (
             self.trace_df.query(
                 f"(stream != -1 or (name == {event_sync} or name == {context_sync})) and index_correlation >= 0"
             )
-            .join(q[["queue_length"]], on="index_correlation")
+            .join(queue_length, on="index_correlation")
             .rename(columns={"queue_length": "queue_length_runtime"})
-            .join(q[["queue_length"]], on="index")
+            .join(queue_length, on="index")
         ).drop(columns=["s_cat", "s_name"], errors="ignore")
 
         # For "Wait on CUDA Event" syncs we look up all cudaRecord calls

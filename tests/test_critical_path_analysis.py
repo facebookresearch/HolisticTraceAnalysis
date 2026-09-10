@@ -6,7 +6,9 @@ from collections import Counter
 from dataclasses import dataclass, field
 from tempfile import TemporaryDirectory
 from typing import Dict, Tuple
+from unittest.mock import patch
 
+import pandas as pd
 from hta.analyzers.critical_path_analysis import (
     CPEdge,
     CPEdgeType,
@@ -15,6 +17,7 @@ from hta.analyzers.critical_path_analysis import (
     CriticalPathAnalysis,
     restore_cpgraph,
 )
+from hta.analyzers.trace_counters import TraceCounters
 from hta.common.trace_parser import (
     _auto_detect_parser_backend,
     get_default_trace_parsing_backend,
@@ -788,6 +791,37 @@ class CriticalPathAnalysisTestCase(unittest.TestCase):
                 self.assertTrue(success)
             finally:
                 set_default_trace_parsing_backend(old_backend)
+
+    def test_amd_trace_with_duplicate_queue_length_indices(self) -> None:
+        """Check a ROCm launch correlated with multiple kernels remains a DAG."""
+        original = TraceCounters._get_queue_length_time_series_for_rank
+        trace_df = self.amd_trace.t.get_trace(0)
+        launch_indices = set(
+            trace_df.loc[trace_df["stream"].ne(-1), "index_correlation"].tolist()
+        )
+
+        def duplicate_launch_rows(_cls, trace, rank):
+            queue_length = original(trace, rank)
+            if queue_length is None:
+                self.fail("expected queue-length data for the AMD fixture")
+            duplicate_indices = queue_length.index.intersection(
+                pd.Index(sorted(launch_indices))
+            )
+            self.assertGreater(len(duplicate_indices), 0)
+            return pd.concat([queue_length, queue_length.loc[duplicate_indices]])
+
+        with patch.object(
+            TraceCounters,
+            "_get_queue_length_time_series_for_rank",
+            classmethod(duplicate_launch_rows),
+        ):
+            _, success = self.amd_trace.critical_path_analysis(
+                rank=0,
+                annotation="ProfilerStep",
+                instance_id=1,
+            )
+
+        self.assertTrue(success)
 
 
 class EndToEndTestCase(unittest.TestCase):
