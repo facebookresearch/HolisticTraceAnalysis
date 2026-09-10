@@ -5,8 +5,7 @@ import unittest
 from collections import Counter
 from dataclasses import dataclass, field
 from tempfile import TemporaryDirectory
-from typing import Dict, Tuple
-from unittest.mock import patch
+from typing import Dict, List, Tuple
 
 import pandas as pd
 from hta.analyzers.critical_path_analysis import (
@@ -17,7 +16,6 @@ from hta.analyzers.critical_path_analysis import (
     CriticalPathAnalysis,
     restore_cpgraph,
 )
-from hta.analyzers.trace_counters import TraceCounters
 from hta.common.trace_parser import (
     _auto_detect_parser_backend,
     get_default_trace_parsing_backend,
@@ -792,36 +790,81 @@ class CriticalPathAnalysisTestCase(unittest.TestCase):
             finally:
                 set_default_trace_parsing_backend(old_backend)
 
-    def test_amd_trace_with_duplicate_queue_length_indices(self) -> None:
-        """Check a ROCm launch correlated with multiple kernels remains a DAG."""
-        original = TraceCounters._get_queue_length_time_series_for_rank
-        trace_df = self.amd_trace.t.get_trace(0)
-        launch_indices = set(
-            trace_df.loc[trace_df["stream"].ne(-1), "index_correlation"].tolist()
+    def _analyze_amd_trace_with_kernel_copies(
+        self, include_new_stream: bool
+    ) -> Tuple[CPGraph, int, List[int]]:
+        trace = TraceAnalysis(trace_dir=self.amd_trace_dir)
+        trace_df = trace.t.get_trace(0)
+        kernel_cat = trace.t.symbol_table.get_sym_id_map().get("kernel")
+        source_rows = trace_df[
+            trace_df["stream"].ne(-1)
+            & trace_df["cat"].eq(kernel_cat)
+            & trace_df["index_correlation"].ge(0)
+        ]
+        self.assertFalse(
+            source_rows.empty,
+            "expected the AMD trace to contain a correlated GPU kernel",
+        )
+        source_kernel = source_rows.iloc[0]
+        source_index = int(source_kernel["index"])
+        runtime_index = int(source_kernel["index_correlation"])
+        source_stream = int(source_kernel["stream"])
+
+        streams = [source_stream]
+        if include_new_stream:
+            streams.append(int(trace_df["stream"].max()) + 1)
+
+        first_new_index = int(trace_df["index"].max()) + 1
+        new_indices = list(range(first_new_index, first_new_index + len(streams)))
+        kernel_copies = pd.concat(
+            [trace_df.loc[[source_index]].copy() for _ in streams]
+        )
+        kernel_copies.index = new_indices
+        kernel_copies["index"] = new_indices
+        kernel_copies["stream"] = streams
+        first_start = source_kernel["ts"] + source_kernel["dur"] + 1
+        kernel_copies["ts"] = [first_start + offset for offset in range(len(streams))]
+        kernel_copies["end"] = kernel_copies["ts"] + kernel_copies["dur"]
+
+        trace_df.loc[runtime_index, "index_correlation"] = new_indices[-1]
+        trace.t.traces[0] = pd.concat([trace_df, kernel_copies]).sort_values(
+            by=["ts", "index"]
         )
 
-        def duplicate_launch_rows(_cls, trace, rank):
-            queue_length = original(trace, rank)
-            if queue_length is None:
-                self.fail("expected queue-length data for the AMD fixture")
-            duplicate_indices = queue_length.index.intersection(
-                pd.Index(sorted(launch_indices))
-            )
-            self.assertGreater(len(duplicate_indices), 0)
-            return pd.concat([queue_length, queue_length.loc[duplicate_indices]])
-
-        with patch.object(
-            TraceCounters,
-            "_get_queue_length_time_series_for_rank",
-            classmethod(duplicate_launch_rows),
-        ):
-            _, success = self.amd_trace.critical_path_analysis(
-                rank=0,
-                annotation="ProfilerStep",
-                instance_id=1,
-            )
-
+        cp_graph, success = trace.critical_path_analysis(
+            rank=0,
+            annotation="ProfilerStep",
+            instance_id=1,
+        )
         self.assertTrue(success)
+        return cp_graph, runtime_index, new_indices
+
+    def test_amd_trace_deduplicates_queue_length_on_same_stream(self) -> None:
+        """A multi-kernel ROCm launch must not link a kernel to itself."""
+        cp_graph, _, kernel_indices = self._analyze_amd_trace_with_kernel_copies(
+            include_new_stream=False
+        )
+        start_node, end_node = cp_graph.get_nodes_for_event(kernel_indices[0])
+        if start_node is None or end_node is None:
+            self.fail("expected graph nodes for the copied AMD kernel")
+
+        self.assertFalse(cp_graph.has_edge(end_node.idx, start_node.idx))
+
+    def test_amd_trace_keeps_queue_length_stream_specific(self) -> None:
+        """A shared runtime must use the queue length for its kernel's stream."""
+        cp_graph, runtime_index, kernel_indices = (
+            self._analyze_amd_trace_with_kernel_copies(include_new_stream=True)
+        )
+        runtime_start, _ = cp_graph.get_nodes_for_event(runtime_index)
+        kernel_start, _ = cp_graph.get_nodes_for_event(kernel_indices[-1])
+        if runtime_start is None or kernel_start is None:
+            self.fail("expected graph nodes for the runtime and copied AMD kernel")
+
+        self.assertTrue(cp_graph.has_edge(runtime_start.idx, kernel_start.idx))
+        launch_edge = cp_graph.edges[runtime_start.idx, kernel_start.idx]["object"]
+
+        self.assertEqual(launch_edge.type, CPEdgeType.KERNEL_LAUNCH_DELAY)
+        self.assertGreater(launch_edge.weight, 0)
 
 
 class EndToEndTestCase(unittest.TestCase):

@@ -1149,6 +1149,30 @@ class CPGraph(nx.DiGraph):
         )
         return True
 
+    @staticmethod
+    def _join_queue_length_on_stream(
+        events: pd.DataFrame, queue_length_time_series: pd.DataFrame
+    ) -> pd.DataFrame:
+        """Attach runtime and kernel queue lengths from the matching stream."""
+        queue_length = queue_length_time_series.set_index("stream", append=True)[
+            ["queue_length"]
+        ]
+        if not queue_length.index.is_unique:
+            # Each repeated runtime row is a +1 update for another kernel on the
+            # same stream, so max is the queue depth after all are enqueued.
+            queue_length = queue_length.groupby(level=[0, 1], sort=False).max()
+        return (
+            events.join(
+                queue_length,
+                on=["index_correlation", "stream"],
+            )
+            .rename(columns={"queue_length": "queue_length_runtime"})
+            .join(
+                queue_length,
+                on=["index", "stream"],
+            )
+        )
+
     @timeit
     def _construct_graph_from_kernels(self) -> None:
         """Create nodes and edges for GPU kernels"""
@@ -1166,20 +1190,11 @@ class CPGraph(nx.DiGraph):
             q is not None
         ), "Queue length time series is required for kernel graph construction"
 
-        # ROCm can associate one runtime launch with multiple kernels, producing
-        # duplicate event indices. Collapse them before joining so a kernel is not
-        # duplicated in the graph and linked back to itself.
-        queue_length = q[["queue_length"]]
-        if not queue_length.index.is_unique:
-            queue_length = queue_length.groupby(level=0, sort=False).max()
-
-        gpu_kernels = (
+        gpu_kernels = self._join_queue_length_on_stream(
             self.trace_df.query(
                 f"(stream != -1 or (name == {event_sync} or name == {context_sync})) and index_correlation >= 0"
-            )
-            .join(queue_length, on="index_correlation")
-            .rename(columns={"queue_length": "queue_length_runtime"})
-            .join(queue_length, on="index")
+            ),
+            q,
         ).drop(columns=["s_cat", "s_name"], errors="ignore")
 
         # For "Wait on CUDA Event" syncs we look up all cudaRecord calls
