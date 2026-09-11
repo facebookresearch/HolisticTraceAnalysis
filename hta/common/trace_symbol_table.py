@@ -24,6 +24,31 @@ from hta.configs.default_values import MAX_NUM_PROCESSES_SMALL
 from hta.utils.utils import shorten_name
 
 
+_OPERATOR_OR_CUDA_RUNTIME_CATEGORIES = (
+    "cpu_op",
+    "cuda_driver",
+    "cuda_runtime",
+)
+_OPERATOR_OR_DEVICE_RUNTIME_CATEGORIES = (
+    *_OPERATOR_OR_CUDA_RUNTIME_CATEGORIES,
+    "mtia_runtime",
+)
+_RUNTIME_LAUNCH_EVENT_NAMES = (
+    "cudaLaunchKernel",
+    "cudaLaunchKernelExC",
+    "cuLaunchKernel",
+    "cuLaunchKernelEx",
+    "cudaMemcpyAsync",
+    "cudaMemsetAsync",
+    "runFunction - job_prep_and_submit_for_execution",
+    "hipLaunchKernel",
+    "hipExtModuleLaunchKernel",
+    "hipMemsetAsync",
+    "hipMemcpyAsync",
+    "hipMemcpyWithStream",
+)
+
+
 class _SymbolCollector:
     """
     To support a multiprocessing version of symbol table update, we use _SymbolCollector to a shared queue
@@ -301,59 +326,40 @@ class TraceSymbolTable:
             lambda i: self.sym_table[i] if (0 <= i < len(self.sym_table)) else ""
         )
 
-    # Use a number lower than -1 as a sentinel for missing symbols
+    # Retained for compatibility with external HTA callers. Internal mask
+    # construction does not substitute it for missing symbols.
     NULL: int = -128
 
-    def get_operator_or_cuda_runtime_mask(self, df: pd.DataFrame) -> pd.Series:
+    def get_operator_or_device_runtime_mask(self, df: pd.DataFrame) -> pd.Series:
         """Returns a boolean mask you can use with pandas dataframes
-        to filter events that are CUDA runtime events or operators."""
-        cpu_op_id = self.sym_index.get("cpu_op")
-        cuda_runtime_id = self.sym_index.get("cuda_driver", self.NULL)
-        cuda_driver_id = self.sym_index.get("cuda_runtime", self.NULL)
-        return (
-            (df["cat"] == cpu_op_id)
-            | (df["cat"] == cuda_runtime_id)
-            | (df["cat"] == cuda_driver_id)
+        to filter events that are device runtime events or operators."""
+        category_ids = self._get_existing_symbol_ids(
+            _OPERATOR_OR_DEVICE_RUNTIME_CATEGORIES
         )
+        return df["cat"].isin(category_ids)
+
+    def get_operator_or_cuda_runtime_mask(self, df: pd.DataFrame) -> pd.Series:
+        """Return the legacy CUDA-only mask for external HTA callers."""
+        category_ids = self._get_existing_symbol_ids(
+            _OPERATOR_OR_CUDA_RUNTIME_CATEGORIES
+        )
+        return df["cat"].isin(category_ids)
+
+    def _get_existing_symbol_ids(self, symbols: Iterable[str]) -> set[int]:
+        symbol_ids = {
+            symbol_id
+            for symbol in symbols
+            if (symbol_id := self.sym_index.get(symbol)) is not None
+        }
+        return symbol_ids
 
     def get_runtime_launch_events_mask(self, df: pd.DataFrame) -> pd.Series:
         """Returns a boolean mask you can use with pandas dataframes
         to filter events that are CUDA runtime kernel and memcpy launches."""
-        cudaLaunchKernel_id = self.sym_index.get("cudaLaunchKernel", self.NULL)
-        cudaLaunchKernelExC_id = self.sym_index.get("cudaLaunchKernelExC", self.NULL)
-        cuLaunchKernel_id = self.sym_index.get("cuLaunchKernel", self.NULL)
-        cuLaunchKernelEx_id = self.sym_index.get("cuLaunchKernelEx", self.NULL)
-        cudaMemcpyAsync_id = self.sym_index.get("cudaMemcpyAsync", self.NULL)
-        cudaMemsetAsync_id = self.sym_index.get("cudaMemsetAsync", self.NULL)
-        mtiaLaunchKernel_id = self.sym_index.get(
-            "runFunction - job_prep_and_submit_for_execution", self.NULL
-        )
-        rocmLaunchKernel_id = self.sym_index.get("hipLaunchKernel", self.NULL)
-        rocmExtModuleLaunchKernel_id = self.sym_index.get(
-            "hipExtModuleLaunchKernel", self.NULL
-        )
-        rocmMemsetAsync_id = self.sym_index.get("hipMemsetAsync", self.NULL)
-        rocmMemcpyAsync_id = self.sym_index.get("hipMemcpyAsync", self.NULL)
-        rocmMemcpyWithStream_id = self.sym_index.get("hipMemcpyWithStream", self.NULL)
-
-        # Create a mask for each event type and combine with OR
-        name_mask = (
-            (df["name"] == cudaMemsetAsync_id)
-            | (df["name"] == cudaMemcpyAsync_id)
-            | (df["name"] == cudaLaunchKernel_id)
-            | (df["name"] == cudaLaunchKernelExC_id)
-            | (df["name"] == cuLaunchKernel_id)
-            | (df["name"] == mtiaLaunchKernel_id)
-            | (df["name"] == rocmLaunchKernel_id)
-            | (df["name"] == rocmExtModuleLaunchKernel_id)
-            | (df["name"] == rocmMemcpyAsync_id)
-            | (df["name"] == rocmMemsetAsync_id)
-            | (df["name"] == rocmMemcpyWithStream_id)
-            | (df["name"] == cuLaunchKernelEx_id)
-        )
+        launch_event_ids = self._get_existing_symbol_ids(_RUNTIME_LAUNCH_EVENT_NAMES)
 
         # Add the index_correlation > 0 condition
-        return name_mask & (df["index_correlation"] > 0)
+        return df["name"].isin(launch_event_ids) & (df["index_correlation"] > 0)
 
     def get_events_mask(self, df: pd.DataFrame, events: list[str] | None) -> pd.Series:
         """Returns a boolean mask you can use with pandas dataframes

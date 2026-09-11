@@ -446,7 +446,7 @@ class CPGraph(nx.DiGraph):
         to represent in our graph"""
 
         operator_or_runtime_events_mask = (
-            self.symbol_table.get_operator_or_cuda_runtime_mask(self.trace_df)
+            self.symbol_table.get_operator_or_device_runtime_mask(self.trace_df)
         )
         data_loading_events_mask = self.symbol_table.get_events_mask(
             self.trace_df, self.data_load_events

@@ -823,6 +823,56 @@ class CriticalPathAnalysisTestCase(unittest.TestCase):
 
         self.assertTrue(success)
 
+    def test_mtia_trace(self) -> None:
+        """Check MTIA runtime launches are represented in the critical path graph."""
+        trace = TraceAnalysis(trace_dir=get_test_data_dir("mtia_inference_trace"))
+
+        cp_graph, success = trace.critical_path_analysis(
+            rank=0, annotation="", instance_id=None
+        )
+
+        self.assertTrue(success)
+        symbol_ids = cp_graph.symbol_table.get_sym_id_map()
+        self.assertIn("mtia_ccp_events", symbol_ids)
+        mtia_category = symbol_ids["mtia_ccp_events"]
+        runtime_indices = set(
+            cp_graph.trace_df.loc[
+                (cp_graph.trace_df["cat"] == mtia_category)
+                & (cp_graph.trace_df["index_correlation"] > 0),
+                "index_correlation",
+            ].astype(int)
+        )
+        self.assertGreater(len(runtime_indices), 0)
+        self.assertIn("mtia_runtime", symbol_ids)
+        mtia_runtime_indices = set(
+            cp_graph.trace_df.index[
+                cp_graph.trace_df["cat"] == symbol_ids["mtia_runtime"]
+            ]
+        )
+        self.assertTrue(
+            runtime_indices.issubset(mtia_runtime_indices),
+            "Expected every MTIA device-event correlation target to be an "
+            "MTIA runtime event",
+        )
+        for runtime_index in runtime_indices:
+            start_node, end_node = cp_graph.get_nodes_for_event(runtime_index)
+            self.assertIsNotNone(start_node)
+            self.assertIsNotNone(end_node)
+
+        launch_delay_runtime_indices = {
+            cp_graph.get_events_for_edge(data["object"])[0]
+            for _, _, data in cp_graph.edges(data=True)
+            if data["object"].type == CPEdgeType.KERNEL_LAUNCH_DELAY
+        }
+        matching_runtime_indices = runtime_indices & launch_delay_runtime_indices
+        self.assertGreater(
+            len(matching_runtime_indices),
+            0,
+            "Expected a kernel-launch-delay edge sourced from an MTIA runtime "
+            f"event; MTIA runtime indices={sorted(runtime_indices)}, "
+            f"launch-delay sources={sorted(launch_delay_runtime_indices)}",
+        )
+
 
 class EndToEndTestCase(unittest.TestCase):
     """Tests the input / final output (overlaid trace file) of critical path analysis.

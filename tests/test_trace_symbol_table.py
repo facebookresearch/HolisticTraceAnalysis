@@ -86,20 +86,54 @@ class TestTraceSymbolTableUpdateAndAdd(unittest.TestCase):
 
 
 class TestTraceSymbolTableMasks(unittest.TestCase):
-    def test_get_operator_or_cuda_runtime_mask(self) -> None:
+    def test_get_operator_or_device_runtime_mask(self) -> None:
         t = TraceSymbolTable()
-        t.add_symbols(["cpu_op", "cuda_runtime", "cuda_driver", "kernel"])
+        t.add_symbols(
+            [
+                "cpu_op",
+                "cuda_runtime",
+                "cuda_driver",
+                "mtia_runtime",
+                "mtia_runtime_extra",
+                "kernel",
+            ]
+        )
         df = pd.DataFrame(
             {
                 "cat": [
                     t.get_sym_id_map()["cpu_op"],
                     t.get_sym_id_map()["kernel"],
                     t.get_sym_id_map()["cuda_driver"],
+                    t.get_sym_id_map()["cuda_runtime"],
+                    t.get_sym_id_map()["mtia_runtime"],
+                    t.get_sym_id_map()["mtia_runtime_extra"],
                 ]
             }
         )
-        mask = t.get_operator_or_cuda_runtime_mask(df)
-        self.assertEqual(mask.tolist(), [True, False, True])
+        mask = t.get_operator_or_device_runtime_mask(df)
+        self.assertEqual(mask.tolist(), [True, False, True, True, True, False])
+
+    def test_get_operator_or_cuda_runtime_mask(self) -> None:
+        t = TraceSymbolTable()
+        t.add_symbols(
+            ["cpu_op", "cuda_runtime", "cuda_driver", "mtia_runtime", "kernel"]
+        )
+        df = pd.DataFrame(
+            {
+                "cat": [
+                    t.get_sym_id_map()["cpu_op"],
+                    t.get_sym_id_map()["kernel"],
+                    t.get_sym_id_map()["cuda_driver"],
+                    t.get_sym_id_map()["cuda_runtime"],
+                    t.get_sym_id_map()["mtia_runtime"],
+                ]
+            }
+        )
+
+        self.assertEqual(
+            t.get_operator_or_cuda_runtime_mask(df).tolist(),
+            [True, False, True, True, False],
+        )
 
     def test_get_runtime_launch_events_mask(self) -> None:
         t = TraceSymbolTable()
