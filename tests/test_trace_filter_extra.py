@@ -1,7 +1,7 @@
 # (c) Meta Platforms, Inc. and affiliates. Confidential and proprietary.
 
 import unittest
-from typing import cast
+from typing import Any, cast
 
 import pandas as pd
 from hta.common.trace_filter import (
@@ -59,7 +59,8 @@ class TestIterationFilter(unittest.TestCase):
 class TestIterationIndexFilter(unittest.TestCase):
     def test_invalid_type_raises(self) -> None:
         with self.assertRaisesRegex(TypeError, "iteration_index"):
-            IterationIndexFilter("bad")  # pyre-ignore[6]
+            # Intentionally bypass static typing to test runtime validation.
+            IterationIndexFilter(cast(int, "bad"))
 
     def test_int_arg(self) -> None:
         f = IterationIndexFilter(0)
@@ -99,7 +100,8 @@ class TestFirstIterationFilter(unittest.TestCase):
 class TestRankFilter(unittest.TestCase):
     def test_invalid_type(self) -> None:
         with self.assertRaisesRegex(TypeError, "ranks"):
-            RankFilter("bad")  # pyre-ignore[6]
+            # Intentionally bypass static typing to test runtime validation.
+            RankFilter(cast(int, "bad"))
 
     def test_int_arg(self) -> None:
         self.assertEqual(RankFilter(0).ranks, [0])
@@ -118,7 +120,8 @@ class TestRankFilter(unittest.TestCase):
 class TestTimeRangeFilter(unittest.TestCase):
     def test_invalid_tuple_raises(self) -> None:
         with self.assertRaisesRegex(ValueError, "tuple of two"):
-            TimeRangeFilter([1, 2])  # pyre-ignore[6]
+            # Intentionally bypass static typing to test runtime validation.
+            TimeRangeFilter(cast(tuple[int, int], [1, 2]))
 
     def test_invalid_order_raises(self) -> None:
         with self.assertRaisesRegex(ValueError, "less than or equal"):
@@ -244,7 +247,8 @@ class TestCPUOperatorFilter(unittest.TestCase):
 class TestCompositeFilter(unittest.TestCase):
     def test_invalid_type_raises(self) -> None:
         with self.assertRaisesRegex(TypeError, "instances of Filter"):
-            CompositeFilter([object()])  # pyre-ignore[6]
+            # Intentionally bypass static typing to test runtime validation.
+            CompositeFilter([cast(Filter, object())])
 
     def test_applies_filters_in_order(self) -> None:
         df = pd.DataFrame(
@@ -276,4 +280,5 @@ class TestMemCopyEventFilter(unittest.TestCase):
 class TestFilterAbstract(unittest.TestCase):
     def test_filter_is_abstract(self) -> None:
         with self.assertRaises(TypeError):
-            Filter()  # pyre-ignore[45]
+            # Intentionally bypass static typing to test runtime validation.
+            cast(Any, Filter)()

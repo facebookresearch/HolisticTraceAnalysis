@@ -5,8 +5,9 @@ import unittest
 from collections import Counter
 from dataclasses import dataclass, field
 from tempfile import TemporaryDirectory
-from typing import Dict, Tuple
+from typing import Dict, List, Tuple
 
+import pandas as pd
 from hta.analyzers.critical_path_analysis import (
     CPEdge,
     CPEdgeType,
@@ -788,6 +789,132 @@ class CriticalPathAnalysisTestCase(unittest.TestCase):
                 self.assertTrue(success)
             finally:
                 set_default_trace_parsing_backend(old_backend)
+
+    def _analyze_amd_trace_with_kernel_copies(
+        self, include_new_stream: bool
+    ) -> Tuple[CPGraph, int, List[int]]:
+        trace = TraceAnalysis(trace_dir=self.amd_trace_dir)
+        trace_df = trace.t.get_trace(0).copy()
+        kernel_cat = trace.t.symbol_table.get_sym_id_map().get("kernel")
+        source_rows = trace_df[
+            trace_df["stream"].ne(-1)
+            & trace_df["cat"].eq(kernel_cat)
+            & trace_df["index_correlation"].ge(0)
+        ]
+        self.assertFalse(
+            source_rows.empty,
+            "expected the AMD trace to contain a correlated GPU kernel",
+        )
+        source_kernel = source_rows.iloc[0]
+        source_index = int(source_kernel["index"])
+        runtime_index = int(source_kernel["index_correlation"])
+        source_stream = int(source_kernel["stream"])
+
+        streams = [source_stream]
+        if include_new_stream:
+            streams.append(int(trace_df["stream"].max()) + 1)
+
+        first_new_index = int(trace_df["index"].max()) + 1
+        new_indices = list(range(first_new_index, first_new_index + len(streams)))
+        kernel_copies = pd.concat(
+            [trace_df.loc[[source_index]].copy() for _ in streams]
+        )
+        kernel_copies.index = new_indices
+        kernel_copies["index"] = new_indices
+        kernel_copies["stream"] = streams
+        first_start = source_kernel["ts"] + source_kernel["dur"] + 1
+        kernel_copies["ts"] = [first_start + offset for offset in range(len(streams))]
+        kernel_copies["end"] = kernel_copies["ts"] + kernel_copies["dur"]
+
+        trace_df.loc[runtime_index, "index_correlation"] = new_indices[-1]
+        trace.t.traces[0] = pd.concat([trace_df, kernel_copies]).sort_values(
+            by=["ts", "index"]
+        )
+
+        cp_graph, success = trace.critical_path_analysis(
+            rank=0,
+            annotation="ProfilerStep",
+            instance_id=1,
+        )
+        self.assertTrue(success)
+        return cp_graph, runtime_index, new_indices
+
+    def test_amd_trace_deduplicates_queue_length_on_same_stream(self) -> None:
+        """A multi-kernel ROCm launch must not link a kernel to itself."""
+        cp_graph, _, kernel_indices = self._analyze_amd_trace_with_kernel_copies(
+            include_new_stream=False
+        )
+        start_node, end_node = cp_graph.get_nodes_for_event(kernel_indices[0])
+        if start_node is None or end_node is None:
+            self.fail("expected graph nodes for the copied AMD kernel")
+
+        self.assertFalse(cp_graph.has_edge(end_node.idx, start_node.idx))
+
+    def test_amd_trace_keeps_queue_length_stream_specific(self) -> None:
+        """A shared runtime must use the queue length for its kernel's stream."""
+        cp_graph, runtime_index, kernel_indices = (
+            self._analyze_amd_trace_with_kernel_copies(include_new_stream=True)
+        )
+        runtime_start, _ = cp_graph.get_nodes_for_event(runtime_index)
+        kernel_start, _ = cp_graph.get_nodes_for_event(kernel_indices[-1])
+        if runtime_start is None or kernel_start is None:
+            self.fail("expected graph nodes for the runtime and copied AMD kernel")
+
+        self.assertTrue(cp_graph.has_edge(runtime_start.idx, kernel_start.idx))
+        launch_edge = cp_graph.edges[runtime_start.idx, kernel_start.idx]["object"]
+
+        self.assertEqual(launch_edge.type, CPEdgeType.KERNEL_LAUNCH_DELAY)
+        self.assertGreater(launch_edge.weight, 0)
+
+    def test_mtia_trace(self) -> None:
+        """Check MTIA runtime launches are represented in the critical path graph."""
+        trace = TraceAnalysis(trace_dir=get_test_data_dir("mtia_inference_trace"))
+
+        cp_graph, success = trace.critical_path_analysis(
+            rank=0, annotation="", instance_id=None
+        )
+
+        self.assertTrue(success)
+        symbol_ids = cp_graph.symbol_table.get_sym_id_map()
+        self.assertIn("mtia_ccp_events", symbol_ids)
+        mtia_category = symbol_ids["mtia_ccp_events"]
+        runtime_indices = set(
+            cp_graph.trace_df.loc[
+                (cp_graph.trace_df["cat"] == mtia_category)
+                & (cp_graph.trace_df["index_correlation"] > 0),
+                "index_correlation",
+            ].astype(int)
+        )
+        self.assertGreater(len(runtime_indices), 0)
+        self.assertIn("mtia_runtime", symbol_ids)
+        mtia_runtime_indices = set(
+            cp_graph.trace_df.index[
+                cp_graph.trace_df["cat"] == symbol_ids["mtia_runtime"]
+            ]
+        )
+        self.assertTrue(
+            runtime_indices.issubset(mtia_runtime_indices),
+            "Expected every MTIA device-event correlation target to be an "
+            "MTIA runtime event",
+        )
+        for runtime_index in runtime_indices:
+            start_node, end_node = cp_graph.get_nodes_for_event(runtime_index)
+            self.assertIsNotNone(start_node)
+            self.assertIsNotNone(end_node)
+
+        launch_delay_runtime_indices = {
+            cp_graph.get_events_for_edge(data["object"])[0]
+            for _, _, data in cp_graph.edges(data=True)
+            if data["object"].type == CPEdgeType.KERNEL_LAUNCH_DELAY
+        }
+        matching_runtime_indices = runtime_indices & launch_delay_runtime_indices
+        self.assertGreater(
+            len(matching_runtime_indices),
+            0,
+            "Expected a kernel-launch-delay edge sourced from an MTIA runtime "
+            f"event; MTIA runtime indices={sorted(runtime_indices)}, "
+            f"launch-delay sources={sorted(launch_delay_runtime_indices)}",
+        )
 
 
 class EndToEndTestCase(unittest.TestCase):
