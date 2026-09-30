@@ -1998,7 +1998,8 @@ class CriticalPathAnalysis:
         # Traverse events and mark them as critical
         for ev_idx, event in enumerate(raw_events):
             if ev_idx in critical_path_graph.critical_path_events_set:
-                event["args"]["critical"] = 1
+                # Chrome trace events need not have an args object.
+                event.setdefault("args", {})["critical"] = 1
 
         flow_events = []
         flow_id = 0
@@ -2012,7 +2013,7 @@ class CriticalPathAnalysis:
         ):
             # This helps with showing the arrows in chrome trace
             end_ts = event["ts"] + event["dur"]
-            if event["args"].get("device", -1) >= 0:
+            if event.get("args", {}).get("device", -1) >= 0:
                 end_ts -= min(1, event["dur"])
 
             is_critical = e in critical_path_graph.critical_path_edges_set
