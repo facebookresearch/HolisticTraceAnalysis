@@ -6,6 +6,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 from tempfile import TemporaryDirectory
 from typing import Dict, List, Tuple
+from unittest.mock import patch
 
 import pandas as pd
 from hta.analyzers.critical_path_analysis import (
@@ -304,6 +305,67 @@ class CriticalPathAnalysisTestCase(unittest.TestCase):
                 os.remove(overlaid_trace)
             if os.path.exists(tmpdir):
                 os.removedirs(tmpdir)
+
+    def test_overlay_marks_critical_event_without_args(self) -> None:
+        cp_graph = self._critical_path_on_simple_add_trace()
+        raw_trace = self.simple_add_trace.t.get_raw_trace_for_one_rank(rank=0)
+        events = raw_trace["traceEvents"]
+        event_idx = next(
+            idx for idx in cp_graph.critical_path_events_set if "args" in events[idx]
+        )
+        events[event_idx].pop("args")
+
+        with patch.object(
+            self.simple_add_trace.t,
+            "get_raw_trace_for_one_rank",
+            return_value=raw_trace,
+        ):
+            with TemporaryDirectory(dir="/tmp") as tmpdir:
+                output = self.simple_add_trace.overlay_critical_path_analysis(
+                    0,
+                    cp_graph,
+                    output_dir=tmpdir,
+                    only_show_critical_events=False,
+                    show_all_edges=True,
+                )
+                with gzip.open(output, "rt") as trace_file:
+                    overlaid_events = json.load(trace_file)["traceEvents"]
+                self.assertEqual(overlaid_events[event_idx]["args"]["critical"], 1)
+
+    def test_overlay_flow_endpoint_without_args(self) -> None:
+        cp_graph = self._critical_path_on_simple_add_trace()
+        raw_trace = self.simple_add_trace.t.get_raw_trace_for_one_rank(rank=0)
+        events = raw_trace["traceEvents"]
+        edges = (cp_graph.edges[u, v]["object"] for u, v in cp_graph.edges)
+        event_idx = next(
+            idx
+            for edge in edges
+            if edge.type != CPEdgeType.KERNEL_LAUNCH_DELAY or edge.weight != 0
+            for idx in cp_graph.get_events_for_edge(edge)
+            if idx >= 0
+            and idx not in cp_graph.critical_path_events_set
+            and "args" in events[idx]
+        )
+        events[event_idx].pop("args")
+
+        with patch.object(
+            self.simple_add_trace.t,
+            "get_raw_trace_for_one_rank",
+            return_value=raw_trace,
+        ):
+            with TemporaryDirectory(dir="/tmp") as tmpdir:
+                output = self.simple_add_trace.overlay_critical_path_analysis(
+                    0,
+                    cp_graph,
+                    output_dir=tmpdir,
+                    only_show_critical_events=False,
+                    show_all_edges=True,
+                )
+                stats = self._check_overlaid_trace(output)
+                self.assertEqual(
+                    stats.marked_critical_edges,
+                    len(cp_graph.critical_path_edges_set),
+                )
 
     def test_critical_path_inter_stream_sync(self) -> None:
         """AlexNet has inter-stream synchronization using CUDA Events."""
