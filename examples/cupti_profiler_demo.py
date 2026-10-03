@@ -41,17 +41,6 @@ def train_xor():
         # this restriction is being removed
         activities=[torch.profiler.ProfilerActivity.CUDA],
         record_shapes=True,
-        experimental_config=torch.profiler._ExperimentalConfig(
-            profiler_metrics=[
-                # Metrics can be picked from
-                # https://docs.nvidia.com/cupti/r_main.html#r_profiler
-                # or use kineto__tensor_core_insts, kineto__cuda_core_flops
-                "kineto__tensor_core_insts",
-                "dram__bytes_read.sum",
-                "dram__bytes_write.sum",
-            ],
-            profiler_measure_per_kernel=False,
-        ),
     ) as prof:
         for input, target in zip(inputs, targets):
             input, target = input.to(device="cuda:0"), target.to(device="cuda:0")
