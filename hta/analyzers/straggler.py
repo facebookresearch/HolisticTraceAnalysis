@@ -102,7 +102,11 @@ def _compute_normalized_start_time_of_significant_comm_kernels(
     # find all communication kernels
     sym_table = symbol_table.get_sym_table()
     sym_map = symbol_table.get_sym_id_map()
-    comm_op_ids = [sym_map[s] for s in sym_table if s.startswith("ncclKernel")]
+    comm_op_ids = [
+        sym_map[s]
+        for s in sym_table
+        if s.startswith(("ncclKernel", "ncclDevKernel"))
+    ]
     iterations = _get_unique_values(df, "iteration")
     ranks = _get_unique_values(df, "rank")
     df = df.loc[df["iteration"].isin(iterations)]
