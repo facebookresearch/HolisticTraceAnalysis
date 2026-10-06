@@ -742,6 +742,21 @@ class BreakdownAnalysis:
             ]
         ]
 
+    def _round_preserving_sum(group: pd.DataFrame) -> pd.DataFrame:
+        """Round idle time ratios while preserving the constraint
+        that they sum to 1.0 (100%) per stream."""
+
+        ratios = group["idle_time_ratio"].round(2)
+        ratio_sum = ratios.sum()
+
+        if ratio_sum != 1.0 and 0 < ratio_sum:
+            max_idx = ratios.idxmax()
+            ratios.loc[max_idx] = ratios.loc[max_idx] + (1.0 - ratio_sum)
+
+        group["idle_time_ratio"] = ratios
+
+        return group
+
     @classmethod
     def _analyze_idle_time_for_stream(
         cls,
@@ -771,6 +786,8 @@ class BreakdownAnalysis:
         gpu_kernels_s["idle_interval"] = (
             gpu_kernels_s["ts"] - gpu_kernels_s["prev_end_ts"]
         )
+        # Handle negative idle intervals that can occur due to rounding errors.
+        gpu_kernels_s.loc[gpu_kernels_s["idle_interval"] < 0, "idle_interval"] = 0
 
         # Default idle time category
         gpu_kernels_s["idle_category"] = IdleTimeType.OTHER.value
@@ -928,6 +945,8 @@ class BreakdownAnalysis:
                 mapper=idle_category_name_map, axis=0, inplace=True
             )
 
+        grouped_result_df = result_df.groupby("stream", group_keys=False)
+        result_df = grouped_result_df.apply(cls._round_preserving_sum)
         result_df = result_df[
             ["rank", "stream", "idle_category", "idle_time", "idle_time_ratio"]
         ].round(2)
