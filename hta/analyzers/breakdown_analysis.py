@@ -806,6 +806,7 @@ class BreakdownAnalysis:
                 f"Computing descriptive statistics for idle time intervals on stream {stream}:"
             )
             idle_interval_stats = gpu_kernels_groupby.idle_interval.describe()
+            # pyrefly: ignore [missing-attribute]
             idle_interval_stats.insert(0, "stream", stream)
 
         result = pd.DataFrame(gpu_kernels_groupby.idle_interval.sum())
