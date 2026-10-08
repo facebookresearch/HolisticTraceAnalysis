@@ -132,6 +132,7 @@ class TraceCounters:
             rank: TraceCounters._get_queue_length_time_series_for_rank(t, rank)
             for rank in ranks
         }
+        # pyrefly: ignore [bad-return]
         return dict(filter(lambda x: x[1] is not None, result.items()))
 
     @classmethod
@@ -356,6 +357,7 @@ class TraceCounters:
             rank: TraceCounters._get_memory_bw_time_series_for_rank(t, rank)
             for rank in ranks
         }
+        # pyrefly: ignore [bad-return]
         return dict(filter(lambda x: x[1] is not None, result.items()))
 
     @classmethod
