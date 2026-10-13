@@ -953,7 +953,7 @@ class Trace:
         # add back ts delta
         events_df["ts"] = events_df["ts"] + self.min_ts
 
-        def convert_to_args(value: int):
+        def convert_to_args(value: int) -> Dict[str, int]:
             return {counter_name: value}
 
         events_df.args = events_df.args.apply(convert_to_args)
