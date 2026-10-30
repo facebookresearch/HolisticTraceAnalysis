@@ -13,6 +13,7 @@ import sys
 import time
 import tracemalloc
 import warnings
+from concurrent.futures import ProcessPoolExecutor
 from typing import Any, cast, Dict, List, Optional, Tuple, Union
 
 import numpy as np
@@ -27,7 +28,7 @@ from hta.common.trace_symbol_table import (
 from hta.configs.config import logger
 from hta.configs.default_values import DEFAULT_TRACE_DIR
 from hta.configs.parser_config import ParserConfig
-from hta.utils.utils import get_mp_pool_size, normalize_path
+from hta.utils.utils import estimate_parse_memory, get_mp_pool_size, normalize_path
 
 MetaData = Dict[str, Any]
 PHASE_COUNTER: str = "C"
@@ -506,7 +507,10 @@ class Trace:
         else:
             num_procs = min(mp.cpu_count(), len(ranks))
             if len(ranks) <= 8:
-                num_procs = min(len(ranks), mp.cpu_count())
+                # Size the pool from file sizes: profiling a parse of a multi-GB file is too slow.
+                num_procs = get_mp_pool_size(
+                    max(estimate_parse_memory(p) for p in trace_paths), len(ranks)
+                )
             elif use_memory_profiling:
                 tracemalloc.start()
                 parse_trace_file(trace_paths[0], self.parser_config)
@@ -516,8 +520,12 @@ class Trace:
             logger.info(f"using {num_procs} processes for parsing.")
 
             _parser = _TraceFileParserWrapper(self.parser_config)
-            with mp.get_context("fork").Pool(num_procs) as pool:
-                results = pool.map(_parser, trace_paths, chunksize=1)
+            # ProcessPoolExecutor raises BrokenProcessPool if a worker dies (e.g. OOM-killed);
+            # mp.Pool.map would hang forever instead.
+            with ProcessPoolExecutor(
+                max_workers=num_procs, mp_context=mp.get_context("fork")
+            ) as pool:
+                results = list(pool.map(_parser, trace_paths))
             logger.debug(f"finished parallel parsing using {num_procs} processes.")
 
             # collect the results
