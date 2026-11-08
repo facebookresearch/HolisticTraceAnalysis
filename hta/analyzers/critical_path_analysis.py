@@ -1889,6 +1889,13 @@ class CriticalPathAnalysis:
             start_ts = annotations.ts[instance_start : instance_end + 1].min()
             end_ts = annotations.end_ts[instance_start : instance_end + 1].max()
 
+        if pd.isna(start_ts) or pd.isna(end_ts):
+            logger.error(
+                f"Could not find instances [{instance_start}, {instance_end}] of "
+                f"'{annotation}' annotation on rank {rank}."
+            )
+            return None
+
         logger.info(f"Looking up events within the window ({start_ts}, {end_ts})")
 
         # Consider all events that start within the annotatated window.

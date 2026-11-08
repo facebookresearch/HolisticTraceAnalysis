@@ -852,6 +852,13 @@ class CriticalPathAnalysisTestCase(unittest.TestCase):
             finally:
                 set_default_trace_parsing_backend(old_backend)
 
+    def test_critical_path_analysis_returns_none_for_missing_instances(self) -> None:
+        """The AMD trace has 3 ProfilerStep instances, so instances 10-12 do not exist."""
+        result = self.amd_trace.critical_path_analysis(
+            rank=0, annotation="ProfilerStep", instance_id=(10, 12)
+        )
+        self.assertIsNone(result)
+
     def _analyze_amd_trace_with_kernel_copies(
         self, include_new_stream: bool
     ) -> Tuple[CPGraph, int, List[int]]:
