@@ -305,6 +305,19 @@ def _compress_df(
     df.dropna(axis=0, subset=["dur", "cat"], inplace=True)
     df.drop(df[df["cat"] == "Trace"].index, inplace=True)
 
+    # drop events with non-positive duration; these can appear after timestamp
+    # rounding (round_down_time_stamps) where ceil(ts) > floor(end) for very
+    # short sub-microsecond events, and would produce negative mean durations
+    # in downstream aggregations such as get_gpu_kernel_breakdown().
+    negative_dur_mask = df["dur"] < 0
+    if negative_dur_mask.any():
+        n_dropped = int(negative_dur_mask.sum())
+        logger.warning(
+            f"Dropping {n_dropped} event(s) with negative duration, likely caused "
+            f"by sub-microsecond events after timestamp rounding."
+        )
+        df.drop(df[negative_dur_mask].index, inplace=True)
+
     # drop columns
     columns_to_drop = {"ph", "id", "bp", "s"}.intersection(set(df.columns))
     df.drop(list(columns_to_drop), axis=1, inplace=True)
