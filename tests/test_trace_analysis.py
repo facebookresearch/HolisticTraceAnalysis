@@ -424,8 +424,11 @@ class TraceAnalysisTestCase(unittest.TestCase):
         stream7_stats = qd_summary.loc[0, 7]["queue_length"].to_dict()
         expected_stats = {
             "count": 17160.0,
-            "mean": 61.043473193,
-            "std": 92.33450047722,
+            # At one microsecond, a kernel start of an earlier launch counts
+            # before a launch, so no level adds the two. The earlier unstable
+            # sort gave mean 61.0435 and std 92.3345.
+            "mean": 61.034499,
+            "std": 92.3387,
             "min": 0.0,
             "25%": 1.0,
             "50%": 9.0,

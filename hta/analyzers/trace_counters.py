@@ -9,6 +9,17 @@ from hta.common.trace import Trace
 from hta.configs.config import logger
 from hta.utils.utils import get_kernel_type, get_memory_kernel_type, KernelType
 
+# The order of a counter's points at one timestamp. The ends of intervals of
+# positive length count first, then the starts of such intervals, then each
+# zero-length interval, its start just before its end. Each level is then a
+# sum over intervals that hold its timestamp under [start, end): it never
+# adds an interval that ends at the timestamp to one that starts there. A
+# zero-length interval keeps a point of its own and adds to no other
+# zero-length interval.
+_ORDER_END = 0
+_ORDER_START = 1
+_ORDER_POINT = 2
+
 
 class TraceCounters:
     def __init__(self):
@@ -58,26 +69,51 @@ class TraceCounters:
         gpu_kernels = trace_df[trace_df["stream"].ne(-1)].copy()
         gpu_kernels["queue"] = -1
 
-        # use the pid, tid and cuda stream from the correlated GPU event.
+        # use the pid, tid and cuda stream from the correlated GPU event. Each
+        # launch also takes the start and the row index of its GPU event, so
+        # that the launch and the start of one queue entry are a pair.
         runtime_calls_filt = runtime_calls.join(
-            gpu_kernels[["stream", "pid", "tid", "correlation"]].set_index(
-                "correlation"
-            ),
+            gpu_kernels[["stream", "pid", "tid", "correlation", "ts", "index"]]
+            .rename(columns={"ts": "_gpu_ts", "index": "_pair"})
+            .set_index("correlation"),
             on="correlation",
         )
 
         # filter GPU kernels with valid parent runtime events only, use a semi-join
         gpu_kernels_filt = gpu_kernels[
             gpu_kernels["correlation"].isin(runtime_calls["correlation"])
-        ]
+        ].copy()
 
         assert len(runtime_calls_filt) == len(gpu_kernels_filt)
 
-        # Concat the series of runtime launch events and GPU kernel events
+        # A queue entry is the interval [launch, start of its GPU event).
+        gpu_kernels_filt["_pair"] = gpu_kernels_filt["index"]
+        launch_ts = gpu_kernels_filt["_pair"].map(
+            runtime_calls_filt.groupby("_pair")["ts"].min()
+        )
+        runtime_calls_filt["_order"] = _ORDER_START
+        runtime_calls_filt.loc[
+            runtime_calls_filt["ts"].eq(runtime_calls_filt["_gpu_ts"]), "_order"
+        ] = _ORDER_POINT
+        runtime_calls_filt["_phase"] = 0
+        gpu_kernels_filt["_order"] = _ORDER_END
+        gpu_kernels_filt.loc[gpu_kernels_filt["ts"].eq(launch_ts), "_order"] = (
+            _ORDER_POINT
+        )
+        gpu_kernels_filt["_phase"] = 1
+
+        # At one timestamp, points count in the _ORDER_* order, then by pid,
+        # tid and queue entry. Points equal in all of these except the entry
+        # give equal rows, so the result does not depend on the row order of
+        # the trace. A launch counts before the GPU event it enqueued.
         merged_df = cast(
             pd.DataFrame, pd.concat([runtime_calls_filt, gpu_kernels_filt])
         )
-        merged_df = merged_df.sort_values(by="ts").set_index("index")
+        merged_df = merged_df.sort_values(
+            by=["ts", "_order", "pid", "tid", "_pair", "_phase"],
+            kind="stable",
+            na_position="first",
+        ).set_index("index")
 
         result_df_list = []
         for stream, stream_df in merged_df.groupby("stream"):
@@ -289,30 +325,50 @@ class TraceCounters:
             lambda x: get_memory_kernel_type(sym_table[x["name"]]), axis=1
         )
 
-        # In case of 0 us duration events round it up to 1 us to avoid -ve values
-        # see https://github.com/facebookresearch/HolisticTraceAnalysis/issues/20
-        memcpy_kernels.loc[memcpy_kernels.dur == 0, ["dur"]] = 1
+        copies = memcpy_kernels[
+            ["ts", "dur", "name", "pid", "memory_bw_gbps"]
+        ].reset_index(drop=True)
+        is_point = copies["dur"].le(0)
+        bandwidth = copies["memory_bw_gbps"]
 
-        membw_time_series_a = memcpy_kernels[["ts", "name", "pid", "memory_bw_gbps"]]
-        membw_time_series_b = memcpy_kernels[
-            ["ts", "name", "dur", "pid", "memory_bw_gbps"]
-        ].copy()
+        # Each copy adds its bandwidth at its start and removes it at its end
+        # (start + duration).
+        starts = copies[["ts", "pid", "name"]].assign(
+            memory_bw_gbps=bandwidth,
+            _order=_ORDER_START,
+            _tie=bandwidth,
+            _phase=0,
+        )
+        ends = copies[["ts", "pid", "name"]].assign(
+            ts=copies["ts"] + copies["dur"],
+            memory_bw_gbps=-bandwidth,
+            _order=_ORDER_END,
+            _tie=(-bandwidth).where(~is_point, bandwidth),
+            _phase=1,
+        )
+        starts.loc[is_point, "_order"] = _ORDER_POINT
+        ends.loc[is_point, "_order"] = _ORDER_POINT
 
-        # The end events have timestamps = start timestamp + duration
-        membw_time_series_b.ts = membw_time_series_b.ts + membw_time_series_b.dur
-        membw_time_series_b.memory_bw_gbps = -membw_time_series_b.memory_bw_gbps
-
+        # At one timestamp, points count in the _ORDER_* order, then by step
+        # (a zero-length copy's by its bandwidth, so its start and its end
+        # stay a pair), then by pid and copy. Points equal in all of these
+        # except the copy give equal rows, so the result does not depend on
+        # the row order of the trace.
         membw_time_series = cast(
             pd.DataFrame,
             pd.concat(
                 [
-                    membw_time_series_a,
-                    membw_time_series_b[["ts", "pid", "name", "memory_bw_gbps"]],
+                    starts.assign(_copy=copies.index),
+                    ends.assign(_copy=copies.index),
                 ],
                 ignore_index=True,
             ),
         )
-        membw_time_series = membw_time_series.sort_values(by="ts")
+        membw_time_series = membw_time_series.sort_values(
+            by=["ts", "_order", "_tie", "pid", "_copy", "_phase"],
+            kind="stable",
+            na_position="first",
+        )
 
         result_df_list = []
         for _, membw_df in membw_time_series.groupby("name"):
