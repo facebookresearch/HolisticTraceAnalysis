@@ -1103,6 +1103,18 @@ class CPGraph(nx.DiGraph):
                 )
             return False
 
+        # Older Kineto builds can name a later record of the same CUDA event;
+        # a wait cannot depend on a record issued after it.
+        if row.wait_on_cuda_event_record_corr_id > row.correlation:
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(
+                    "CUDA Stream Wait event names a cudaEventRecord issued after "
+                    f"it, name = {self._get_node_name(eid)}, correlation = "
+                    f"{row.correlation}, record correlation = "
+                    f"{row.wait_on_cuda_event_record_corr_id}"
+                )
+            return False
+
         if (not hasattr(row, "index_previous_launch")) or (
             row.index_previous_launch == -1
         ):
@@ -1260,6 +1272,11 @@ class CPGraph(nx.DiGraph):
                 ]
 
                 if name == stream_wait_event:
+                    # Stream order already covers a wait on an event recorded
+                    # on the same stream.
+                    if row.wait_on_stream == row.stream:
+                        return
+
                     # Stream Wait event is indicating a dependency between
                     # the next GPU kernel on this stream and another GPU kernel
 

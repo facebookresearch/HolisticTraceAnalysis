@@ -5,7 +5,7 @@ import unittest
 from collections import Counter
 from dataclasses import dataclass, field
 from tempfile import TemporaryDirectory
-from typing import Dict, List, Tuple
+from typing import Any, Callable, Dict, List, Tuple
 from unittest.mock import patch
 
 import pandas as pd
@@ -984,6 +984,103 @@ class CriticalPathAnalysisTestCase(unittest.TestCase):
             f"event; MTIA runtime indices={sorted(runtime_indices)}, "
             f"launch-delay sources={sorted(launch_delay_runtime_indices)}",
         )
+
+    def _edited_event_sync_trace(
+        self, trace_dir: str, edit: Callable[[List[Dict[str, Any]]], None]
+    ) -> TraceAnalysis:
+        """The multi-stream event sync trace after `edit` changes its events."""
+        src = os.path.join(
+            get_test_data_dir("critical_path/cuda_event_sync_multi_stream"),
+            "event_sync_trace.json.gz",
+        )
+        with gzip.open(src, "rt") as f:
+            trace = json.load(f)
+        edit(trace["traceEvents"])
+        with gzip.open(os.path.join(trace_dir, "event_sync_trace.json.gz"), "wt") as f:
+            json.dump(trace, f)
+        return TraceAnalysis(trace_dir=trace_dir)
+
+    @staticmethod
+    def _sync_event(events: List[Dict[str, Any]], correlation: int) -> Dict[str, Any]:
+        return next(
+            e
+            for e in events
+            if e.get("cat") == "cuda_sync" and e["args"]["correlation"] == correlation
+        )
+
+    def _assert_critical_path_succeeds(
+        self, edit: Callable[[List[Dict[str, Any]]], None]
+    ) -> None:
+        with TemporaryDirectory() as trace_dir:
+            trace = self._edited_event_sync_trace(trace_dir, edit)
+            _, success = trace.critical_path_analysis(
+                rank=0, annotation="", instance_id=None
+            )
+        self.assertTrue(success)
+
+    def _wait_on_later_record(
+        self, events: List[Dict[str, Any]], wait_correlation: int
+    ) -> None:
+        """Points the wait at cudaEventRecord 1418, issued after it on stream
+        24, as older Kineto builds do when the event is recorded again."""
+        args = self._sync_event(events, wait_correlation)["args"]
+        args["wait_on_cuda_event_record_corr_id"] = 1418
+        args["wait_on_stream"] = 24
+
+    def test_critical_path_ignores_event_sync_on_later_record(self) -> None:
+        """cudaEventQuery (correlation 54) cannot wait on a record issued after
+        it."""
+        self._assert_critical_path_succeeds(
+            lambda events: self._wait_on_later_record(events, 54)
+        )
+
+    def test_critical_path_ignores_stream_wait_on_later_record(self) -> None:
+        """cudaStreamWaitEvent on stream 24 (correlation 1389) cannot wait on a
+        record issued after it, here on stream 24 itself."""
+        self._assert_critical_path_succeeds(
+            lambda events: self._wait_on_later_record(events, 1389)
+        )
+
+    def test_critical_path_ignores_stream_wait_on_same_stream(self) -> None:
+        """A wait on stream 20 for cudaEventRecord 1385, also recorded on
+        stream 20, adds nothing to stream order before the next kernel there."""
+
+        def edit(events: List[Dict[str, Any]]) -> None:
+            wait = self._sync_event(events, 1389)
+            wait["tid"] = wait["args"]["stream"] = 20
+            launch_ts = wait["ts"] + 10
+            events.append(
+                {
+                    "ph": "X",
+                    "cat": "cuda_runtime",
+                    "name": "cudaLaunchKernel",
+                    "pid": 3727853,
+                    "tid": 3727853,
+                    "ts": launch_ts,
+                    "dur": 10,
+                    "args": {"External id": 7, "cbid": 211, "correlation": 1390},
+                }
+            )
+            events.append(
+                {
+                    "ph": "X",
+                    "cat": "kernel",
+                    "name": "ampere_sgemm_128x64_nn",
+                    "pid": 0,
+                    "tid": 20,
+                    "ts": launch_ts + 20,
+                    "dur": 50,
+                    "args": {
+                        "External id": 7,
+                        "device": 0,
+                        "context": 1,
+                        "stream": 20,
+                        "correlation": 1390,
+                    },
+                }
+            )
+
+        self._assert_critical_path_succeeds(edit)
 
 
 class EndToEndTestCase(unittest.TestCase):
