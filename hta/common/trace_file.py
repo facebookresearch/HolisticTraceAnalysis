@@ -55,6 +55,7 @@ def create_rank_to_trace_dict(file_list: List[str]) -> Tuple[bool, Dict]:
                     break
 
             # match is like "rank": 6,
+            # pyrefly: ignore [unbound-name]
             match = rank_re.search(data)
             if match:
                 rank = int(match.group(1))
