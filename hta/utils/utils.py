@@ -189,10 +189,47 @@ def get_mp_pool_size(obj_size: int, num_objs: int) -> int:
         int
             the recommend pool size
     """
-    free_mem = psutil.virtual_memory().available
     # Leave 20% buffer for system and other processes
-    max_np = int(0.8 * free_mem / obj_size)
-    return min(max_np, num_objs, mp.cpu_count())
+    max_np = int(0.8 * get_available_memory() / obj_size)
+    return max(1, min(max_np, num_objs, mp.cpu_count()))
+
+
+def get_available_memory() -> int:
+    """
+    Bytes of memory available to this process, honoring container (cgroup) limits.
+
+    psutil reports the host's memory, which is larger than the limit inside a container
+    or a Slurm job; workers are OOM-killed once the cgroup limit is reached.
+    """
+    avail = psutil.virtual_memory().available
+    # (limit file, usage file) for cgroup v2 and v1
+    for limit_f, usage_f in (
+        ("/sys/fs/cgroup/memory.max", "/sys/fs/cgroup/memory.current"),
+        (
+            "/sys/fs/cgroup/memory/memory.limit_in_bytes",
+            "/sys/fs/cgroup/memory/memory.usage_in_bytes",
+        ),
+    ):
+        try:
+            limit = int(Path(limit_f).read_text())  # v2 says "max" when unlimited
+            usage = int(Path(usage_f).read_text())
+        except (OSError, ValueError):
+            continue
+        return min(avail, max(0, limit - usage))
+    return avail
+
+
+# Peak memory while parsing is measured at 5-8x the uncompressed JSON size, and gzip
+# shrinks traces 20-35x. ponytail: constants from a few traces of ~100-250MB, retune
+# if a real multi-GB trace disagrees.
+_PARSE_MEM_FACTOR = 10
+_PARSE_MEM_FACTOR_GZ = 200
+
+
+def estimate_parse_memory(trace_file: str) -> int:
+    """Rough peak memory in bytes needed to parse one trace file."""
+    factor = _PARSE_MEM_FACTOR_GZ if trace_file.endswith(".gz") else _PARSE_MEM_FACTOR
+    return factor * Path(trace_file).stat().st_size
 
 
 def get_symbol_column_names(df: pd.DataFrame) -> Tuple[str, str]:
