@@ -1834,6 +1834,19 @@ class TestLabeledTrace(unittest.TestCase):
             ops = lt.extract_ops(rank=ranks[:1])
             self.assertFalse(ops.empty)
 
+    def test_extract_ops_with_rank_subset(self) -> None:
+        """extract_ops labels each row with the rank it came from."""
+        from hta.trace_diff import LabeledTrace
+
+        lt = LabeledTrace(label="test", trace_dir=_vt_trace_dir())
+        ranks = lt.ranks()[-2:]
+        ops = lt.extract_ops(rank=ranks)
+        self.assertEqual(sorted(ops["rank"].unique()), ranks)
+        for r in ranks:
+            df = lt.t.get_trace(r)
+            expected = df[df["iteration"].isin(lt.iterations()[:1])]
+            self.assertEqual(int((ops["rank"] == r).sum()), len(expected))
+
     def test_extract_ops_invalid_rank_type(self) -> None:
         """Lines 113-114: ValueError for invalid rank type."""
         from hta.trace_diff import LabeledTrace
