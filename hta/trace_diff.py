@@ -143,7 +143,7 @@ class LabeledTrace:
             df_rank = pd.concat(
                 [self.t.get_trace(r) for r in ranks],
                 axis=0,
-                keys=_ranks,
+                keys=ranks,
                 names=["rank", "idx"],
             ).reset_index()
 
