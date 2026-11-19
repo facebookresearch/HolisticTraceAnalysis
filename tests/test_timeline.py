@@ -17,6 +17,7 @@ from hta.common.timeline import (
     TimelinePlotSetting,
 )
 from hta.common.trace import Trace
+from hta.common.trace_call_graph import CallGraph
 from hta.common.trace_filter import GPUKernelFilter
 
 _MODULE = "hta.common.timeline"
@@ -193,6 +194,7 @@ class TestAlignModuleWithKernels(unittest.TestCase):
         trace_path = os.path.join(get_test_data_dir(), "timeline_analysis")
         cls.t = Trace(trace_dir=trace_path)
         cls.t.parse_traces()
+        CallGraph(cls.t, ranks=[0])
         cls.t.decode_symbol_ids(use_shorten_name=False)
 
     def setUp(self) -> None:
@@ -216,11 +218,9 @@ class TestAlignModuleWithKernels(unittest.TestCase):
 
     def test_align_with_symbol_table(self) -> None:
         """Should produce aligned events when all required columns are present."""
-        required = REQUIRED_COLUMNS_FOR_CPU_GPU_ALIGNMENT
-        if not required.issubset(set(self.df.columns)):
-            self.skipTest(
-                f"Test data missing columns: {required - set(self.df.columns)}"
-            )
+        self.assertTrue(
+            REQUIRED_COLUMNS_FOR_CPU_GPU_ALIGNMENT.issubset(set(self.df.columns))
+        )
 
         aligned = align_module_with_kernels(
             self.df, ["## forward ##"], sym_table=self.t.symbol_table
@@ -232,11 +232,9 @@ class TestAlignModuleWithKernels(unittest.TestCase):
 
     def test_align_without_symbol_table(self) -> None:
         """Should work when name column contains strings (decoded)."""
-        required = REQUIRED_COLUMNS_FOR_CPU_GPU_ALIGNMENT
-        if not required.issubset(set(self.df.columns)):
-            self.skipTest(
-                f"Test data missing columns: {required - set(self.df.columns)}"
-            )
+        self.assertTrue(
+            REQUIRED_COLUMNS_FOR_CPU_GPU_ALIGNMENT.issubset(set(self.df.columns))
+        )
 
         aligned = align_module_with_kernels(self.df, ["## forward ##"])
         self.assertGreater(aligned.shape[0], 0)
