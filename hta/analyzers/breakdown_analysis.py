@@ -304,13 +304,21 @@ class BreakdownAnalysis:
             if len(kernel_positions) == 0:
                 continue
 
+            # Compare bounds directly: IntervalIndex.overlaps() handles empty
+            # [ts, ts) intervals differently across pandas versions, and
+            # zero-duration kernels must still match their annotation.
+            kernel_starts = kernel_positions.left.to_numpy()
+            kernel_ends = kernel_positions.right.to_numpy()
+
             # Loop over all GPU user annotation intervals and match them with GPU
             # kernel intervals. Build updates using integer positions.
             for row in gpu_user_anno_df_filt.itertuples():
                 interval, anno_name = row.Index, row.name  # type: ignore[attr-defined]
 
                 # Check overlap only on the pre-filtered kernel positions
-                overlaps = kernel_positions.overlaps(interval)
+                overlaps = (kernel_starts < interval.right) & (
+                    kernel_ends > interval.left
+                )
 
                 # Get the actual positions that overlap
                 overlapping_positions = kernel_positions[overlaps]

@@ -259,9 +259,7 @@ class TraceParseTestCase(unittest.TestCase):
 
 
 @unittest.skipIf(
-    # _auto_detect_parser_backend() == ParserBackend.JSON,
-    # Tests are timing out the CI so have to disable this
-    1,
+    _auto_detect_parser_backend() == ParserBackend.JSON,
     "Skipping ijson based trace load tests",
 )
 class TraceParseIjsonBatchCompressTestCase(TraceParseTestCase):

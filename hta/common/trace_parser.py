@@ -45,6 +45,9 @@ class MetaDataKey(enum.Enum):
 
 _TRACE_PARSING_BACKEND: Optional[ParserBackend] = None
 
+# Kineto writes these metadata keys after "traceEvents".
+_TRAILING_METADATA_KEYS: Tuple[str, ...] = ("baseTimeNanoseconds",)
+
 IJSON_INSTRS = """ Install ijson with pip by using
   pip install ijson
 
@@ -441,6 +444,7 @@ def _parse_trace_dataframe_ijson(
     with _open_trace_file(trace_file_path) as fh:
         t_start = time.perf_counter_ns()
         meta = parse_metadata_ijson(fh)
+        _parse_trailing_metadata_ijson(trace_file_path, meta)
         t_end = time.perf_counter_ns()
         logger.info(
             f"Parsed {trace_file_path} metadata in "
@@ -463,6 +467,26 @@ def _parse_trace_dataframe_ijson(
 
     df, local_symbol_table = _compress_df(df, cfg)
     return meta, df, local_symbol_table
+
+
+def _parse_trailing_metadata_ijson(trace_file_path: str, meta: MetaData) -> None:
+    """
+    Add metadata keys that Kineto writes after "traceEvents" to `meta`.
+
+    `parse_metadata_ijson` stops at "traceEvents", so it never sees keys such as
+    "baseTimeNanoseconds" that come after the events. This scans the file once
+    more with `ijson.items`, which skips non-matching events without building
+    Python objects for them.
+    """
+    import ijson
+
+    for key in _TRAILING_METADATA_KEYS:
+        if key in meta:
+            continue
+        with _open_trace_file(trace_file_path) as fh:
+            value = next(ijson.items(fh, key), None)
+        if value is not None:
+            meta[key] = value
 
 
 def parse_trace_dataframe(
